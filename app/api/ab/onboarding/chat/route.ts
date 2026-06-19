@@ -9,7 +9,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { scwChatCompletions } from '@/lib/scw-llm-client';
 import { rateLimit, LLM_RATE_LIMIT } from '@/lib/rate-limit';
-import { inspectInput, logGuardEvent } from '@/lib/prompt-guard';
+import { inspectInput, BLOCK_MESSAGE_USER_INPUT } from '@/lib/prompt-guard';
+import { recordGuardEvent } from '@/lib/guard-audit';
 
 const SYSTEM_PROMPT = `Tu es l'assistant de creation d'agents IA du Ministere de l'Interieur.
 Tu guides un agent du ministere (utilisateur non technique) pour creer son propre agent IA.
@@ -85,14 +86,17 @@ export async function POST(req: Request) {
   const lastUser = clientMessages[clientMessages.length - 1];
   const inGuard = inspectInput(lastUser.content, 'user');
   if (inGuard.blocked) {
-    logGuardEvent({
+    await recordGuardEvent({
       route: 'onboarding.chat',
       stage: 'input',
       userId: session.user?.id,
       role: 'user',
       signals: inGuard.signals,
     });
-    return NextResponse.json({ error: 'blocked_input' }, { status: 422 });
+    return NextResponse.json(
+      { error: 'blocked_input', message: BLOCK_MESSAGE_USER_INPUT },
+      { status: 422 },
+    );
   }
 
   try {

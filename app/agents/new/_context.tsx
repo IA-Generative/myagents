@@ -5,7 +5,7 @@
 
 'use client';
 
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 import { DEFAULT_MODEL_ID } from '@/lib/models';
 
 export type AgentVisibility = 'private' | 'community' | 'ministry';
@@ -43,6 +43,13 @@ type WizardContextValue = {
   draft: AgentDraft;
   update: (patch: Partial<AgentDraft>) => void;
   reset: () => void;
+  /**
+   * Drapeau transient (non persisté) : true quand les instructions système
+   * courantes ont passé la validation anti-jailbreak. Toute modification du
+   * systemPrompt le repasse à false (cf. update), forçant une re-validation.
+   */
+  promptValidated: boolean;
+  setPromptValidated: (v: boolean) => void;
 };
 
 const WizardContext = createContext<WizardContextValue | null>(null);
@@ -55,10 +62,25 @@ export function WizardProvider({
   initialDraft?: Partial<AgentDraft>;
 }) {
   const [draft, setDraft] = useState<AgentDraft>({ ...INITIAL, ...initialDraft });
+  const [promptValidated, setPromptValidated] = useState(false);
+
+  const update = useCallback((patch: Partial<AgentDraft>) => {
+    setDraft((d) => ({ ...d, ...patch }));
+    // Toute modification des instructions système invalide la validation.
+    if ('systemPrompt' in patch) setPromptValidated(false);
+  }, []);
+
+  const reset = useCallback(() => {
+    setDraft(INITIAL);
+    setPromptValidated(false);
+  }, []);
+
   const value: WizardContextValue = {
     draft,
-    update: (patch) => setDraft((d) => ({ ...d, ...patch })),
-    reset: () => setDraft(INITIAL),
+    update,
+    reset,
+    promptValidated,
+    setPromptValidated,
   };
   return <WizardContext.Provider value={value}>{children}</WizardContext.Provider>;
 }

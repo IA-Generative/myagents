@@ -13,7 +13,8 @@ import {
   buildOwuiModelId,
   OwuiAdminUnavailableError,
 } from '@/lib/owui-admin-client';
-import { inspectInput, logGuardEvent } from '@/lib/prompt-guard';
+import { inspectInput, BLOCK_MESSAGE_AGENT_CONFIG } from '@/lib/prompt-guard';
+import { recordGuardEvent } from '@/lib/guard-audit';
 
 type AgentDraftPayload = {
   name?: string;
@@ -86,14 +87,17 @@ export async function POST(req: Request) {
   ].join('\n\n');
   const inGuard = inspectInput(creatorContent, 'system');
   if (inGuard.blocked) {
-    logGuardEvent({
+    await recordGuardEvent({
       route: 'agents.create',
       stage: 'input',
       userId: r.session.user.id,
       role: 'system',
       signals: inGuard.signals,
     });
-    return NextResponse.json({ error: 'blocked_input' }, { status: 422 });
+    return NextResponse.json(
+      { error: 'blocked_input', message: BLOCK_MESSAGE_AGENT_CONFIG },
+      { status: 422 },
+    );
   }
 
   const owuiModelId =

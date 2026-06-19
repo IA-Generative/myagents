@@ -145,6 +145,26 @@ model ConversationMessage {
   @@map("ab_conversation_messages")
 }
 
+// File d'audit dédiée des alertes du garde anti-prompt-injection.
+// Chaque blocage (entrée, sortie, validation wizard) y est tracé avec l'heure
+// et l'utilisateur, séparément des autres tables, pour l'audit / le pen-test.
+model GuardEvent {
+  id        String   @id @default(uuid()) @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  // Volontairement String (pas @db.Uuid) : un log d'audit ne doit jamais
+  // échouer à l'écriture à cause d'un id d'utilisateur au format inattendu.
+  userId    String?  @map("user_id")
+  route     String
+  stage     String
+  role      String?
+  severity  String
+  signals   Json
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("ab_guard_events")
+}
+
 model MailIndex {
   id               String    @id @default(uuid()) @db.Uuid
   userId           String    @map("user_id") @db.Uuid

@@ -7,7 +7,13 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { scwChatCompletions, ScwLlmUnavailableError } from '@/lib/scw-llm-client';
 import { rateLimit, LLM_RATE_LIMIT } from '@/lib/rate-limit';
-import { inspectInput, inspectOutput, logGuardEvent } from '@/lib/prompt-guard';
+import {
+  inspectInput,
+  inspectOutput,
+  BLOCK_MESSAGE_AGENT_CONFIG,
+  BLOCK_MESSAGE_OUTPUT,
+} from '@/lib/prompt-guard';
+import { recordGuardEvent } from '@/lib/guard-audit';
 
 const SYSTEM_META_PROMPT = `Tu es un assistant qui aide un agent du Ministère de l'Intérieur
 à rédiger un prompt système pour son propre agent IA. Propose un prompt structuré, clair,
@@ -32,14 +38,17 @@ export async function POST(req: Request) {
   const inboundContent = `${JSON.stringify(body.hints ?? {})}\n${body.prompt ?? ''}`;
   const inGuard = inspectInput(inboundContent, 'user');
   if (inGuard.blocked) {
-    logGuardEvent({
+    await recordGuardEvent({
       route: 'prompt.assist',
       stage: 'input',
       userId: session.user?.id,
       role: 'user',
       signals: inGuard.signals,
     });
-    return NextResponse.json({ error: 'blocked_input' }, { status: 422 });
+    return NextResponse.json(
+      { error: 'blocked_input', message: BLOCK_MESSAGE_AGENT_CONFIG },
+      { status: 422 },
+    );
   }
 
   const userMessage =
@@ -62,13 +71,16 @@ export async function POST(req: Request) {
     // utilisateur), l'heuristique keylogger suffit.
     const outGuard = inspectOutput(generated);
     if (outGuard.blocked) {
-      logGuardEvent({
+      await recordGuardEvent({
         route: 'prompt.assist',
         stage: 'output',
         userId: session.user?.id,
         signals: outGuard.signals,
       });
-      return NextResponse.json({ error: 'blocked_output' }, { status: 422 });
+      return NextResponse.json(
+        { error: 'blocked_output', message: BLOCK_MESSAGE_OUTPUT },
+        { status: 422 },
+      );
     }
     return NextResponse.json({ prompt: generated });
   } catch (err) {

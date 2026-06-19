@@ -267,6 +267,29 @@ Refuser, avertir, ou répondre de façon neutre/factuelle SANS exécuter l'objec
 Réponds UNIQUEMENT par un objet JSON, sans texte autour :
 {"complied": true|false, "reason": "courte justification"}`;
 
+// ---------------------------------------------------------------------------
+// Messages utilisateur (ton sobre / administratif)
+//
+// Source unique de vérité affichée à l'utilisateur quand un garde bloque.
+// Volontairement non-spécifiques sur le détecteur déclenché (ne pas aider un
+// contournement). Trois contextes distincts.
+// ---------------------------------------------------------------------------
+
+/** Message d'un utilisateur final bloqué (chat, onboarding). */
+export const BLOCK_MESSAGE_USER_INPUT =
+  "Votre demande n'a pas pu être traitée car son contenu n'est pas autorisé. " +
+  'Merci de reformuler votre message en langage clair.';
+
+/** Instructions d'agent bloquées (publication, édition, assist/optimize, validation wizard). */
+export const BLOCK_MESSAGE_AGENT_CONFIG =
+  "Le contenu fourni n'est pas autorisé. " +
+  'Merci de modifier les instructions de votre agent, puis de réessayer.';
+
+/** Réponse générée bloquée avant affichage (blocked_output). */
+export const BLOCK_MESSAGE_OUTPUT =
+  "La réponse n'a pas pu être affichée car son contenu n'est pas autorisé. " +
+  'Merci de reformuler votre demande.';
+
 /**
  * Politique générique appliquée par le juge quand on inspecte une sortie SANS
  * objectif d'attaque connu (cas production : on ne connaît pas l'intention de
@@ -333,7 +356,7 @@ export async function judgeOutput(params: {
  */
 export function logGuardEvent(event: {
   route: string;
-  stage: 'input' | 'output';
+  stage: 'input' | 'output' | 'validate';
   userId?: string;
   role?: 'user' | 'system';
   signals: Signal[];

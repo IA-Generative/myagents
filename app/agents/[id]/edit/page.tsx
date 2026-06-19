@@ -69,10 +69,14 @@ function EditAgentInner() {
 
 function EditWizardShell({ agentId }: { agentId: string }) {
   const router = useRouter();
-  const { draft } = useWizard();
+  const { draft, promptValidated } = useWizard();
   const [currentStep, setCurrentStep] = useState(1);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Gate identique au wizard de création : on ne quitte l'étape Comportement
+  // qu'après validation anti-jailbreak des instructions système.
+  const nextBlocked = currentStep === 2 && !promptValidated;
 
   async function save() {
     setBusy(true);
@@ -85,7 +89,7 @@ function EditWizardShell({ agentId }: { agentId: string }) {
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        setError(`Erreur ${res.status} : ${d.error ?? 'inconnue'}`);
+        setError(d.message ?? `Erreur ${res.status} : ${d.error ?? 'inconnue'}`);
         setBusy(false);
         return;
       }
@@ -161,12 +165,17 @@ function EditWizardShell({ agentId }: { agentId: string }) {
         <button
           type="button"
           className="fr-btn"
-          disabled={currentStep === STEPS.length}
+          disabled={currentStep === STEPS.length || nextBlocked}
           onClick={() => setCurrentStep((s) => Math.min(STEPS.length, s + 1))}
         >
           Suivant
         </button>
       </div>
+      {nextBlocked && (
+        <p className="fr-hint-text fr-mt-1w">
+          Validez les instructions système pour continuer.
+        </p>
+      )}
     </div>
   );
 }

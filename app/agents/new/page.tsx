@@ -6,7 +6,7 @@
 
 import { Suspense, useState, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { WizardProvider, type AgentDraft } from './_context';
+import { WizardProvider, useWizard, type AgentDraft } from './_context';
 import { StepIdentity } from './_components/step-identity';
 import { StepBehavior } from './_components/step-behavior';
 import { StepKnowledge } from './_components/step-knowledge';
@@ -57,6 +57,11 @@ function NewAgentPageInner() {
 
 function WizardShell({ fromOnboarding = false }: { fromOnboarding?: boolean }) {
   const [currentStep, setCurrentStep] = useState(1);
+  const { promptValidated } = useWizard();
+
+  // L'étape 2 (Comportement) ne peut être quittée que si les instructions
+  // système ont été validées par le module anti-jailbreak.
+  const nextBlocked = currentStep === 2 && !promptValidated;
 
   return (
     <div>
@@ -104,12 +109,17 @@ function WizardShell({ fromOnboarding = false }: { fromOnboarding?: boolean }) {
         <button
           type="button"
           className="fr-btn"
-          disabled={currentStep === STEPS.length}
+          disabled={currentStep === STEPS.length || nextBlocked}
           onClick={() => setCurrentStep((s) => Math.min(STEPS.length, s + 1))}
         >
           Suivant
         </button>
       </div>
+      {nextBlocked && (
+        <p className="fr-hint-text fr-mt-1w">
+          Validez les instructions système pour continuer.
+        </p>
+      )}
     </div>
   );
 }
