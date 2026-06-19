@@ -15,7 +15,7 @@ type SearchParams = { saved?: string };
 export default async function AgentsPage({
   searchParams,
 }: {
-  searchParams: SearchParams;
+  searchParams: Promise<SearchParams>;
 }) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect('/sign-in');
@@ -30,7 +30,7 @@ export default async function AgentsPage({
 
   const owuiPublicUrl = env().OWUI_PUBLIC_URL || null;
 
-  const savedBanner = buildSavedBanner(searchParams.saved);
+  const savedBanner = buildSavedBanner((await searchParams).saved);
 
   return (
     <div>

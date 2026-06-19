@@ -9,6 +9,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { scwChatCompletions } from '@/lib/scw-llm-client';
 import { rateLimit, LLM_RATE_LIMIT } from '@/lib/rate-limit';
+import { inspectInput, logGuardEvent } from '@/lib/prompt-guard';
 
 const SYSTEM_PROMPT = `Tu es l'assistant de creation d'agents IA du Ministere de l'Interieur.
 Tu guides un agent du ministere (utilisateur non technique) pour creer son propre agent IA.
@@ -76,6 +77,22 @@ export async function POST(req: Request) {
 
   if (clientMessages.length === 0) {
     return NextResponse.json({ error: 'messages_required' }, { status: 400 });
+  }
+
+  // Garde d'entrée : le dialogue d'onboarding produit le systemPrompt qui sera
+  // ensuite publié. On inspecte le dernier message utilisateur pour bloquer une
+  // injection avant qu'elle ne contamine la config générée.
+  const lastUser = clientMessages[clientMessages.length - 1];
+  const inGuard = inspectInput(lastUser.content, 'user');
+  if (inGuard.blocked) {
+    logGuardEvent({
+      route: 'onboarding.chat',
+      stage: 'input',
+      userId: session.user?.id,
+      role: 'user',
+      signals: inGuard.signals,
+    });
+    return NextResponse.json({ error: 'blocked_input' }, { status: 422 });
   }
 
   try {

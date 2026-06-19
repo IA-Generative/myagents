@@ -7,6 +7,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { inspectInput, logGuardEvent } from '@/lib/prompt-guard';
 
 async function requireOwner(agentId: string) {
   const session = await getServerSession(authOptions);
@@ -28,9 +29,10 @@ async function requireOwner(agentId: string) {
 
 export async function GET(
   _req: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const r = await requireOwner(params.id);
+  const { id } = await params;
+  const r = await requireOwner(id);
   if (!r.ok) return r.res;
 
   const snapshot = r.agent.versions[0]?.configSnapshot ?? {};
@@ -50,12 +52,32 @@ export async function GET(
 
 export async function PUT(
   req: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const r = await requireOwner(params.id);
+  const { id } = await params;
+  const r = await requireOwner(id);
   if (!r.ok) return r.res;
 
   const body = await req.json().catch(() => ({}));
+
+  // Garde anti-supply-chain à l'édition : même contrôle qu'à la création.
+  const creatorContent = [
+    body.systemPrompt ?? '',
+    body.description ?? '',
+    body.greeting ?? '',
+    ...(Array.isArray(body.examples) ? body.examples : []),
+  ].join('\n\n');
+  const inGuard = inspectInput(creatorContent, 'system');
+  if (inGuard.blocked) {
+    logGuardEvent({
+      route: 'agents.update',
+      stage: 'input',
+      userId: r.session.user.id,
+      role: 'system',
+      signals: inGuard.signals,
+    });
+    return NextResponse.json({ error: 'blocked_input' }, { status: 422 });
+  }
 
   const newVersion = r.agent.version + 1;
   const visibility = body.visibility ?? r.agent.visibility;
@@ -77,7 +99,7 @@ export async function PUT(
   try {
     await prisma.$transaction([
       prisma.agent.update({
-        where: { id: params.id },
+        where: { id },
         data: {
           visibility,
           status,
@@ -87,7 +109,7 @@ export async function PUT(
       }),
       prisma.agentVersion.create({
         data: {
-          agentId: params.id,
+          agentId: id,
           version: newVersion,
           configSnapshot,
           changelog: body.changelog ?? 'Modification via le wizard',
@@ -95,7 +117,7 @@ export async function PUT(
       }),
     ]);
 
-    return NextResponse.json({ id: params.id, version: newVersion, status });
+    return NextResponse.json({ id, version: newVersion, status });
   } catch (err) {
     console.error('update_failed', err);
     return NextResponse.json({ error: 'update_failed' }, { status: 500 });
@@ -104,15 +126,16 @@ export async function PUT(
 
 export async function DELETE(
   _req: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const r = await requireOwner(params.id);
+  const { id } = await params;
+  const r = await requireOwner(id);
   if (!r.ok) return r.res;
 
   await prisma.agent.update({
-    where: { id: params.id },
+    where: { id },
     data: { status: 'archived' },
   });
 
-  return NextResponse.json({ id: params.id, status: 'archived' });
+  return NextResponse.json({ id, status: 'archived' });
 }

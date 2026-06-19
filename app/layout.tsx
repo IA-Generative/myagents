@@ -3,6 +3,7 @@
 
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import Link from 'next/link';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { HeaderAccount } from './_components/header-account';
@@ -59,12 +60,12 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
                     </div>
                   </div>
                   <div className="fr-header__service">
-                    <a href="/" title="Accueil — Mes Agents MirAI">
+                    <Link href="/" title="Accueil — Mes Agents MirAI">
                       <p className="fr-header__service-title">
                         Mes Agents MirAI{' '}
                         <span className="fr-badge fr-badge--sm fr-badge--green-emeraude">Beta</span>
                       </p>
-                    </a>
+                    </Link>
                     <p className="fr-header__service-tagline">
                       Créez vos agents IA souverains
                     </p>
@@ -88,13 +89,13 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           <div className="fr-container">
             <div className="fr-footer__body">
               <div className="fr-footer__brand fr-enlarge-link">
-                <a href="/" title="Accueil — Mes Agents MirAI">
+                <Link href="/" title="Accueil — Mes Agents MirAI">
                   <p className="fr-logo">
                     République
                     <br />
                     Française
                   </p>
-                </a>
+                </Link>
               </div>
               <div className="fr-footer__content">
                 <p className="fr-footer__content-desc">

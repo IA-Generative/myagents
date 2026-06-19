@@ -2,10 +2,9 @@
 const nextConfig = {
   output: 'standalone',
   reactStrictMode: true,
-  experimental: {
-    // react-dsfr requires this for server components compatibility
-    serverComponentsExternalPackages: ['@codegouvfr/react-dsfr'],
-  },
+  // react-dsfr requires this for server components compatibility
+  // (Next 15 : renommé depuis experimental.serverComponentsExternalPackages)
+  serverExternalPackages: ['@codegouvfr/react-dsfr'],
   // On sert l'app derrière un ingress nginx qui gère déjà la compression/TLS
   poweredByHeader: false,
 

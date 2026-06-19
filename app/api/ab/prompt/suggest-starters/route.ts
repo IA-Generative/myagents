@@ -7,6 +7,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { scwChatCompletions, ScwLlmUnavailableError } from '@/lib/scw-llm-client';
 import { rateLimit, LLM_RATE_LIMIT } from '@/lib/rate-limit';
+import { inspectInput, logGuardEvent } from '@/lib/prompt-guard';
 
 const SYSTEM_META_PROMPT = `Tu es un assistant qui aide à mettre en service un agent IA
 ministériel. À partir du prompt système que l'utilisateur fournit, génère :
@@ -56,6 +57,19 @@ export async function POST(req: Request) {
       },
       { status: 400 },
     );
+  }
+
+  // Garde d'entrée : le prompt système soumis est fourni par l'utilisateur.
+  const inGuard = inspectInput(body.prompt, 'system');
+  if (inGuard.blocked) {
+    logGuardEvent({
+      route: 'prompt.suggest-starters',
+      stage: 'input',
+      userId: session.user?.id,
+      role: 'system',
+      signals: inGuard.signals,
+    });
+    return NextResponse.json({ error: 'blocked_input' }, { status: 422 });
   }
 
   const userMessage =

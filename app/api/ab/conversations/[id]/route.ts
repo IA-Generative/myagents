@@ -8,15 +8,16 @@ import { prisma } from '@/lib/db';
 
 export async function GET(
   _req: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
+  const { id } = await params;
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
   const conv = await prisma.conversation.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: { messages: { orderBy: { createdAt: 'asc' } } },
   });
 
@@ -34,18 +35,19 @@ export async function GET(
 
 export async function DELETE(
   _req: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
+  const { id } = await params;
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  const conv = await prisma.conversation.findUnique({ where: { id: params.id } });
+  const conv = await prisma.conversation.findUnique({ where: { id } });
   if (!conv || conv.userId !== session.user.id) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
 
-  await prisma.conversation.delete({ where: { id: params.id } });
+  await prisma.conversation.delete({ where: { id } });
   return NextResponse.json({ deleted: true });
 }

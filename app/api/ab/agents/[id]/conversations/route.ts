@@ -7,15 +7,16 @@ import { prisma } from '@/lib/db';
 
 export async function GET(
   _req: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
+  const { id } = await params;
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
   const conversations = await prisma.conversation.findMany({
-    where: { agentId: params.id, userId: session.user.id },
+    where: { agentId: id, userId: session.user.id },
     orderBy: { updatedAt: 'desc' },
     take: 50,
     include: {

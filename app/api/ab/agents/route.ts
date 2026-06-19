@@ -13,6 +13,7 @@ import {
   buildOwuiModelId,
   OwuiAdminUnavailableError,
 } from '@/lib/owui-admin-client';
+import { inspectInput, logGuardEvent } from '@/lib/prompt-guard';
 
 type AgentDraftPayload = {
   name?: string;
@@ -72,6 +73,27 @@ export async function POST(req: Request) {
   }
   if (!body.systemPrompt || body.systemPrompt.trim().length === 0) {
     return NextResponse.json({ error: 'system_prompt_required' }, { status: 400 });
+  }
+
+  // Garde anti-supply-chain : un créateur ne doit pas pouvoir publier un agent
+  // dont le system prompt (ou les contenus annexes) embarque un keylogger ou une
+  // consigne d'injection. On inspecte tout le contenu fourni par le créateur.
+  const creatorContent = [
+    body.systemPrompt,
+    body.description ?? '',
+    body.greeting ?? '',
+    ...(body.examples ?? []),
+  ].join('\n\n');
+  const inGuard = inspectInput(creatorContent, 'system');
+  if (inGuard.blocked) {
+    logGuardEvent({
+      route: 'agents.create',
+      stage: 'input',
+      userId: r.session.user.id,
+      role: 'system',
+      signals: inGuard.signals,
+    });
+    return NextResponse.json({ error: 'blocked_input' }, { status: 422 });
   }
 
   const owuiModelId =
