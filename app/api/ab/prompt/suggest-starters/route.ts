@@ -7,7 +7,15 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { scwChatCompletions, ScwLlmUnavailableError } from '@/lib/scw-llm-client';
 import { rateLimit, LLM_RATE_LIMIT } from '@/lib/rate-limit';
-import { inspectInput, BLOCK_MESSAGE_AGENT_CONFIG } from '@/lib/prompt-guard';
+import {
+  inspectInput,
+  inspectOutput,
+  judgeOutput,
+  DEFAULT_GUARD_CONFIG,
+  DEFAULT_OUTPUT_POLICY_GOAL,
+  BLOCK_MESSAGE_AGENT_CONFIG,
+  BLOCK_MESSAGE_OUTPUT,
+} from '@/lib/prompt-guard';
 import { recordGuardEvent } from '@/lib/guard-audit';
 
 const SYSTEM_META_PROMPT = `Tu es un assistant qui aide à mettre en service un agent IA
@@ -61,8 +69,8 @@ export async function POST(req: Request) {
   }
 
   // Garde d'entrée : le prompt système soumis est fourni par l'utilisateur.
-  const inGuard = inspectInput(body.prompt, 'system');
-  if (inGuard.blocked) {
+  const inGuard = inspectInput(body.prompt, 'system', { anomaly: DEFAULT_GUARD_CONFIG.anomaly });
+  if (inGuard.signals.some((s) => s.complied)) {
     await recordGuardEvent({
       route: 'prompt.suggest-starters',
       stage: 'input',
@@ -70,6 +78,8 @@ export async function POST(req: Request) {
       role: 'system',
       signals: inGuard.signals,
     });
+  }
+  if (inGuard.blocked) {
     return NextResponse.json(
       { error: 'blocked_input', message: BLOCK_MESSAGE_AGENT_CONFIG },
       { status: 422 },
@@ -91,6 +101,28 @@ export async function POST(req: Request) {
     });
 
     const raw = completion.choices?.[0]?.message?.content?.trim() ?? '';
+
+    // Garde de sortie : l'amorce + les exemples générés seront affichés à
+    // l'utilisateur final → on inspecte (heuristiques + juge) avant de les rendre.
+    const outHeuristics = inspectOutput(raw);
+    const judge = await judgeOutput({ goal: DEFAULT_OUTPUT_POLICY_GOAL, response: raw });
+    const outSignals = [
+      ...outHeuristics.signals,
+      { source: 'judge' as const, complied: judge.complied, reason: judge.reason, severity: 'medium' as const },
+    ];
+    if (outSignals.some((s) => s.complied)) {
+      await recordGuardEvent({
+        route: 'prompt.suggest-starters',
+        stage: 'output',
+        userId: session.user?.id,
+        signals: outSignals,
+      });
+      return NextResponse.json(
+        { error: 'blocked_output', message: BLOCK_MESSAGE_OUTPUT },
+        { status: 422 },
+      );
+    }
+
     const parsed = parseStartersJson(raw);
     if (!parsed) {
       console.error('suggest-starters parse_failed, raw output:', raw);

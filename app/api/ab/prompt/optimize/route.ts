@@ -9,6 +9,9 @@ import { rateLimit, LLM_RATE_LIMIT } from '@/lib/rate-limit';
 import {
   inspectInput,
   inspectOutput,
+  judgeOutput,
+  DEFAULT_GUARD_CONFIG,
+  DEFAULT_OUTPUT_POLICY_GOAL,
   BLOCK_MESSAGE_AGENT_CONFIG,
   BLOCK_MESSAGE_OUTPUT,
 } from '@/lib/prompt-guard';
@@ -35,8 +38,8 @@ export async function POST(req: Request) {
   }
 
   // Garde d'entrée : le prompt à optimiser est fourni par l'utilisateur.
-  const inGuard = inspectInput(body.prompt, 'user');
-  if (inGuard.blocked) {
+  const inGuard = inspectInput(body.prompt, 'user', { anomaly: DEFAULT_GUARD_CONFIG.anomaly });
+  if (inGuard.signals.some((s) => s.complied)) {
     await recordGuardEvent({
       route: 'prompt.optimize',
       stage: 'input',
@@ -44,6 +47,8 @@ export async function POST(req: Request) {
       role: 'user',
       signals: inGuard.signals,
     });
+  }
+  if (inGuard.blocked) {
     return NextResponse.json(
       { error: 'blocked_input', message: BLOCK_MESSAGE_AGENT_CONFIG },
       { status: 422 },
@@ -59,13 +64,18 @@ export async function POST(req: Request) {
       temperature: 0.4,
     });
     const optimized = completion.choices?.[0]?.message?.content?.trim() ?? body.prompt;
-    const outGuard = inspectOutput(optimized);
-    if (outGuard.blocked) {
+    const outHeuristics = inspectOutput(optimized);
+    const judge = await judgeOutput({ goal: DEFAULT_OUTPUT_POLICY_GOAL, response: optimized });
+    const outSignals = [
+      ...outHeuristics.signals,
+      { source: 'judge' as const, complied: judge.complied, reason: judge.reason, severity: 'medium' as const },
+    ];
+    if (outSignals.some((s) => s.complied)) {
       await recordGuardEvent({
         route: 'prompt.optimize',
         stage: 'output',
         userId: session.user?.id,
-        signals: outGuard.signals,
+        signals: outSignals,
       });
       return NextResponse.json(
         { error: 'blocked_output', message: BLOCK_MESSAGE_OUTPUT },

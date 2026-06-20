@@ -7,7 +7,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { rateLimit, LLM_RATE_LIMIT } from '@/lib/rate-limit';
-import { inspectInput, BLOCK_MESSAGE_AGENT_CONFIG } from '@/lib/prompt-guard';
+import { inspectInput, DEFAULT_GUARD_CONFIG, BLOCK_MESSAGE_AGENT_CONFIG } from '@/lib/prompt-guard';
 import { recordGuardEvent } from '@/lib/guard-audit';
 
 export async function POST(req: Request) {
@@ -24,8 +24,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'prompt_required' }, { status: 400 });
   }
 
-  const guard = inspectInput(body.prompt, 'system');
-  if (guard.blocked) {
+  const guard = inspectInput(body.prompt, 'system', { anomaly: DEFAULT_GUARD_CONFIG.anomaly });
+  if (guard.signals.some((s) => s.complied)) {
     await recordGuardEvent({
       route: 'prompt.validate',
       stage: 'validate',
@@ -33,6 +33,8 @@ export async function POST(req: Request) {
       role: 'system',
       signals: guard.signals,
     });
+  }
+  if (guard.blocked) {
     return NextResponse.json(
       { error: 'blocked_input', message: BLOCK_MESSAGE_AGENT_CONFIG },
       { status: 422 },
