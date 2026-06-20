@@ -82,9 +82,17 @@ d'approvisionnement (system). Pistes :
   splitting* (l'attaque répartie sur plusieurs tours pour passer sous le radar).
 - **Chaînes d'encodage** : base64 → rot13 → hex imbriqués ; demande de décodage
   en plusieurs étapes.
+- **Suffixes adversariaux (GCG)** : suffixe optimisé sans mot-clé, invisible aux
+  regex. Détectable par **perplexité** (cf. NeMo : `len/perplexité`, perplexité
+  préfixe/suffixe) — piste de détecteur complémentaire dans `core.ts`.
 
 Chaque nouvelle famille s'ajoute soit à `payloads.ts` (cas figés), soit comme
 nouvel axe paramétré du générateur `zorg-corpus.ts`.
+
+> **Inspirations externes** : l'analyse comparée de **NVIDIA NeMo Guardrails**
+> (détection par perplexité, parser self-check robuste, grounding/fact-check,
+> rails en streaming) et les améliorations actionnables qui en découlent sont
+> documentées dans [`docs/nemo-guardrails-comparison.md`](../../docs/nemo-guardrails-comparison.md).
 
 ## 8. Durcir le scoring
 

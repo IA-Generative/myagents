@@ -146,14 +146,15 @@ Une fois `npm run test:redteam:judge` joué (rapport
 - exporter `GUARD_JUDGE_MODEL=<id>` à l'exécution (override sans rebuild).
 
 > Statut : **benchmark joué le 2026-06-20** sur les 9 modèles (36 cas étiquetés).
-> `RECOMMENDED_JUDGE_MODEL = 'gemma-4-26b-a4b-it'` est appliqué dans `config.ts`.
+> `RECOMMENDED_JUDGE_MODEL = 'gpt-oss-120b'` est appliqué dans `config.ts` (choix
+> « fiabilité max », cf. décision ci-dessous).
 
 #### Résultat du benchmark (2026-06-20)
 
 | Modèle | Coût | Rappel | Précision | F1 | FPR | Fail-closed | Latence |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| **gemma-4-26b-a4b-it** ✅ | **2** | **96 %** | **100 %** | **98 %** | **0 %** | 17 % | 3453 ms |
-| gpt-oss-120b | 4 | 93 % | 100 % | 96 % | 0 % | 0 % | 1119 ms |
+| **gpt-oss-120b** ✅ | 4 | 93 % | 100 % | 96 % | 0 % | **0 %** | 1119 ms |
+| gemma-4-26b-a4b-it | 2 | 96 % | 100 % | 98 % | 0 % | 17 % | 3453 ms |
 | llama-3.3-70b-instruct | 3 | 89 % | 100 % | 94 % | 0 % | 0 % | 435 ms |
 | qwen3-235b-a22b | 4 | 89 % | 100 % | 94 % | 0 % | 0 % | 911 ms |
 | mistral-medium-3.5-128b | 4 | 81 % | 100 % | 90 % | 0 % | 0 % | 837 ms |
@@ -162,17 +163,19 @@ Une fois `npm run test:redteam:judge` joué (rapport
 | qwen3.6-35b-a3b | 3 | 81 % | 73 % | 77 % | 89 % | 83 % | 2575 ms |
 | qwen3.5-397b-a17b | 5 | 100 % | 75 % | 86 % | **100 %** | 100 % | 8365 ms |
 
-**Décision** : `gemma-4-26b-a4b-it` (coût 2) — meilleur compromis coût vs détection
-(rappel 96 %, FPR 0 %). L'hypothèse « un modèle équilibré bon marché suffit comme
-juge » est **confirmée** : inutile de payer un *reasoning* coûteux par défaut.
+**Décision retenue** : `gpt-oss-120b` (coût 4) — on privilégie la **fiabilité du
+juge** (0 % de verdicts illisibles, donc aucun blocage *fail-closed* parasite sur
+du contenu légitime ; rappel 93 %, FPR 0 %, précision 100 %, latence ~1,1 s).
+
+**Alternative coût-optimal** : `gemma-4-26b-a4b-it` (coût 2, rappel 96 %, FPR 0 %)
+reste le meilleur rapport coût/détection — mais ses **17 % de fail-closed**
+(verdicts illisibles → comptés *cédé*) provoqueraient des blocages parasites. À
+retenir si le budget tokens prime sur la fiabilité ; bascule via
+`GUARD_JUDGE_MODEL=gemma-4-26b-a4b-it`.
 
 **Nuances** :
 - `qwen3.5-397b` affiche un rappel 100 % trompeur : son **fail-closed 100 %**
-  (verdicts illisibles → comptés *cédé*) flague aussi tout le contenu bénin
-  (FPR 100 %) → inutilisable comme juge.
-- `gemma` a 17 % de fail-closed (sous le seuil de 20 %, mais à surveiller). Pour
-  une **fiabilité maximale** (0 % fail-closed, latence 1,1 s), `gpt-oss-120b`
-  (coût 4) est l'alternative — à choisir si le budget tokens n'est pas contraint.
+  flague aussi tout le contenu bénin (FPR 100 %) → inutilisable comme juge.
 - Pour la **latence minimale**, `llama-3.3-70b` (435 ms, rappel 89 %).
 
 ## 6. Compatibilité & non-régression
@@ -189,3 +192,10 @@ juge » est **confirmée** : inutile de payer un *reasoning* coûteux par défau
   réutilisation hors de ce repo (registre privé).
 - Embarquer le **corpus versionné + tests de régression** dans le package.
 - Ajouter un mode **juge en ensemble** (vote multi-modèles) derrière `GuardConfig`.
+- **Emprunts à NeMo Guardrails** (analyse comparée :
+  [`nemo-guardrails-comparison.md`](./nemo-guardrails-comparison.md)) : détecteur
+  de jailbreak par **perplexité** (anti-suffixe GCG) dans `core.ts`, **parser
+  keyword de repli** dans `judgeWith` (réduit le fail-closed), **grounding /
+  fact-check** optionnel pour l'objectif désinformation, détecteur **PII** en
+  sortie — tous derrière `GuardConfig`, en TS pur, sans les dépendances lourdes
+  de NeMo.
