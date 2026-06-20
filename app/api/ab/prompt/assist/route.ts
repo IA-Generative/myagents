@@ -10,6 +10,9 @@ import { rateLimit, LLM_RATE_LIMIT } from '@/lib/rate-limit';
 import {
   inspectInput,
   inspectOutput,
+  judgeOutput,
+  DEFAULT_GUARD_CONFIG,
+  DEFAULT_OUTPUT_POLICY_GOAL,
   BLOCK_MESSAGE_AGENT_CONFIG,
   BLOCK_MESSAGE_OUTPUT,
 } from '@/lib/prompt-guard';
@@ -36,8 +39,8 @@ export async function POST(req: Request) {
 
   // Garde d'entrée : le prompt + les hints sont fournis par l'utilisateur.
   const inboundContent = `${JSON.stringify(body.hints ?? {})}\n${body.prompt ?? ''}`;
-  const inGuard = inspectInput(inboundContent, 'user');
-  if (inGuard.blocked) {
+  const inGuard = inspectInput(inboundContent, 'user', { anomaly: DEFAULT_GUARD_CONFIG.anomaly });
+  if (inGuard.signals.some((s) => s.complied)) {
     await recordGuardEvent({
       route: 'prompt.assist',
       stage: 'input',
@@ -45,6 +48,8 @@ export async function POST(req: Request) {
       role: 'user',
       signals: inGuard.signals,
     });
+  }
+  if (inGuard.blocked) {
     return NextResponse.json(
       { error: 'blocked_input', message: BLOCK_MESSAGE_AGENT_CONFIG },
       { status: 422 },
@@ -66,16 +71,20 @@ export async function POST(req: Request) {
       temperature: 0.5,
     });
     const generated = completion.choices?.[0]?.message?.content?.trim() ?? '';
-    // Garde de sortie (heuristiques) : le prompt généré ne doit pas contenir
-    // de keylogger. Pas de juge inline ici (sortie = un prompt, pas une réponse
-    // utilisateur), l'heuristique keylogger suffit.
-    const outGuard = inspectOutput(generated);
-    if (outGuard.blocked) {
+    // Garde de sortie : heuristiques (keylogger) + LLM-juge (manipulation /
+    // désinformation que la regex ne voit pas). Fail-closed.
+    const outHeuristics = inspectOutput(generated);
+    const judge = await judgeOutput({ goal: DEFAULT_OUTPUT_POLICY_GOAL, response: generated });
+    const outSignals = [
+      ...outHeuristics.signals,
+      { source: 'judge' as const, complied: judge.complied, reason: judge.reason, severity: 'medium' as const },
+    ];
+    if (outSignals.some((s) => s.complied)) {
       await recordGuardEvent({
         route: 'prompt.assist',
         stage: 'output',
         userId: session.user?.id,
-        signals: outGuard.signals,
+        signals: outSignals,
       });
       return NextResponse.json(
         { error: 'blocked_output', message: BLOCK_MESSAGE_OUTPUT },

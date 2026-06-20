@@ -7,7 +7,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { inspectInput, BLOCK_MESSAGE_AGENT_CONFIG } from '@/lib/prompt-guard';
+import { inspectInput, DEFAULT_GUARD_CONFIG, BLOCK_MESSAGE_AGENT_CONFIG } from '@/lib/prompt-guard';
 import { recordGuardEvent } from '@/lib/guard-audit';
 
 async function requireOwner(agentId: string) {
@@ -68,8 +68,8 @@ export async function PUT(
     body.greeting ?? '',
     ...(Array.isArray(body.examples) ? body.examples : []),
   ].join('\n\n');
-  const inGuard = inspectInput(creatorContent, 'system');
-  if (inGuard.blocked) {
+  const inGuard = inspectInput(creatorContent, 'system', { anomaly: DEFAULT_GUARD_CONFIG.anomaly });
+  if (inGuard.signals.some((s) => s.complied)) {
     await recordGuardEvent({
       route: 'agents.update',
       stage: 'input',
@@ -77,6 +77,8 @@ export async function PUT(
       role: 'system',
       signals: inGuard.signals,
     });
+  }
+  if (inGuard.blocked) {
     return NextResponse.json(
       { error: 'blocked_input', message: BLOCK_MESSAGE_AGENT_CONFIG },
       { status: 422 },

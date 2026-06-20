@@ -73,3 +73,8 @@ tests/redteam/reports/*.json
 .apdisk
 Icon?
 __MACOSX/
+
+# --- Playwright e2e (session + rapports locaux) ---
+tests/e2e/.auth/
+tests/e2e/.report/
+playwright-report/
