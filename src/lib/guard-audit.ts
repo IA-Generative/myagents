@@ -11,15 +11,13 @@
 // pur et partagé avec le harnais de tests.
 
 import { prisma } from './db';
-import { logGuardEvent, type Signal, type Severity } from './prompt-guard';
-
-type GuardEventInput = {
-  route: string;
-  stage: 'input' | 'output' | 'validate';
-  userId?: string;
-  role?: 'user' | 'system';
-  signals: Signal[];
-};
+import {
+  logGuardEvent,
+  type Signal,
+  type Severity,
+  type AuditSink,
+  type GuardEventInput,
+} from './prompt-guard';
 
 /** Sévérité la plus élevée parmi les signaux ayant déclenché (défaut: medium). */
 function highestSeverity(signals: Signal[]): Severity {
@@ -53,3 +51,12 @@ export async function recordGuardEvent(event: GuardEventInput): Promise<void> {
     console.error('[guard-audit] échec persistance GuardEvent (non bloquant):', err);
   }
 }
+
+/**
+ * Puits d'audit Prisma : implémentation du contrat `AuditSink` du composant
+ * prompt-guard. C'est l'adapter de persistance que l'app injecte (le cœur reste
+ * agnostique de la base de données).
+ */
+export const prismaAuditSink: AuditSink = {
+  record: recordGuardEvent,
+};

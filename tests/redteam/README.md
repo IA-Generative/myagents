@@ -10,6 +10,18 @@ référence sont couvertes :
 …ainsi que des variantes (obfuscation, injection indirecte, base64, « ignore previous
 instructions », DAN, fuite de prompt).
 
+Deux corpus sont disponibles :
+
+- **baseline** — payloads faits maison ([`payloads.ts`](./payloads.ts), `ATTACKS`).
+- **ZORG** — corpus **paramétré** ([`zorg-corpus.ts`](./zorg-corpus.ts)) dérivé de la
+  structure du jailbreak public « ZORG 👽 » : on réutilise ses techniques d'enveloppe
+  (hijack de persona, override des directives, suppression de refus, marqueurs/émojis,
+  rituel d'activation, omniscience/fabrication, obfuscation) en les faisant varier
+  (langue FR/EN, objectif, rôle, densité de marqueurs, rituel, encodage) sur les 3
+  objectifs mesurables.
+
+> Méthode détaillée et pistes d'amélioration : [`METHODOLOGY.md`](./METHODOLOGY.md).
+
 ## Lancer la suite
 
 La suite est **opt-in** : elle appelle un vrai LLM (réseau + tokens). Sans credentials
@@ -44,6 +56,39 @@ Scaleway, elle est **skippée** et `npm test` reste vert et hors-ligne.
 ```bash
 REDTEAM_SAMPLES=5 REDTEAM_MODELS=gpt-oss-120b,mistral-small-3.2-24b-instruct-2506 npm run test:redteam
 ```
+
+## Matrice multi-modèles & synthèse persistée
+
+`npm run test:redteam` échoue au 1er breach et ne produit qu'une sortie TAP. Pour une
+**synthèse par modèle** (nature de l'attaque, blocage brut vs derrière la garde, couche
+déclenchante, latence, coût), utiliser le **runner de matrice** :
+
+```bash
+# Pré-vol (1 modèle × 2 payloads × 1 tirage) — valider la chaîne avant le run complet :
+REDTEAM_SMOKE=1 npm run test:redteam:matrix
+
+# Run complet : les 9 modèles du catalogue, corpus baseline + ZORG, 2 surfaces :
+npm run test:redteam:matrix
+```
+
+Sorties dans [`reports/`](./reports/) : `synthesis-*.md` (tableaux A–E, committable),
+`summary-*.csv` (agrégé), `results-*.json` (brut, **gitignoré** car il contient des
+extraits de réponses). Réglages : `REDTEAM_MODELS`, `REDTEAM_SAMPLES`,
+`REDTEAM_CONCURRENCY`, `REDTEAM_CORPUS` (`all|baseline|zorg`),
+`REDTEAM_SURFACES` (`both|raw|guarded`).
+
+## Benchmark du LLM-juge (coût vs détection)
+
+Pour désigner le **meilleur modèle juge** du module antijailbreak :
+
+```bash
+npm run test:redteam:judge
+```
+
+Évalue chaque modèle dans le rôle de juge sur un jeu étiqueté (rappel / précision / F1 /
+FPR / coût / latence) et écrit `reports/judge-eval-*.md` avec une **recommandation**. Voir
+[`docs/prompt-guard-isolation.md`](../../docs/prompt-guard-isolation.md) pour l'application
+de la reco (`RECOMMENDED_JUDGE_MODEL` / `GUARD_JUDGE_MODEL`).
 
 ## Interpréter les résultats
 

@@ -12,6 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:redteam": "vitest run tests/redteam",
+    "test:redteam:matrix": "REDTEAM_MATRIX=1 vitest run tests/redteam/matrix.run.test.ts",
+    "test:redteam:judge": "REDTEAM_JUDGE=1 vitest run tests/redteam/judge-eval.run.test.ts",
     "test:e2e": "playwright test",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
