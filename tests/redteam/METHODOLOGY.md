@@ -83,8 +83,10 @@ d'approvisionnement (system). Pistes :
 - **Chaînes d'encodage** : base64 → rot13 → hex imbriqués ; demande de décodage
   en plusieurs étapes.
 - **Suffixes adversariaux (GCG)** : suffixe optimisé sans mot-clé, invisible aux
-  regex. Détectable par **perplexité** (cf. NeMo : `len/perplexité`, perplexité
-  préfixe/suffixe) — piste de détecteur complémentaire dans `core.ts`.
+  regex. **Désormais détecté** par le proxy d'anomalie `anomalyDetector` (`core.ts`,
+  emprunt NeMo `len/perplexité` + fenêtres préfixe/suffixe), en posture **audit**
+  par défaut (journalise sans bloquer — proxy bruité). Pour ajouter un axe de test
+  GCG, voir `tests/redteam/anomaly.test.ts` (calibration prose ≤ 0,05 vs GCG ≥ 0,21).
 
 Chaque nouvelle famille s'ajoute soit à `payloads.ts` (cas figés), soit comme
 nouvel axe paramétré du générateur `zorg-corpus.ts`.

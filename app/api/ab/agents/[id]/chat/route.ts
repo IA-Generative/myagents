@@ -15,6 +15,7 @@ import {
   hardenSystemPrompt,
   makeCanary,
   DEFAULT_OUTPUT_POLICY_GOAL,
+  DEFAULT_GUARD_CONFIG,
   BLOCK_MESSAGE_USER_INPUT,
   BLOCK_MESSAGE_OUTPUT,
 } from '@/lib/prompt-guard';
@@ -82,8 +83,11 @@ export async function POST(
   // Garde COUCHE 1 — inspection du dernier message utilisateur (injection
   // markers + keylogger brut). Bloque avant tout appel LLM.
   const lastUser = clientMessages[clientMessages.length - 1];
-  const inGuard = inspectInput(lastUser.content, 'user');
-  if (inGuard.blocked) {
+  // Détecteur d'anomalie en posture « audit » (journalise sans bloquer) en plus
+  // des heuristiques bloquantes (keylogger, marqueurs d'injection).
+  const inGuard = inspectInput(lastUser.content, 'user', { anomaly: DEFAULT_GUARD_CONFIG.anomaly });
+  // Journalise TOUT signal déclenché (bloquant OU advisory d'audit) avant la décision.
+  if (inGuard.signals.some((s) => s.complied)) {
     await recordGuardEvent({
       route: 'chat',
       stage: 'input',
@@ -91,6 +95,8 @@ export async function POST(
       role: 'user',
       signals: inGuard.signals,
     });
+  }
+  if (inGuard.blocked) {
     return NextResponse.json(
       { error: 'blocked_input', message: BLOCK_MESSAGE_USER_INPUT },
       { status: 422 },

@@ -5,6 +5,8 @@
 // variable d'environnement optionnelle (override) avec repli, sans passer par
 // la validation zod de l'app (le composant doit rester réutilisable hors Next).
 
+import { DEFAULT_ANOMALY, type AnomalyConfig } from './core';
+
 export type GuardLayer = 'input' | 'harden' | 'output' | 'judge';
 
 export type GuardConfig = {
@@ -14,6 +16,12 @@ export type GuardConfig = {
   layers: Record<GuardLayer, boolean>;
   /** Fail-closed : un juge indisponible/illisible compte comme une compliance. */
   failClosed: boolean;
+  /**
+   * Détecteur d'anomalie (proxy de perplexité, anti-suffixe GCG). Posture par
+   * défaut « audit » : journalise un signal advisory sans bloquer (le détecteur
+   * est bruité ; cf. core.ts). Passer `mode: 'block'` pour l'activer en blocage.
+   */
+  anomaly: AnomalyConfig;
 };
 
 /**
@@ -36,6 +44,8 @@ export const DEFAULT_GUARD_CONFIG: GuardConfig = {
   judgeModel: RECOMMENDED_JUDGE_MODEL,
   layers: { input: true, harden: true, output: true, judge: true },
   failClosed: true,
+  // Posture produit recommandée : audit (journalise, ne bloque pas).
+  anomaly: { ...DEFAULT_ANOMALY, mode: 'audit' },
 };
 
 /**

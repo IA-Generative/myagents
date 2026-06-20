@@ -193,9 +193,18 @@ retenir si le budget tokens prime sur la fiabilité ; bascule via
 - Embarquer le **corpus versionné + tests de régression** dans le package.
 - Ajouter un mode **juge en ensemble** (vote multi-modèles) derrière `GuardConfig`.
 - **Emprunts à NeMo Guardrails** (analyse comparée :
-  [`nemo-guardrails-comparison.md`](./nemo-guardrails-comparison.md)) : détecteur
-  de jailbreak par **perplexité** (anti-suffixe GCG) dans `core.ts`, **parser
-  keyword de repli** dans `judgeWith` (réduit le fail-closed), **grounding /
-  fact-check** optionnel pour l'objectif désinformation, détecteur **PII** en
-  sortie — tous derrière `GuardConfig`, en TS pur, sans les dépendances lourdes
-  de NeMo.
+  [`nemo-guardrails-comparison.md`](./nemo-guardrails-comparison.md)) :
+  - ✅ **(a)** Détecteur d'anomalie « proxy de perplexité » (anti-suffixe GCG) dans
+    `core.ts` — `anomalyDetector` + intégré à `inspectInput`. Posture par défaut
+    **`audit`** (`GuardConfig.anomaly.mode`) : journalise un signal `advisory` sans
+    bloquer (le proxy est bruité — code/markup dense le déclenche). Câblé en audit
+    sur les routes chat + onboarding. Promouvable en `block` via `GuardConfig`.
+  - ✅ **(b)** **Parser keyword de repli** (`parseKeywordVerdict`) dans `judgeWith` :
+    avant de fail-closer sur un verdict non-JSON, on tente un mapping yes/no/safe/
+    unsafe (FR+EN) → réduit le `failClosedRate`.
+  - ✅ **(f)** **Inspecteur de sortie en streaming** (`createStreamingOutputInspector`,
+    fenêtre glissante + contexte reporté) — capacité composant, non branchée (app
+    en `stream:false`).
+  - 🔲 Backlog : **(c)** classifieur dédié type Llama Guard, **(d)** grounding /
+    fact-check pour la désinformation, **(e)** détecteur PII en sortie — tous
+    derrière `GuardConfig`, en TS pur, sans les dépendances lourdes de NeMo.
