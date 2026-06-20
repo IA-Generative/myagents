@@ -101,7 +101,7 @@ export default function AgentChatPage() {
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        setError(`Erreur ${res.status} : ${d.error ?? 'inconnue'}`);
+        setError(d.message ?? `Erreur ${res.status} : ${d.error ?? 'inconnue'}`);
         setBusy(false);
         return;
       }

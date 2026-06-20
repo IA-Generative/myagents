@@ -7,7 +7,8 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { inspectInput, logGuardEvent } from '@/lib/prompt-guard';
+import { inspectInput, BLOCK_MESSAGE_AGENT_CONFIG } from '@/lib/prompt-guard';
+import { recordGuardEvent } from '@/lib/guard-audit';
 
 async function requireOwner(agentId: string) {
   const session = await getServerSession(authOptions);
@@ -69,14 +70,17 @@ export async function PUT(
   ].join('\n\n');
   const inGuard = inspectInput(creatorContent, 'system');
   if (inGuard.blocked) {
-    logGuardEvent({
+    await recordGuardEvent({
       route: 'agents.update',
       stage: 'input',
       userId: r.session.user.id,
       role: 'system',
       signals: inGuard.signals,
     });
-    return NextResponse.json({ error: 'blocked_input' }, { status: 422 });
+    return NextResponse.json(
+      { error: 'blocked_input', message: BLOCK_MESSAGE_AGENT_CONFIG },
+      { status: 422 },
+    );
   }
 
   const newVersion = r.agent.version + 1;

@@ -50,6 +50,11 @@ coverage/
 playwright-report/
 test-results/
 
+# --- Rapports red-team ---
+# Le JSON brut peut contenir des extraits de réponses de modèles : on l'ignore.
+# La synthèse .md et le CSV agrégé (sans contenu) sont committables.
+tests/redteam/reports/*.json
+
 # --- IDE / outils agents ---
 .vscode/
 .idea/

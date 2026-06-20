@@ -14,8 +14,8 @@ import {
 import { useWizard } from '../_context';
 
 export function StepBehavior() {
-  const { draft, update } = useWizard();
-  const [busy, setBusy] = useState<null | 'assist' | 'optimize' | 'starters'>(null);
+  const { draft, update, promptValidated, setPromptValidated } = useWizard();
+  const [busy, setBusy] = useState<null | 'assist' | 'optimize' | 'starters' | 'validate'>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Liste des modèles chargée dynamiquement depuis /api/ab/models (cache serveur).
@@ -67,7 +67,7 @@ export function StepBehavior() {
       });
       if (!res.ok) {
         const detail = await res.json().catch(() => ({}));
-        setError(`Erreur ${res.status} : ${detail.error ?? 'inconnue'}`);
+        setError(detail.message ?? `Erreur ${res.status} : ${detail.error ?? 'inconnue'}`);
         return;
       }
       const data = await res.json();
@@ -94,7 +94,7 @@ export function StepBehavior() {
       });
       if (!res.ok) {
         const detail = await res.json().catch(() => ({}));
-        setError(`Erreur ${res.status} : ${detail.error ?? 'inconnue'}`);
+        setError(detail.message ?? `Erreur ${res.status} : ${detail.error ?? 'inconnue'}`);
         return;
       }
       const data = (await res.json()) as { greeting?: string; examples?: string[] };
@@ -103,6 +103,36 @@ export function StepBehavior() {
       if (Array.isArray(data.examples)) patch.examples = data.examples;
       update(patch);
     } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // Validation OBLIGATOIRE des instructions système par le module anti-jailbreak.
+  // Tant que ce n'est pas validé, la navigation « Suivant » est bloquée (cf. page.tsx).
+  async function validateSystemPrompt() {
+    if (!draft.systemPrompt || draft.systemPrompt.trim().length === 0) {
+      setError('Saisissez des instructions système avant de les valider.');
+      return;
+    }
+    setBusy('validate');
+    setError(null);
+    try {
+      const res = await fetch('/api/ab/prompt/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: draft.systemPrompt }),
+      });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        setPromptValidated(false);
+        setError(detail.message ?? `Erreur ${res.status} : ${detail.error ?? 'inconnue'}`);
+        return;
+      }
+      setPromptValidated(true);
+    } catch (err) {
+      setPromptValidated(false);
       setError(String(err));
     } finally {
       setBusy(null);
@@ -178,9 +208,37 @@ Contraintes :
             {busy === 'optimize' ? 'Optimisation…' : 'Optimiser mon prompt'}
           </button>
         </div>
+
+        {/* ---- Validation obligatoire des instructions système ---- */}
+        <div className="fr-mt-2w" style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className={
+              promptValidated
+                ? 'fr-btn fr-btn--icon-left fr-icon-checkbox-circle-line'
+                : 'fr-btn fr-btn--secondary fr-btn--icon-left fr-icon-shield-line'
+            }
+            disabled={busy !== null || !draft.systemPrompt || promptValidated}
+            onClick={validateSystemPrompt}
+            aria-live="polite"
+          >
+            {busy === 'validate'
+              ? 'Validation…'
+              : promptValidated
+                ? 'Instructions validées ✓'
+                : 'Valider les instructions système'}
+          </button>
+          <span className="fr-hint-text" style={{ margin: 0 }}>
+            {promptValidated
+              ? 'Vous pouvez passer à l’étape suivante.'
+              : 'La validation des instructions système est obligatoire avant de passer à l’étape suivante.'}
+          </span>
+        </div>
+
         {error && (
           <div className="fr-alert fr-alert--error fr-alert--sm fr-mt-2w">
             <p>{error}</p>
+            <p className="fr-text--sm fr-mb-0">Modifiez vos instructions système, puis validez à nouveau.</p>
           </div>
         )}
       </div>

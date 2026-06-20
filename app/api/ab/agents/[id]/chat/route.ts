@@ -14,9 +14,12 @@ import {
   judgeOutput,
   hardenSystemPrompt,
   makeCanary,
-  logGuardEvent,
   DEFAULT_OUTPUT_POLICY_GOAL,
+  DEFAULT_GUARD_CONFIG,
+  BLOCK_MESSAGE_USER_INPUT,
+  BLOCK_MESSAGE_OUTPUT,
 } from '@/lib/prompt-guard';
+import { recordGuardEvent } from '@/lib/guard-audit';
 
 export async function POST(
   req: Request,
@@ -80,16 +83,24 @@ export async function POST(
   // Garde COUCHE 1 — inspection du dernier message utilisateur (injection
   // markers + keylogger brut). Bloque avant tout appel LLM.
   const lastUser = clientMessages[clientMessages.length - 1];
-  const inGuard = inspectInput(lastUser.content, 'user');
-  if (inGuard.blocked) {
-    logGuardEvent({
+  // Détecteur d'anomalie en posture « audit » (journalise sans bloquer) en plus
+  // des heuristiques bloquantes (keylogger, marqueurs d'injection).
+  const inGuard = inspectInput(lastUser.content, 'user', { anomaly: DEFAULT_GUARD_CONFIG.anomaly });
+  // Journalise TOUT signal déclenché (bloquant OU advisory d'audit) avant la décision.
+  if (inGuard.signals.some((s) => s.complied)) {
+    await recordGuardEvent({
       route: 'chat',
       stage: 'input',
       userId: session.user.id,
       role: 'user',
       signals: inGuard.signals,
     });
-    return NextResponse.json({ error: 'blocked_input' }, { status: 422 });
+  }
+  if (inGuard.blocked) {
+    return NextResponse.json(
+      { error: 'blocked_input', message: BLOCK_MESSAGE_USER_INPUT },
+      { status: 422 },
+    );
   }
 
   // Garde COUCHE 2 — durcissement du system prompt + canari par requête.
@@ -130,7 +141,7 @@ export async function POST(
     },
   ];
   if (outSignals.some((s) => s.complied)) {
-    logGuardEvent({
+    await recordGuardEvent({
       route: 'chat',
       stage: 'output',
       userId: session.user.id,
@@ -138,7 +149,10 @@ export async function POST(
       signals: outSignals,
     });
     // On ne renvoie NI ne persiste la réponse dangereuse (caviardage total).
-    return NextResponse.json({ error: 'blocked_output' }, { status: 422 });
+    return NextResponse.json(
+      { error: 'blocked_output', message: BLOCK_MESSAGE_OUTPUT },
+      { status: 422 },
+    );
   }
 
   // Persistance de la conversation

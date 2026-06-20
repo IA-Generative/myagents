@@ -52,7 +52,10 @@ export function OnboardingChat() {
           messages: [{ role: 'user', content: 'Bonjour, je souhaite creer un agent.' }],
         }),
       });
-      if (!res.ok) throw new Error(`${res.status}`);
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.message ?? `Erreur ${res.status}`);
+      }
       const data = await res.json();
       setMessages([
         { role: 'user', content: 'Bonjour, je souhaite creer un agent.' },
@@ -80,7 +83,10 @@ export function OnboardingChat() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: updatedMessages }),
       });
-      if (!res.ok) throw new Error(`${res.status}`);
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.message ?? `Erreur ${res.status}`);
+      }
       const data = await res.json();
       setMessages([...updatedMessages, { role: 'assistant', content: data.message }]);
       if (data.agentConfig) {

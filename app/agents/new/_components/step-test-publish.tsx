@@ -34,7 +34,7 @@ export function StepTestPublish() {
       });
       if (!res.ok) {
         const detail = await res.json().catch(() => ({}));
-        setError(`Erreur ${res.status} : ${detail.error ?? 'inconnue'}`);
+        setError(detail.message ?? `Erreur ${res.status} : ${detail.error ?? 'inconnue'}`);
         setBusy(null);
         return;
       }
