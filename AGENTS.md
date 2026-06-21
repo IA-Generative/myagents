@@ -15,7 +15,7 @@ via le socle `../owuicore-main/`) et K8s Scaleway (namespace `miraiku`,
 
 ### Schema DB — **jamais `prisma db push`** en prod
 
-Le Job K8s [k8s/base/job-migrate.yaml](k8s/base/job-migrate.yaml) execute
+Le Job K8s [deploy/k8s/base/job-migrate.yaml](deploy/k8s/base/job-migrate.yaml) execute
 `prisma migrate deploy`. Les migrations SQL sont versionnees dans
 [prisma/migrations/](prisma/migrations/). Reecrire une migration existante ou
 rebasculer sur `db push` reintroduit un bug qui corrompt silencieusement la DB
@@ -53,7 +53,7 @@ l'environnement.
 
 ### Ingress nginx : buffer eleve pour NextAuth
 
-[k8s/base/ingress.yaml](k8s/base/ingress.yaml) doit garder :
+[deploy/k8s/base/ingress.yaml](deploy/k8s/base/ingress.yaml) doit garder :
 ```
 nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
 nginx.ingress.kubernetes.io/proxy-buffers-number: "4"
@@ -117,6 +117,6 @@ kubectl -n miraiku exec "$POD" -- node -e "
 
 ## References
 
-- Spec fonctionnelle : [prompt_mirai_agent_builder.md](prompt_mirai_agent_builder.md)
+- Spec fonctionnelle : [docs/specs/agent-builder-spec.md](docs/specs/agent-builder-spec.md)
 - Socle Keycloak+OWUI+Postgres : `../owuicore-main/`
 - Orchestrateur deploy : [deploy/deploy-k8s.sh](deploy/deploy-k8s.sh)

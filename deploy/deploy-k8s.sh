@@ -28,36 +28,36 @@ done
 ./deploy/prepare-secrets.sh
 
 # 3. Rendu des manifestes par envsubst
-mkdir -p k8s/rendered
+mkdir -p deploy/k8s/rendered
 RENDER_VARS='${NAMESPACE} ${AGENT_BUILDER_IMAGE} ${AGENT_BUILDER_MIGRATOR_IMAGE} ${AGENTS_HOST} ${AGENTS_TLS_SECRET_NAME} ${OWUI_BASE_URL} ${KEYCLOAK_ISSUER} ${SCW_LLM_BASE_URL} ${SCW_LLM_MODEL} ${OPENWEBUI_HOST}'
 
-for manifest in k8s/base/*.yaml; do
+for manifest in deploy/k8s/base/*.yaml; do
   name="$(basename "$manifest")"
   [[ "$name" == "secret.example.yaml" ]] && continue
   [[ "$name" == "kustomization.yaml" ]] && continue
-  envsubst "$RENDER_VARS" < "$manifest" > "k8s/rendered/$name"
+  envsubst "$RENDER_VARS" < "$manifest" > "deploy/k8s/rendered/$name"
 done
 
 # 4. Application
 echo "Application du namespace..."
-kubectl apply -f k8s/rendered/namespace.yaml
+kubectl apply -f deploy/k8s/rendered/namespace.yaml
 
 echo "Application de la configmap..."
-kubectl apply -f k8s/rendered/configmap.yaml
+kubectl apply -f deploy/k8s/rendered/configmap.yaml
 
 # 5. Migration DB — on relance le Job à chaque déploiement
 echo "Lancement du Job de migration Prisma..."
 kubectl -n "$NAMESPACE" delete job agent-builder-migrate --ignore-not-found
-kubectl apply -f k8s/rendered/job-migrate.yaml
+kubectl apply -f deploy/k8s/rendered/job-migrate.yaml
 kubectl -n "$NAMESPACE" wait --for=condition=complete \
   job/agent-builder-migrate --timeout="${DEPLOYMENT_WAIT_TIMEOUT_SECONDS}s" \
   || { kubectl -n "$NAMESPACE" logs job/agent-builder-migrate; exit 1; }
 
 # 6. App workloads
 echo "Application du Deployment / Service / Ingress..."
-kubectl apply -f k8s/rendered/deployment.yaml
-kubectl apply -f k8s/rendered/service.yaml
-kubectl apply -f k8s/rendered/ingress.yaml
+kubectl apply -f deploy/k8s/rendered/deployment.yaml
+kubectl apply -f deploy/k8s/rendered/service.yaml
+kubectl apply -f deploy/k8s/rendered/ingress.yaml
 
 # 7. Force un rollout même si le template n'a pas changé — nécessaire quand
 #    on redéploie la même balise avec un nouveau digest, sinon kubectl apply

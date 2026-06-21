@@ -16,7 +16,7 @@ ajoutant un client OIDC confidentiel dédié.
 ## Intégration au realm.json du socle (recommandé)
 
 Plus reproductible : ajouter le bloc `client-miraiku-agents.json` au tableau
-`clients` de [owuicore-main/keycloak/realm-openwebui.k8s.json](../../owuicore-main/keycloak/realm-openwebui.k8s.json)
+`clients` de [owuicore-main/keycloak/realm-openwebui.k8s.json](../../../owuicore-main/keycloak/realm-openwebui.k8s.json)
 et relancer `./deploy/deploy-k8s.sh` du socle pour recharger le ConfigMap
 `keycloak-realm`. Ça permet de provisionner le client à la création du cluster
 plutôt que manuellement.

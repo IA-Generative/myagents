@@ -2,7 +2,7 @@
 
 Application Next.js 14 permettant aux agents du ministère de l'Intérieur de
 créer et partager des agents IA sans jamais ouvrir l'interface admin
-d'OpenWebUI. Spec complète dans [prompt_mirai_agent_builder.md](prompt_mirai_agent_builder.md).
+d'OpenWebUI. Spec complète dans [docs/specs/agent-builder-spec.md](docs/specs/agent-builder-spec.md).
 
 > **État actuel** : scaffold. Le squelette compile et se déploie (Docker +
 > Kubernetes Scaleway), l'authentification Keycloak est câblée, le wizard de
@@ -44,7 +44,7 @@ valeur rencontrée gagne) :
 3. `../owuicore-main/.env` (credentials partagés du socle)
 
 La fonction `load_dotenv_preserve_existing` (copiée depuis le socle dans
-[scripts/load_env.sh](scripts/load_env.sh)) n'écrase jamais une variable
+[deploy/scripts/load_env.sh](deploy/scripts/load_env.sh)) n'écrase jamais une variable
 déjà définie — d'où l'ordre « overrides d'abord, défauts ensuite ».
 
 Pour pointer vers un autre emplacement du `.env` du socle :
@@ -90,7 +90,7 @@ Ouvrir http://localhost:3001 → redirection vers `/sign-in` → SSO Keycloak �
 kubectl -n miraiku exec deploy/postgres -- \
   psql -U owui -c "CREATE DATABASE agentbuilder; GRANT ALL ON DATABASE agentbuilder TO app;"
 
-# 2. Importer le client Keycloak (voir keycloak/README.md)
+# 2. Importer le client Keycloak (voir deploy/keycloak/README.md)
 
 # 3. Configurer .env avec les valeurs prod (KEYCLOAK_CLIENT_SECRET, DATABASE_URL, ...)
 
@@ -104,22 +104,34 @@ kubectl -n miraiku get pods,svc,ingress -l app=agent-builder
 kubectl -n miraiku logs deploy/agent-builder --tail=50
 ```
 
-## Arborescence
+## Structure du dépôt
 
 ```
 .
-├── app/                    Next.js App Router (pages + API BFF)
+├── app/                    Next.js App Router — pages + API BFF
 │   ├── agents/new/         Wizard de création (4 étapes DSFR)
-│   ├── api/ab/             Endpoints BFF (§6 du prompt — stubs)
+│   ├── api/ab/             Endpoints BFF (§6 de la spec)
 │   └── api/auth/           NextAuth / Keycloak
-├── src/lib/                env, auth, prisma, owui-client
-├── prisma/schema.prisma    Tables ab_* du §4 du prompt
-├── k8s/base/               Manifestes templates (envsubst)
-├── deploy/                 Scripts build / push / deploy
-├── keycloak/               Client OIDC à importer dans le realm openwebui
-├── Dockerfile
-└── docker-compose.yml
+├── src/
+│   ├── lib/                Adaptateurs : env, auth, prisma, clients OWUI/Scaleway, prompt-guard
+│   ├── packages/           Modules isolés réutilisables (prompt-guard : cœur sans dépendance)
+│   └── types/              Augmentations de types (NextAuth)
+├── prisma/                 schema.prisma (tables ab_*) + migrations
+├── tests/redteam/          Suite red-team / prompt-injection (opt-in, voir le README local)
+├── deploy/                 Tout le déploiement au même endroit :
+│   ├── *.sh                Scripts build / push / deploy
+│   ├── scripts/            helper load_env.sh (cascade .env)
+│   ├── k8s/base/           Manifestes templates (rendus via envsubst)
+│   └── keycloak/           Client OIDC à importer dans le realm openwebui
+├── public/                 Assets statiques
+├── docs/                   📚 Toute la documentation — voir docs/README.md
+│   ├── specs/              Spec produit + roadmap V2
+│   └── mockups/            Maquettes DSFR (HTML + PNG)
+├── Dockerfile  docker-compose.yml
+└── README.md  AGENTS.md    Ce fichier · contexte pour les assistants de code
 ```
+
+Toute la documentation vit sous [docs/](docs/) (point d'entrée : [docs/README.md](docs/README.md)).
 
 ## Tests de bout en bout
 
@@ -143,4 +155,4 @@ curl -i https://myagents.fake-domain.name/api/ab/prompt/assist
 - Prévisualisation live du chat (→ MVP, §3.1 étape 4)
 - Pipeline CI/CD (→ à définir selon l'équipe socle)
 
-Roadmap détaillée dans le §8 de [prompt_mirai_agent_builder.md](prompt_mirai_agent_builder.md).
+Roadmap détaillée dans le §8 de [docs/specs/agent-builder-spec.md](docs/specs/agent-builder-spec.md).
