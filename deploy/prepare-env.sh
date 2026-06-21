@@ -15,7 +15,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 # shellcheck disable=SC1091
-source "${ROOT_DIR}/scripts/load_env.sh"
+source "${ROOT_DIR}/deploy/scripts/load_env.sh"
 
 # 1. shell env est déjà en place (rien à faire — load_dotenv_preserve_existing
 #    respecte les variables existantes).

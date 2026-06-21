@@ -1,6 +1,6 @@
 # MirAI Agent Builder — Extensions V2 (prompt fonctionnel)
 
-> **Statut** : spec fonctionnelle additive, conçue pour prolonger [prompt_mirai_agent_builder.md](prompt_mirai_agent_builder.md) sans le ré-écrire.
+> **Statut** : spec fonctionnelle additive, conçue pour prolonger [agent-builder-spec.md](agent-builder-spec.md) sans le ré-écrire.
 > Les sections et numérotations du document principal (§1 à §10) restent la référence. Ce document ajoute **5 extensions** cohérentes entre elles et positionnées sur la roadmap §8.
 >
 > Les extensions 1, 2 et 4 sont à implémenter dans les itérations MVP→V1. L'extension 3 (action agentique navigateur) et l'extension 5 (services locaux via mirai-assistant + myvault) sont des **études préalables** — architecture, sécurité, ergonomie — non à coder immédiatement : elles conditionnent la V2/V3 et doivent orienter les choix de design faits dès aujourd'hui.
