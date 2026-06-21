@@ -315,7 +315,7 @@ export function parseJudgeOptions(env: NodeJS.ProcessEnv = process.env): JudgeEv
   return {
     models,
     concurrency: Number(env.REDTEAM_CONCURRENCY ?? '4'),
-    outDir: env.REDTEAM_OUT ?? resolve(process.cwd(), 'tests/redteam/reports'),
+    outDir: env.REDTEAM_OUT ?? resolve(process.cwd(), 'private/redteam-reports'),
   };
 }
 

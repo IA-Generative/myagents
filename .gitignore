@@ -1,6 +1,9 @@
 # Sorties locales sensibles (audit, homologation) — ne pas committer
 private/
 
+# Documents d'homologation produits (locaux)
+homologation-output/
+
 # --- Secrets ---
 .env
 .env.local
@@ -20,7 +23,7 @@ kubeconfig*
 *.tfstate.*
 *.dump
 secrets/
-keycloak/realm-passwords.local.json
+deploy/keycloak/realm-passwords.local.json
 
 # --- Node / Next.js ---
 node_modules/
@@ -33,7 +36,7 @@ build/
 next-env.d.ts
 
 # --- K8s rendered ---
-k8s/rendered/
+deploy/k8s/rendered/
 
 # --- Prisma ---
 prisma/migrations/dev.db*
@@ -51,9 +54,9 @@ playwright-report/
 test-results/
 
 # --- Rapports red-team ---
-# Le JSON brut peut contenir des extraits de réponses de modèles : on l'ignore.
-# La synthèse .md et le CSV agrégé (sans contenu) sont committables.
-tests/redteam/reports/*.json
+# Le harness écrit dans private/redteam-reports/ (hors git) par défaut.
+# Garde-fou si REDTEAM_OUT est repointé sur l'ancien emplacement :
+tests/redteam/reports/
 
 # --- IDE / outils agents ---
 .vscode/

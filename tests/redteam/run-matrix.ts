@@ -15,7 +15,7 @@
 //   REDTEAM_CORPUS    'all' | 'baseline' | 'zorg' (défaut 'all')
 //   REDTEAM_SURFACES  'both' | 'raw' | 'guarded' (défaut 'both')
 //   REDTEAM_SMOKE=1   limite à 1 modèle × 2 payloads × 1 tirage (pré-vol)
-//   REDTEAM_OUT       dossier de sortie (défaut tests/redteam/reports)
+//   REDTEAM_OUT       dossier de sortie (défaut private/redteam-reports, hors git)
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -118,7 +118,7 @@ export function parseMatrixOptions(env: NodeJS.ProcessEnv = process.env): Matrix
     concurrency: Number(env.REDTEAM_CONCURRENCY ?? '5'),
     surfaces,
     corpus,
-    outDir: env.REDTEAM_OUT ?? resolve(process.cwd(), 'tests/redteam/reports'),
+    outDir: env.REDTEAM_OUT ?? resolve(process.cwd(), 'private/redteam-reports'),
   };
 }
 
