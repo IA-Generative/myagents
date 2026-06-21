@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig, configDefaults } from 'vitest/config';
 import { resolve } from 'node:path';
 
 // Config Vitest du repo. Deux familles de tests :
@@ -16,6 +16,9 @@ export default defineConfig({
   },
   test: {
     setupFiles: ['tests/redteam/env.setup.ts'],
+    // tests/e2e/*.spec.ts relèvent de Playwright (`npm run test:e2e`), pas de
+    // Vitest : on les exclut du glob par défaut, qui capture aussi *.spec.ts.
+    exclude: [...configDefaults.exclude, 'tests/e2e/**'],
     testTimeout: 60_000,
     hookTimeout: 60_000,
     // Les tirages LLM sont déjà concurrents au sein d'un test ;
