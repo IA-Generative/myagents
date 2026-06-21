@@ -44,5 +44,12 @@
     "tailwindcss": "^3.4.7",
     "typescript": "^5.5.4",
     "vitest": "^3.2.6"
+  },
+  "comment:overrides": "Corrige les advisories transitives sans bump majeur. vite ^6.4.3 = patch SSRF/fs.deny (reste dans le peer range de vitest 3). postcss = force la copie bundlée par Next (8.4.31 -> 8.5.x). esbuild et uuid NON forcés : esbuild=0.25 casserait vite 6 (faille dev-server only) ; uuid=8.3.2 via next-auth n'atteint pas la faille (v4() sans buf).",
+  "overrides": {
+    "vite": "^6.4.3",
+    "js-yaml": "^4.2.0",
+    "@babel/core": "^7.29.6",
+    "postcss": "^8.5.15"
   }
 }
