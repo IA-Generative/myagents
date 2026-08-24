@@ -63,7 +63,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
                     <Link href="/" title="Accueil — Mes Agents MirAI">
                       <p className="fr-header__service-title">
                         Mes Agents MirAI{' '}
-                        <span className="fr-badge fr-badge--sm fr-badge--green-emeraude">Beta</span>
+                        
                       </p>
                     </Link>
                     <p className="fr-header__service-tagline">
