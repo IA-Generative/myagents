@@ -119,6 +119,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             </div>
           </div>
         </footer>
+        {/* Le menu commun de la bêta — servi en même origine par l'Ingress `/_beta`,
+            depuis `IA-Generative/mirai-apps-menu`. Rien à monter ni à configurer ici. */}
+        <script src="/_beta/menu.js" async></script>
       </body>
     </html>
   );
