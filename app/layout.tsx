@@ -6,11 +6,12 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { HeaderAccount } from './_components/header-account';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Mes Agents MirAI (beta)',
+  // Casse de phrase, sans mention bêta : la pastille « MirAI Next Beta » du menu
+  // commun porte déjà ce repère (docs/nommage.md du dépôt mirai-apps-menu).
+  title: 'Mes agents',
   description:
     "Créer, partager et utiliser des agents IA souverains pour les agents du Ministère de l'Intérieur",
   icons: {
@@ -60,10 +61,10 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
                     </div>
                   </div>
                   <div className="fr-header__service">
-                    <Link href="/" title="Accueil — Mes Agents MirAI">
+                    <Link href="/" title="Accueil — Mes agents">
                       <p className="fr-header__service-title">
-                        Mes Agents MirAI{' '}
-                        
+                        Mes agents{' '}
+
                       </p>
                     </Link>
                     <p className="fr-header__service-tagline">
@@ -71,13 +72,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
                     </p>
                   </div>
                 </div>
-                {displayName && (
-                  <div className="fr-header__tools">
-                    <div className="fr-header__tools-links">
-                      <HeaderAccount displayName={displayName} />
-                    </div>
-                  </div>
-                )}
+                {/* Le nom et « Se déconnecter » sont portés par le menu commun de la
+                    bêta (bulle en haut à droite, sortie GET /deconnexion) : une seule
+                    commande de compte à l'écran. */}
               </div>
             </div>
           </div>
@@ -120,7 +117,15 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           </div>
         </footer>
         {/* Le menu commun de la bêta — servi en même origine par l'Ingress `/_beta`,
-            depuis `IA-Generative/mirai-apps-menu`. Rien à monter ni à configurer ici. */}
+            depuis `IA-Generative/mirai-apps-menu`. L'identité alimente la bulle du
+            compte ; `<` échappé pour qu'aucun nom ne puisse fermer le script. */}
+        {displayName && (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `window.MIRAI_MENU={nom:${JSON.stringify(displayName).replace(/</g, '\\u003c')},mail:${JSON.stringify(session?.user?.email || '').replace(/</g, '\\u003c')}};`,
+            }}
+          />
+        )}
         <script src="/_beta/menu.js" async></script>
       </body>
     </html>
