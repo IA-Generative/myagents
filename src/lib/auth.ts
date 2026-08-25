@@ -35,6 +35,10 @@ export const authOptions: NextAuthOptions = {
   ],
   session: {
     strategy: 'jwt',
+    // 12 h et non le défaut de TRENTE JOURS : une session applicative ne doit pas
+    // survivre des semaines à la session SSO qui l'a ouverte (lot 9, incrément 3 —
+    // le realm ne se touche pas, l'alignement se fait côté applications).
+    maxAge: 12 * 60 * 60,
   },
   callbacks: {
     // Restriction d'acces au groupe declare dans OIDC_GROUPE_EXIGE. Le claim
