@@ -35,6 +35,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
+# Docker injecte HOSTNAME=<container id> par défaut ; le serveur Next.js
+# standalone s'y bind alors littéralement, ce qui rend localhost injoignable
+# (healthcheck en ECONNREFUSED). On force le bind sur toutes les interfaces.
+ENV HOSTNAME=0.0.0.0
 
 # User non-root aligné avec le securityContext K8s (runAsUser: 1001)
 RUN addgroup --system --gid 1001 nodejs \

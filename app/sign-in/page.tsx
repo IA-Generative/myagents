@@ -1,4 +1,4 @@
-// Page de connexion — bouton SSO Keycloak + invitation claire.
+// Page de connexion — mode standalone (pas de SSO externe).
 
 'use client';
 
@@ -17,14 +17,14 @@ export default function SignInPage() {
           <h2 className="fr-callout__title">Que souhaitez-vous faire&nbsp;?</h2>
           <p className="fr-callout__text">
             Pour rédiger un assistant IA adapté à votre métier (rédaction de notes,
-            analyse juridique, accueil usager, synthèse de réunion…),
-            connectez-vous d&apos;abord avec votre compte ministériel.
+            analyse juridique, accueil usager, synthèse de réunion…), continuez
+            ci-dessous.
           </p>
           <button
             className="fr-btn fr-btn--lg fr-btn--icon-left fr-icon-account-circle-line"
-            onClick={() => signIn('keycloak', { callbackUrl: '/agents' })}
+            onClick={() => signIn('credentials', { callbackUrl: '/agents' })}
           >
-            Se connecter avec Keycloak
+            Continuer
           </button>
         </div>
 
