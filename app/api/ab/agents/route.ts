@@ -1,20 +1,25 @@
 // BFF — GET /api/ab/agents et POST /api/ab/agents.
-// Persistance des brouillons dans Prisma. L'intégration OpenWebUI (création
-// du modèle-wrapper via POST /api/models/create) n'est pas encore en place ;
-// on stocke simplement le snapshot complet dans config_snapshot (table
-// ab_agent_versions) et un owui_model_id de placeholder.
+// Persistance des brouillons dans Prisma. Aucune intégration externe
+// (OpenWebUI) : on stocke le snapshot complet dans config_snapshot (table
+// ab_agent_versions) et un owui_model_id qui sert d'identifiant/slug interne.
 
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import {
-  createOwuiModel,
-  buildOwuiModelId,
-  OwuiAdminUnavailableError,
-} from '@/lib/owui-admin-client';
 import { inspectInput, DEFAULT_GUARD_CONFIG, BLOCK_MESSAGE_AGENT_CONFIG } from '@/lib/prompt-guard';
 import { recordGuardEvent } from '@/lib/guard-audit';
+
+function buildAgentSlug(name: string, uniqueSuffix: string): string {
+  const slug = name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+  return `mirai-${slug}-${uniqueSuffix.slice(0, 6)}`;
+}
 
 type AgentDraftPayload = {
   name?: string;
@@ -113,8 +118,8 @@ export async function POST(req: Request) {
 
   // Validation des enums : on n'accepte que des valeurs connues, defaut sur le
   // niveau le plus restrictif. NOTE (a valider) : le droit de publier en
-  // community/ministry devra etre conditionne a l'appartenance au groupe
-  // Keycloak correspondant — non implemente ici.
+  // community/ministry devra etre conditionne a un mecanisme de groupes
+  // (non implemente en mode standalone).
   const VISIBILITIES = ['private', 'community', 'ministry'] as const;
   const STATUSES = ['draft', 'published', 'submitted'] as const;
   const visibility = VISIBILITIES.includes(body.visibility as never)
@@ -139,34 +144,9 @@ export async function POST(req: Request) {
     temperature: body.temperature ?? 0.7,
   };
 
-  // Generer l'id du modele OpenWebUI
+  // Generer l'id/slug interne de l'agent
   const uniqueSuffix = Date.now().toString(36);
-  const finalOwuiModelId = buildOwuiModelId(body.name!, uniqueSuffix);
-
-  // Si publication (pas draft), creer le modele dans OpenWebUI
-  let owuiCreated = false;
-  if (status !== 'draft') {
-    try {
-      await createOwuiModel({
-        id: finalOwuiModelId,
-        name: body.name!,
-        description: configSnapshot.description,
-        systemPrompt: configSnapshot.systemPrompt,
-        baseModelId: configSnapshot.modelId ?? 'gpt-oss-120b',
-        temperature: configSnapshot.temperature,
-        greeting: configSnapshot.greeting,
-        examples: configSnapshot.examples,
-      });
-      owuiCreated = true;
-    } catch (err) {
-      if (err instanceof OwuiAdminUnavailableError) {
-        // Non bloquant : on cree quand meme en base, juste pas dans OWUI
-        console.warn('OpenWebUI admin non configure, agent cree en base seulement');
-      } else {
-        console.error('Erreur creation modele OpenWebUI:', err);
-      }
-    }
-  }
+  const finalOwuiModelId = buildAgentSlug(body.name!, uniqueSuffix);
 
   try {
     const agent = await prisma.agent.create({
@@ -193,7 +173,6 @@ export async function POST(req: Request) {
       status,
       name: body.name,
       owuiModelId: finalOwuiModelId,
-      owuiCreated,
     });
   } catch (err) {
     console.error('persistence_failure', err);
