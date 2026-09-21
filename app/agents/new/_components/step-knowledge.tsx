@@ -32,15 +32,33 @@ export function StepKnowledge() {
       </div>
       <div className="fr-col-12">
         <fieldset className="fr-fieldset">
-          <legend className="fr-fieldset__legend">Outils MirAI (aucun connecté pour l&apos;instant)</legend>
+          <legend className="fr-fieldset__legend">
+            Outils MirAI
+            <span className="fr-hint-text">
+              Pas encore réglables agent par agent : les cases ci-dessous indiquent l&apos;état de chaque outil.
+            </span>
+          </legend>
           <div className="fr-fieldset__content">
+            {/* Recherche web : en service dans Mon assistant (pour toutes les
+                conversations), mais pas encore activable/désactivable par agent. */}
             <div className="fr-checkbox-group">
-              <input type="checkbox" id="tool-web" disabled />
-              <label className="fr-label" htmlFor="tool-web">Recherche web</label>
+              <input type="checkbox" id="tool-web" disabled aria-describedby="tool-web-etat" />
+              <label className="fr-label" htmlFor="tool-web">
+                Recherche web{' '}
+                <span className="fr-badge fr-badge--info fr-badge--sm fr-badge--no-icon">
+                  Disponible dans Mon assistant
+                </span>
+                <span className="fr-hint-text" id="tool-web-etat">
+                  Disponible dans Mon assistant, pas encore réglable par agent.
+                </span>
+              </label>
             </div>
             <div className="fr-checkbox-group">
               <input type="checkbox" id="tool-image" disabled />
-              <label className="fr-label" htmlFor="tool-image">Génération d&apos;image</label>
+              <label className="fr-label" htmlFor="tool-image">
+                Génération d&apos;image{' '}
+                <span className="fr-badge fr-badge--warning fr-badge--sm">En construction</span>
+              </label>
             </div>
           </div>
         </fieldset>
@@ -50,7 +68,8 @@ export function StepKnowledge() {
           <div className="fr-container">
             <div className="fr-notice__body">
               <p className="fr-notice__title">
-                Connecteurs SI, index mail et chaînage inter-agents : bientôt disponibles.
+                Connecteurs SI (MCP), index mail et chaînage inter-agents{' '}
+                <span className="fr-badge fr-badge--warning fr-badge--sm">En construction</span>
               </p>
             </div>
           </div>
