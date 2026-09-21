@@ -81,3 +81,5 @@ __MACOSX/
 tests/e2e/.auth/
 tests/e2e/.report/
 playwright-report/
+
+*__pycache__/
