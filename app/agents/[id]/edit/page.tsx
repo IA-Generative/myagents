@@ -61,7 +61,9 @@ function EditAgentInner() {
   if (!initialDraft) return null;
 
   return (
-    <WizardProvider initialDraft={initialDraft}>
+    // Le prompt rechargé a déjà été validé : l'étape 2 ne bloque plus tant
+    // qu'il n'est pas modifié (sinon « Suivant » restait grisé sans raison).
+    <WizardProvider initialDraft={initialDraft} initialValidated={Boolean(initialDraft.systemPrompt)}>
       <EditWizardShell agentId={id} />
     </WizardProvider>
   );
@@ -77,6 +79,9 @@ function EditWizardShell({ agentId }: { agentId: string }) {
   // Gate identique au wizard de création : on ne quitte l'étape Comportement
   // qu'après validation anti-jailbreak des instructions système.
   const nextBlocked = currentStep === 2 && !promptValidated;
+  // Mêmes conditions que le bouton « Enregistrer » : on dit ce qui manque au
+  // lieu de laisser un bouton grisé sans explication.
+  const saveBlocked = !draft.name || !draft.systemPrompt || !promptValidated;
 
   async function save() {
     setBusy(true);
@@ -93,7 +98,10 @@ function EditWizardShell({ agentId }: { agentId: string }) {
         setBusy(false);
         return;
       }
-      router.push('/agents?saved=updated');
+      // Agent publié mais Mon assistant n'a pas pu être mis à jour : on le dit
+      // plutôt que d'afficher un succès complet.
+      const d = await res.json().catch(() => ({}));
+      router.push(d.owuiUpdated === false ? '/agents?saved=updated-local' : '/agents?saved=updated');
     } catch (err) {
       setError(String(err));
       setBusy(false);
@@ -138,12 +146,24 @@ function EditWizardShell({ agentId }: { agentId: string }) {
             <div className="fr-btns-group">
               <button
                 className="fr-btn"
-                disabled={busy || !draft.name || !draft.systemPrompt}
+                disabled={busy || saveBlocked}
                 onClick={save}
               >
                 {busy ? 'Enregistrement...' : 'Enregistrer les modifications'}
               </button>
             </div>
+            {saveBlocked && (
+              <p className="fr-hint-text fr-mt-1w">
+                {!draft.name || !draft.systemPrompt ? (
+                  <>
+                    Renseignez au moins le <strong>nom</strong> (étape 1) et les{' '}
+                    <strong>instructions système</strong> (étape 2) pour enregistrer.
+                  </>
+                ) : (
+                  <>Validez les instructions système (étape 2) pour enregistrer.</>
+                )}
+              </p>
+            )}
             {error && (
               <div className="fr-alert fr-alert--error fr-alert--sm fr-mt-2w">
                 <p>{error}</p>
