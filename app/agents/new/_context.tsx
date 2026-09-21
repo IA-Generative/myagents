@@ -57,12 +57,20 @@ const WizardContext = createContext<WizardContextValue | null>(null);
 export function WizardProvider({
   children,
   initialDraft,
+  initialValidated = false,
 }: {
   children: ReactNode;
   initialDraft?: Partial<AgentDraft>;
+  /**
+   * En modification, les instructions rechargées depuis la base ont déjà passé
+   * la validation (à la création ou à la précédente modification) : on les
+   * tient pour validées tant qu'elles restent identiques. La première frappe
+   * dans le champ repasse le drapeau à false (cf. update).
+   */
+  initialValidated?: boolean;
 }) {
   const [draft, setDraft] = useState<AgentDraft>({ ...INITIAL, ...initialDraft });
-  const [promptValidated, setPromptValidated] = useState(false);
+  const [promptValidated, setPromptValidated] = useState(initialValidated);
 
   const update = useCallback((patch: Partial<AgentDraft>) => {
     setDraft((d) => ({ ...d, ...patch }));

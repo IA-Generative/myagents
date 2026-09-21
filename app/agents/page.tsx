@@ -203,6 +203,11 @@ function buildSavedBanner(saved?: string) {
       title: 'Agent mis à jour',
       detail: 'Les modifications ont été enregistrées. Une nouvelle version a été créée.',
     };
+  if (saved === 'updated-local')
+    return {
+      title: 'Agent mis à jour, sauf dans Mon assistant',
+      detail: 'Les modifications ont été enregistrées (nouvelle version), mais Mon assistant n\'a pas pu être mis à jour pour le moment. Enregistrez de nouveau plus tard ; si le problème persiste, signalez-le.',
+    };
   return null;
 }
 

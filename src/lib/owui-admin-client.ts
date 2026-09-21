@@ -97,13 +97,17 @@ export async function createOwuiModel(p: CreateModelPayload): Promise<OwuiModelR
 
 export async function updateOwuiModel(p: CreateModelPayload): Promise<OwuiModelResponse> {
   // OpenWebUI v0.8.12 : POST /api/v1/models/model/update avec l'id dans le body
+  // Nom, description et etiquette identiques a la creation : sinon la premiere
+  // modification renommait l'agent (suffixe perdu) et lui retirait son etiquette
+  // « Mes Agents MirAI » dans Mon assistant.
   const body = {
     id: p.id,
-    name: p.name,
+    name: `${p.name} (Mes Agents MirAI)`,
     meta: {
-      description: p.description,
+      description: p.description || `Agent cree via Mes Agents MirAI`,
       profile_image_url: '/static/favicon.png',
       suggestion_prompts: (p.examples ?? []).map((content) => ({ content })),
+      tags: [{ name: 'Mes Agents MirAI' }],
       capabilities: { vision: false, usage: false, citations: true },
     },
     params: {
