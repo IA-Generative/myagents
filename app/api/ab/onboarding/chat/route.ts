@@ -116,8 +116,11 @@ export async function POST(req: Request) {
         { role: 'system', content: SYSTEM_PROMPT },
         ...clientMessages,
       ],
-      // mistral-small : rapide et bon pour le dialogue guide
-      model: 'mistral-small-3.2-24b-instruct-2506',
+      // PAS de modèle en dur : le nom codé ici (`mistral-small-3.2-24b-instruct-2506`)
+      // a été RETIRÉ du catalogue Scaleway le 2026-08-25 — l'API répondait 400
+      // « Invalid model name » et la route rendait 502 sur chaque message du chat.
+      // Le client retombe sur SCW_LLM_MODEL (alias `chat` du catalogue), qui suit les
+      // renommages de l'opérateur sans reconstruire l'image.
       temperature: 0.6,
       maxTokens: 1024,
     });

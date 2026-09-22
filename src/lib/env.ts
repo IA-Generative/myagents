@@ -35,6 +35,11 @@ const serverSchema = z.object({
 
   // Cle API admin OpenWebUI pour creer/supprimer des modeles via /api/v1/models/create
   OWUI_ADMIN_API_KEY: z.string().optional(),
+
+  // Restriction d'acces a un groupe du realm. Optionnel : non renseigne, tout
+  // utilisateur du realm entre — c'est le comportement historique. Renseigne,
+  // seuls les membres du groupe nomme sont admis (claim `groups` de l'ID token).
+  OIDC_GROUPE_EXIGE: z.string().optional(),
 });
 
 export type ServerEnv = z.infer<typeof serverSchema>;
@@ -60,6 +65,7 @@ function parseEnv(): ServerEnv {
       SCW_LLM_MODEL: 'gpt-oss-120b',
       OWUI_PUBLIC_URL: undefined,
       OWUI_ADMIN_API_KEY: undefined,
+      OIDC_GROUPE_EXIGE: undefined,
     };
   }
 
