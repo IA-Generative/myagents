@@ -35,8 +35,32 @@ export const authOptions: NextAuthOptions = {
   ],
   session: {
     strategy: 'jwt',
+    // 12 h et non le défaut de TRENTE JOURS : une session applicative ne doit pas
+    // survivre des semaines à la session SSO qui l'a ouverte (lot 9, incrément 3 —
+    // le realm ne se touche pas, l'alignement se fait côté applications).
+    maxAge: 12 * 60 * 60,
   },
   callbacks: {
+    // Restriction d'acces au groupe declare dans OIDC_GROUPE_EXIGE. Le claim
+    // `groups` porte le NOM FEUILLE des groupes (mapper Keycloak full.path=false),
+    // jamais leur chemin : on compare donc a un nom, pas a un « /chemin/groupe ».
+    // Variable absente = aucune restriction, comportement historique inchange.
+    async signIn({ profile }) {
+      const exige = env().OIDC_GROUPE_EXIGE;
+      if (!exige) return true;
+      const brut = (profile as { groups?: unknown } | undefined)?.groups;
+      const groupes = Array.isArray(brut)
+        ? brut.map(String)
+        : typeof brut === 'string'
+          ? [brut]
+          : [];
+      if (groupes.includes(exige)) return true;
+      // Tracer le refus sans nommer la personne : le motif suffit au diagnostic.
+      console.warn(
+        `Acces refuse : le jeton ne porte pas le groupe requis (${groupes.length} groupe(s) presente(s))`,
+      );
+      return false;
+    },
     async jwt({ token, account }) {
       // Premier appel après login : on récupère l'access token Keycloak.
       // `token.sub` est automatiquement posé par next-auth à partir du

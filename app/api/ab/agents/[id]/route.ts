@@ -1,6 +1,7 @@
 // BFF — GET / PUT / DELETE /api/ab/agents/:id
 // GET  : retourne l'agent + son dernier config snapshot (pour hydrater le wizard edit)
-// PUT  : met a jour l'agent (nouvelle version dans ab_agent_versions)
+// PUT  : met a jour l'agent (nouvelle version dans ab_agent_versions) et, s'il
+//        est publie, son modele dans Mon assistant (OpenWebUI)
 // DELETE : soft delete (status = archived)
 
 import { NextResponse } from 'next/server';
@@ -9,6 +10,12 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { inspectInput, DEFAULT_GUARD_CONFIG, BLOCK_MESSAGE_AGENT_CONFIG } from '@/lib/prompt-guard';
 import { recordGuardEvent } from '@/lib/guard-audit';
+import { updateOwuiModel, OwuiAdminUnavailableError } from '@/lib/owui-admin-client';
+
+// Statuts pour lesquels la creation a pousse le modele dans OpenWebUI
+// (POST /api/ab/agents : tout sauf « draft »). Un agent archive n'est pas
+// republie par une modification.
+const STATUTS_PUBLIES = ['published', 'submitted', 'validated'];
 
 async function requireOwner(agentId: string) {
   const session = await getServerSession(authOptions);
@@ -122,12 +129,40 @@ export async function PUT(
         },
       }),
     ]);
-
-    return NextResponse.json({ id, version: newVersion, status });
   } catch (err) {
     console.error('update_failed', err);
     return NextResponse.json({ error: 'update_failed' }, { status: 500 });
   }
+
+  // Agent deja publie : sans cet appel, Mon assistant gardait l'ancienne
+  // version indefiniment. Meme charge utile qu'a la creation, meme identifiant
+  // de modele (celui enregistre en base). Non bloquant, comme a la creation :
+  // la nouvelle version est deja en base, on signale seulement l'echec.
+  let owuiUpdated: boolean | null = null;
+  if (STATUTS_PUBLIES.includes(status)) {
+    try {
+      await updateOwuiModel({
+        id: r.agent.owuiModelId,
+        name: configSnapshot.name,
+        description: configSnapshot.description,
+        systemPrompt: configSnapshot.systemPrompt,
+        baseModelId: configSnapshot.modelId ?? 'gpt-oss-120b',
+        temperature: configSnapshot.temperature,
+        greeting: configSnapshot.greeting,
+        examples: configSnapshot.examples,
+      });
+      owuiUpdated = true;
+    } catch (err) {
+      owuiUpdated = false;
+      if (err instanceof OwuiAdminUnavailableError) {
+        console.warn('OpenWebUI admin non configure, agent mis a jour en base seulement');
+      } else {
+        console.error('Erreur mise a jour modele OpenWebUI:', err);
+      }
+    }
+  }
+
+  return NextResponse.json({ id, version: newVersion, status, owuiUpdated });
 }
 
 export async function DELETE(
