@@ -28,7 +28,11 @@ const serverSchema = z.object({
   // pour pouvoir réutiliser le même Secret K8s (`owui-socle-secrets`).
   SCW_LLM_BASE_URL: z.string().url().optional(),
   SCW_SECRET_KEY_LLM: z.string().optional(),
-  SCW_LLM_MODEL: z.string().default('gpt-oss-120b'),
+  // Défaut : l'ALIAS `chat` du hub, jamais un nom de modèle daté. Les noms datés
+  // (`gpt-oss-120b`, `mistral-small-3.2-24b-instruct-2506`) disparaissent aux
+  // renommages de l'opérateur et l'API répond alors 400 « Invalid model name » —
+  // que les routes rendent en 502 `upstream_failure`. Les alias, eux, suivent.
+  SCW_LLM_MODEL: z.string().default('chat'),
 
   // URL publique d'OpenWebUI (MirAI Chat) pour le bouton "Poursuivre dans MirAI Chat"
   OWUI_PUBLIC_URL: z.string().url().optional(),
@@ -62,7 +66,7 @@ function parseEnv(): ServerEnv {
       DATABASE_URL: 'postgresql://build:build@build/build',
       SCW_LLM_BASE_URL: undefined,
       SCW_SECRET_KEY_LLM: undefined,
-      SCW_LLM_MODEL: 'gpt-oss-120b',
+      SCW_LLM_MODEL: 'chat',
       OWUI_PUBLIC_URL: undefined,
       OWUI_ADMIN_API_KEY: undefined,
       OIDC_GROUPE_EXIGE: undefined,

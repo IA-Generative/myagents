@@ -12,9 +12,11 @@ import {
   createOwuiModel,
   buildOwuiModelId,
   OwuiAdminUnavailableError,
+  resolveOwuiBaseModel,
 } from '@/lib/owui-admin-client';
 import { inspectInput, DEFAULT_GUARD_CONFIG, BLOCK_MESSAGE_AGENT_CONFIG } from '@/lib/prompt-guard';
 import { recordGuardEvent } from '@/lib/guard-audit';
+import { DEFAULT_MODEL_ID } from '@/lib/models';
 
 type AgentDraftPayload = {
   name?: string;
@@ -152,7 +154,15 @@ export async function POST(req: Request) {
         name: body.name!,
         description: configSnapshot.description,
         systemPrompt: configSnapshot.systemPrompt,
-        baseModelId: configSnapshot.modelId ?? 'gpt-oss-120b',
+        // Même précaution qu'au chat : un nom de modèle périmé publié dans
+        // Mon assistant y donne une fiche dont le modèle de base n'existe pas —
+        // elle disparaît du sélecteur sans la moindre erreur (cf. le piège du
+        // `base_model_id` dans docs/apps/socle-owui.md).
+        // C'est le catalogue de Mon assistant qui fait foi pour une fiche
+        // publiée — pas celui du hub : le socle n'en expose qu'une partie.
+        // Un `base_model_id` qu'il ne sert pas donne « Model not found » à
+        // l'usage, sans la moindre erreur à la publication.
+        baseModelId: await resolveOwuiBaseModel(configSnapshot.modelId, DEFAULT_MODEL_ID),
         temperature: configSnapshot.temperature,
         greeting: configSnapshot.greeting,
         examples: configSnapshot.examples,
