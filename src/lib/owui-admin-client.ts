@@ -166,3 +166,54 @@ export function buildOwuiModelId(name: string, uniqueSuffix: string): string {
     .slice(0, 40);
   return `mirai-${slug}-${uniqueSuffix.slice(0, 6)}`;
 }
+
+// --- Le modèle de base existe-t-il DANS Mon assistant ? ---------------------
+// PANNE DU 2026-09-23 (suite). Publier un agent posait une fiche dont le
+// `base_model_id` était le modèle choisi au wizard — sans jamais vérifier que
+// Mon assistant le sert. Résultat pour les deux agents publiés :
+// `base_model_id = mistral-small-3.2-24b-instruct-2506`, et « Model not found »
+// à l'usage.
+//
+// Le catalogue du HUB ne suffit pas à répondre : le socle n'expose qu'une PARTIE
+// de ce que le hub sert (`chat`, `chat-pro`, `vision`, `tools` — cf.
+// OPENAI_API_CONFIGS dans apps/socle-owui/base/10-configmap.yaml). Un modèle
+// peut donc répondre au banc d'essai de Mes agents et rester introuvable une
+// fois publié. C'est le catalogue du SOCLE qui fait foi ici.
+const OWUI_TTL_MS = 60 * 60 * 1000;
+let owuiCache: { ids: Set<string>; fetchedAt: number } | null = null;
+
+export async function owuiServedModelIds(): Promise<Set<string> | null> {
+  const now = Date.now();
+  if (owuiCache && now - owuiCache.fetchedAt < OWUI_TTL_MS) return owuiCache.ids;
+  try {
+    const res = await fetch(`${baseUrl()}/api/models`, {
+      headers: getHeaders(),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) throw new Error(`OpenWebUI models ${res.status}`);
+    const json = (await res.json()) as { data?: Array<{ id: string }> } | Array<{ id: string }>;
+    const liste = Array.isArray(json) ? json : (json.data ?? []);
+    owuiCache = { ids: new Set(liste.map((m) => m.id)), fetchedAt: now };
+    return owuiCache.ids;
+  } catch (err) {
+    console.warn('catalogue de Mon assistant injoignable', err);
+    return owuiCache?.ids ?? null;
+  }
+}
+
+// Rend le `base_model_id` à publier. Un modèle absent du socle est remplacé par
+// l'alias par défaut : mieux vaut un agent qui répond sur `chat` qu'une fiche
+// morte, qui ne dit RIEN — elle s'installe sans erreur et échoue à l'usage.
+// Catalogue injoignable → on n'invente rien et on publie le choix de l'auteur.
+export async function resolveOwuiBaseModel(
+  wanted: string | null | undefined,
+  defaut: string,
+): Promise<string> {
+  if (!wanted) return defaut;
+  const ids = await owuiServedModelIds();
+  if (!ids || ids.has(wanted)) return wanted;
+  console.warn(
+    `modèle « ${wanted} » absent de Mon assistant — publication sur « ${defaut} »`,
+  );
+  return defaut;
+}
