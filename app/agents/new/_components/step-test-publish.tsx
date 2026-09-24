@@ -88,13 +88,19 @@ export function StepTestPublish() {
       </div>
 
       <div className="fr-col-12 fr-col-md-6">
-        <h3>Prévisualisation</h3>
+        <h3>
+          Prévisualisation{' '}
+          <span className="fr-badge fr-badge--warning fr-badge--sm">En construction</span>
+        </h3>
+        {/* Texte destiné à l'utilisateur : on parle de « Mon assistant », jamais
+            du nom technique du socle. Un brouillon n'est pas poussé dans Mon
+            assistant (cf. POST /api/ab/agents) : seul un agent publié s'y teste. */}
         <div className="fr-callout">
           <p className="fr-callout__text">
-            La prévisualisation live (chat de test contre l&apos;agent) sera branchée sur
-            l&apos;API OpenWebUI <code>/api/chat/completions</code> dans la prochaine itération.
-            Pour l&apos;instant, sauvegardez en brouillon et testez manuellement dans
-            OpenWebUI une fois l&apos;intégration créée.
+            La conversation de test avec l&apos;agent, directement sur cette page, n&apos;est
+            pas encore disponible. Pour l&apos;instant, publiez l&apos;agent puis testez-le dans
+            Mon assistant, ou utilisez « Utiliser rapidement ici » depuis la liste de vos
+            agents (fonctionne aussi pour un brouillon).
           </p>
         </div>
       </div>

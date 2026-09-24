@@ -28,11 +28,13 @@ export default withAuth({
 //                      les clients fetch). Les routes restent strictement
 //                      protégées, juste par un autre mécanisme.
 //   - /sign-in        (page de connexion)
+//   - /deconnexion    (la sortie du menu commun — une session déjà expirée doit
+//                      pouvoir la traverser vers Keycloak, pas prendre un 307)
 //   - /_next/*        (assets compilés)
 //   - /favicon.ico
 //   - /dsfr/*         (assets DSFR statiques éventuels)
 export const config = {
   matcher: [
-    '/((?!api/auth|api/health|api/ab|sign-in|_next/static|_next/image|favicon.ico|favicon.svg|dsfr).*)',
+    '/((?!api/auth|api/health|api/ab|sign-in|deconnexion|_next/static|_next/image|favicon.ico|favicon.svg|dsfr).*)',
   ],
 };

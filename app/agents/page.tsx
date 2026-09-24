@@ -62,12 +62,14 @@ export default async function AgentsPage({
           icon="fr-icon-search-line"
           title="Explorer le catalogue"
           description="Parcourez les agents partagés par les autres directions. Vous pouvez les utiliser directement ou les dupliquer pour les personnaliser."
+          enConstruction="Le catalogue partagé n'est pas encore ouvert : la page présente ce qui est prévu."
         />
         <ActionTile
           href="/agents/new?template=example"
           icon="fr-icon-lightbulb-line"
           title="Partir d'un exemple"
           description="Choisissez un modèle métier pré-configuré (préfecture, juridique, RH, communication) comme point de départ."
+          enConstruction="Les modèles métier ne sont pas encore proposés : ce lien ouvre pour l'instant le formulaire de création vide."
         />
       </div>
 
@@ -203,6 +205,11 @@ function buildSavedBanner(saved?: string) {
       title: 'Agent mis à jour',
       detail: 'Les modifications ont été enregistrées. Une nouvelle version a été créée.',
     };
+  if (saved === 'updated-local')
+    return {
+      title: 'Agent mis à jour, sauf dans Mon assistant',
+      detail: 'Les modifications ont été enregistrées (nouvelle version), mais Mon assistant n\'a pas pu être mis à jour pour le moment. Enregistrez de nouveau plus tard ; si le problème persiste, signalez-le.',
+    };
   return null;
 }
 
@@ -221,23 +228,28 @@ function StatusBadge({ status }: { status: string }) {
 function VisibilityBadge({ visibility }: { visibility: string }) {
   const map: Record<string, { label: string; cls: string }> = {
     private: { label: 'Prive', cls: 'fr-badge--yellow-tournesol' },
-    community: { label: 'Communaute', cls: 'fr-badge--green-emeraude' },
+    community: { label: 'Communauté', cls: 'fr-badge--green-emeraude' },
     ministry: { label: 'Ministeriel', cls: 'fr-badge--blue-ecume' },
   };
   const entry = map[visibility] ?? { label: visibility, cls: '' };
   return <span className={`fr-badge fr-badge--sm ${entry.cls}`}>{entry.label}</span>;
 }
 
+// `enConstruction` : la tuile reste cliquable mais porte le badge « En
+// construction » ; le texte explique ce qui manque, en infobulle (attribut
+// title — le JavaScript du DSFR n'est pas chargé) et sous la description.
 function ActionTile({
   href,
   icon,
   title,
   description,
+  enConstruction,
 }: {
   href: string;
   icon: string;
   title: string;
   description: string;
+  enConstruction?: string;
 }) {
   return (
     <div className="fr-col-12 fr-col-md-4">
@@ -245,11 +257,22 @@ function ActionTile({
         <div className="fr-tile__body">
           <div className="fr-tile__content">
             <h3 className="fr-tile__title">
-              <Link href={href} className="fr-tile__link">
+              <Link href={href} className="fr-tile__link" title={enConstruction}>
                 {title}
               </Link>
             </h3>
             <p className="fr-tile__desc">{description}</p>
+            {enConstruction && (
+              <p className="fr-tile__detail">
+                <span className="fr-icon-information-line fr-icon--sm" aria-hidden="true" />
+                &nbsp;{enConstruction}
+              </p>
+            )}
+            {enConstruction && (
+              <div className="fr-tile__start">
+                <p className="fr-badge fr-badge--warning fr-badge--sm">En construction</p>
+              </div>
+            )}
           </div>
         </div>
         <div className="fr-tile__header">
