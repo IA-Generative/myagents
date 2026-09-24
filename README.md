@@ -15,8 +15,8 @@ d'OpenWebUI. Spec complète dans [docs/specs/agent-builder-spec.md](docs/specs/a
 
 - **Framework** : Next.js 14 (App Router) + React 18 + TypeScript
 - **Design system** : DSFR officiel (`@codegouvfr/react-dsfr`)
-- **Auth** : NextAuth 4 + Keycloak (realm `openwebui` du socle owuicore-main)
-- **DB** : PostgreSQL (partagée avec le socle, base `agentbuilder`) + Prisma
+- **Auth** : NextAuth 4, stub "utilisateur local" en dev standalone (voir `src/lib/auth.ts`)
+- **DB** : PostgreSQL (conteneur local dédié, base `agentbuilder`) + Prisma
 - **BFF** : routes Next.js côté serveur, wrapper `src/lib/owui-client.ts`
 - **Conteneur** : Docker multi-stage (Node 20 alpine, Next.js standalone)
 - **Déploiement** : Kubernetes Scaleway, namespace `miraiku`, ingress nginx +
@@ -24,64 +24,37 @@ d'OpenWebUI. Spec complète dans [docs/specs/agent-builder-spec.md](docs/specs/a
 
 ## Pré-requis
 
-Le socle [owuicore-main](../owuicore-main/) doit être déployé **avant** :
-- En local : `docker compose up -d` dans `owuicore-main` crée le réseau
-  `owui-net` auquel ce compose se rattache.
-- En K8s : le socle fournit Keycloak, OpenWebUI, PostgreSQL et le cert-manager.
+Aucun : l'application tourne en standalone, `docker-compose.yml` lance son
+propre conteneur PostgreSQL (pas de dépendance à un socle externe type
+`owuicore-main`).
 
-## Configuration — `.env` en cascade
+## Configuration — `.env`
 
-**Règle** : les credentials Scaleway (registry, LLM), Keycloak et PostgreSQL
-restent dans `../owuicore-main/.env`. Notre `./.env` ne contient que ce qui
-est **spécifique à l'Agent Builder** (image, host, NEXTAUTH_SECRET,
-DATABASE_URL propre à la base `agentbuilder`).
-
-[deploy/prepare-env.sh](deploy/prepare-env.sh) charge en cascade (première
-valeur rencontrée gagne) :
-
-1. variables shell déjà exportées (CI, override ponctuel)
-2. `./.env` (overrides Agent Builder)
-3. `../owuicore-main/.env` (credentials partagés du socle)
-
-La fonction `load_dotenv_preserve_existing` (copiée depuis le socle dans
-[deploy/scripts/load_env.sh](deploy/scripts/load_env.sh)) n'écrase jamais une variable
-déjà définie — d'où l'ordre « overrides d'abord, défauts ensuite ».
-
-Pour pointer vers un autre emplacement du `.env` du socle :
-```bash
-OWUICORE_ENV_FILE=/autre/chemin/.env ./deploy/deploy-k8s.sh
-```
-
-Variables requises côté Agent Builder uniquement (à mettre dans `./.env`) :
-- `AGENT_BUILDER_IMAGE` (ou laissé dérivé de `${REGISTRY}/miraiku-agents:${IMAGE_TAG}`)
-- `AGENTS_HOST` (défaut : `myagents.fake-domain.name`)
+`./.env` contient uniquement les variables nécessaires en local :
+- `AGENT_BUILDER_IMAGE`
+- `AGENTS_HOST` (utilisé seulement pour le déploiement K8s)
+- `NEXTAUTH_URL` (`http://localhost:3001` en local)
 - `NEXTAUTH_SECRET` (générer avec `openssl rand -base64 32`)
-- `DATABASE_URL` (pointant vers la base `agentbuilder` du Postgres du socle)
+- `DATABASE_URL` (pointe vers le service `postgres` du compose)
 
-Tout le reste (`REGISTRY_SERVER`, `REGISTRY_PASSWORD`, `KEYCLOAK_CLIENT_SECRET`,
-`KEYCLOAK_HOST`, `LETSENCRYPT_EMAIL`, `NAMESPACE`...) est hérité du socle.
+Les variables Scaleway (`SCW_LLM_BASE_URL`, `SCW_SECRET_KEY_LLM`) et
+`OWUI_PUBLIC_URL` sont optionnelles (voir `.env.example`).
 
 ## Démarrage local
 
 ```bash
-# 1. Configurer l'environnement (minimal — le reste est hérité du socle)
+# 1. Configurer l'environnement
 cp .env.example .env
-# → renseigner NEXTAUTH_SECRET et DATABASE_URL au minimum.
-# KEYCLOAK_CLIENT_SECRET, REGISTRY_*, LETSENCRYPT_EMAIL : déjà dans
-# ../owuicore-main/.env, rien à recopier.
+# → NEXTAUTH_SECRET est généré automatiquement au premier lancement si absent.
 
-# 2. Créer la base agentbuilder sur le Postgres du socle (une seule fois)
-docker exec -it owuicore-main-postgres-1 \
-  psql -U owui -c "CREATE DATABASE agentbuilder; GRANT ALL ON DATABASE agentbuilder TO app;"
-
-# 3. Lancer
+# 2. Lancer (Postgres + migration Prisma + app, tout est inclus)
 docker compose up -d --build
 curl -fsS http://localhost:3001/api/health
 # → {"status":"ok","service":"miraiku-agents"}
 ```
 
-Ouvrir http://localhost:3001 → redirection vers `/sign-in` → SSO Keycloak →
-`/agents`.
+Ouvrir http://localhost:3001 → `/sign-in` → bouton "Continuer" (connexion
+locale automatique, pas de SSO) → `/agents`.
 
 ## Déploiement Kubernetes Scaleway
 
