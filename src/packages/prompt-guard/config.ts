@@ -38,7 +38,11 @@ export type GuardConfig = {
  * illisibles, donc pas de blocages fail-closed parasites) plutôt que le coût.
  * Override possible via la variable d'env `GUARD_JUDGE_MODEL`.
  */
-export const RECOMMENDED_JUDGE_MODEL: string | undefined = 'gpt-oss-120b';
+// ⚠ `gpt-oss-120b` (le nom du benchmark) a été RETIRÉ du catalogue Scaleway le
+//   2026-08-25 — renommé `gptoss-120b`, sans tiret. Le juge répondait 400 et la garde,
+//   fail-closed, bloquait TOUT. Les noms d'opérateur bougent : en déploiement, préférer
+//   la variable GUARD_JUDGE_MODEL, qui se corrige sans reconstruire.
+export const RECOMMENDED_JUDGE_MODEL: string | undefined = 'gptoss-120b';
 
 export const DEFAULT_GUARD_CONFIG: GuardConfig = {
   judgeModel: RECOMMENDED_JUDGE_MODEL,

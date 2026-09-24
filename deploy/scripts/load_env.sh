@@ -6,7 +6,7 @@
 #   - d'overrider via l'environnement CI sans modifier les fichiers
 #
 # Fonction copiée depuis owuicore-main/scripts/load_env.sh pour que
-# owuiapps-agents reste déployable même si le socle n'est pas cloné
+# myagents reste déployable même si le socle n'est pas cloné
 # à côté.
 
 load_dotenv_preserve_existing() {

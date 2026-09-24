@@ -44,6 +44,21 @@ function baseUrl(): string {
   return env().OWUI_BASE_URL.replace(/\/$/, '');
 }
 
+// Partage de l'agent dans OpenWebUI. A partir de la version 0.11, le partage ne passe
+// plus par `access_control` mais par une liste `access_grants`, et deux details comptent :
+//
+//  - une liste ABSENTE ou nulle fait echouer la mise a jour avec un 500 dont le corps ne
+//    dit rien (la trace n'existe que dans le journal du socle) ;
+//  - une liste VIDE veut dire « visible du seul proprietaire », c'est-a-dire du compte
+//    qui porte la cle d'administration. L'agent apparait alors dans l'interface
+//    d'administration et nulle part ailleurs, sans qu'aucun message ne le signale.
+//
+// `user/*` = tout compte connecte. Surtout pas `anyone/*`, qui vaut « sans
+// authentification » et que le socle retire d'office sur cette route.
+const PARTAGE_TOUT_COMPTE_CONNECTE = [
+  { principal_type: 'user', principal_id: '*', permission: 'read' },
+];
+
 export async function createOwuiModel(p: CreateModelPayload): Promise<OwuiModelResponse> {
   const body = {
     id: p.id,
@@ -61,6 +76,7 @@ export async function createOwuiModel(p: CreateModelPayload): Promise<OwuiModelR
     },
     base_model_id: p.baseModelId,
     access_control: null,
+    access_grants: PARTAGE_TOUT_COMPTE_CONNECTE,
     is_active: true,
   };
 
@@ -81,13 +97,17 @@ export async function createOwuiModel(p: CreateModelPayload): Promise<OwuiModelR
 
 export async function updateOwuiModel(p: CreateModelPayload): Promise<OwuiModelResponse> {
   // OpenWebUI v0.8.12 : POST /api/v1/models/model/update avec l'id dans le body
+  // Nom, description et etiquette identiques a la creation : sinon la premiere
+  // modification renommait l'agent (suffixe perdu) et lui retirait son etiquette
+  // « Mes Agents MirAI » dans Mon assistant.
   const body = {
     id: p.id,
-    name: p.name,
+    name: `${p.name} (Mes Agents MirAI)`,
     meta: {
-      description: p.description,
+      description: p.description || `Agent cree via Mes Agents MirAI`,
       profile_image_url: '/static/favicon.png',
       suggestion_prompts: (p.examples ?? []).map((content) => ({ content })),
+      tags: [{ name: 'Mes Agents MirAI' }],
       capabilities: { vision: false, usage: false, citations: true },
     },
     params: {
@@ -96,10 +116,15 @@ export async function updateOwuiModel(p: CreateModelPayload): Promise<OwuiModelR
     },
     base_model_id: p.baseModelId,
     access_control: null,
+    access_grants: PARTAGE_TOUT_COMPTE_CONNECTE,
     is_active: true,
   };
 
-  const res = await fetch(`${baseUrl()}/api/v1/models/model/update`, {
+  // L'identifiant part AUSSI en parametre de requete : les socles recents l'y attendent,
+  // les anciens le lisent dans le corps. Sans lui, la mise a jour echoue et le repli
+  // tente une creation, qui repond 401 « already registered » — un code
+  // d'authentification pour un conflit de nom, de quoi chercher au mauvais endroit.
+  const res = await fetch(`${baseUrl()}/api/v1/models/model/update?id=${encodeURIComponent(p.id)}`, {
     method: 'POST',
     headers: getHeaders(),
     body: JSON.stringify(body),
