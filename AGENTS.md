@@ -77,9 +77,9 @@ Keycloak, Postgres, registry) restent dans le socle. Detail dans
 ## Workflow evolution du schema DB
 
 ```
-1. editer prisma/schema.prisma
-2. npx prisma migrate dev --name <description>   # genere + applique en local
-3. git add prisma/migrations/<timestamp>_<desc>/
+1. editer apps/next/prisma/schema.prisma
+2. cd apps/next && bunx prisma migrate dev --name <description>   # genere + applique en local
+3. git add apps/next/prisma/migrations/<timestamp>_<desc>/
 4. ./deploy/build-image.sh && ./deploy/push-image.sh
 5. ./deploy/deploy-k8s.sh                        # run job migrate-deploy + rollout
 ```
@@ -108,7 +108,7 @@ for r in c.execute('SELECT id, email, role FROM user'): print(r)
 # Tester un endpoint depuis le pod (pour contourner l'ingress/auth)
 POD=$(kubectl -n miraiku get pod -l app=agent-builder -o jsonpath='{.items[0].metadata.name}')
 IP=$(kubectl -n miraiku get pod "$POD" -o jsonpath='{.status.podIP}')
-kubectl -n miraiku exec "$POD" -- node -e "
+kubectl -n miraiku exec "$POD" -- bun -e "
   require('http').get('http://$IP:3000/api/health', r => {
     let b=''; r.on('data',c=>b+=c); r.on('end',()=>console.log(r.statusCode, b));
   });

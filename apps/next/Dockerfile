@@ -1,15 +1,16 @@
-# MirAI Agent Builder — Dockerfile multi-stage (Next.js 14 standalone)
+# MirAI Agent Builder — Dockerfile multi-stage (Next.js 14 standalone, Bun)
 # Registre cible : rg.fr-par.scw.cloud/${NAMESPACE}/miraiku-agents:${IMAGE_TAG}
+# Contexte de build = apps/next/ (app 100% indépendante, cf. deploy/build-image.sh)
 
 # ---------- Stage 1 : deps ----------
-FROM node:20-alpine AS deps
+FROM oven/bun:1-alpine AS deps
 RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
 
 # ---------- Stage 2 : builder ----------
-FROM node:20-alpine AS builder
+FROM oven/bun:1-alpine AS builder
 RUN apk add --no-cache openssl
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
@@ -19,17 +20,17 @@ COPY . .
 # sur l'arborescence d'imports de main.css.
 RUN mkdir -p public/dsfr && cp -r node_modules/@codegouvfr/react-dsfr/dsfr/* public/dsfr/
 # Prisma client a besoin du schema avant le build Next
-RUN npx prisma generate
+RUN bunx prisma generate
 ENV NEXT_TELEMETRY_DISABLED=1
 # Skip runtime env validation during build — secrets sont injectés au démarrage
 # du conteneur, pas au build. src/lib/env.ts retourne des placeholders quand
 # SKIP_ENV_VALIDATION=1 pour que Next.js puisse faire le static analysis des
 # routes API sans qu'authOptions/KeycloakProvider ne plante.
 ENV SKIP_ENV_VALIDATION=1
-RUN npm run build
+RUN bun run build
 
 # ---------- Stage 3 : runner ----------
-FROM node:20-alpine AS runner
+FROM oven/bun:1-alpine AS runner
 RUN apk add --no-cache openssl
 WORKDIR /app
 ENV NODE_ENV=production
