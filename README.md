@@ -15,10 +15,11 @@ d'OpenWebUI. Spec complète dans [docs/specs/agent-builder-spec.md](docs/specs/a
 
 - **Framework** : Next.js 14 (App Router) + React 18 + TypeScript
 - **Design system** : DSFR officiel (`@codegouvfr/react-dsfr`)
-- **Auth** : NextAuth 4, stub "utilisateur local" en dev standalone (voir `src/lib/auth.ts`)
+- **Auth** : NextAuth 4, stub "utilisateur local" en dev standalone (voir `apps/next/src/lib/auth.ts`)
 - **DB** : PostgreSQL (conteneur local dédié, base `agentbuilder`) + Prisma
-- **BFF** : routes Next.js côté serveur, wrapper `src/lib/owui-client.ts`
-- **Conteneur** : Docker multi-stage (Node 20 alpine, Next.js standalone)
+- **BFF** : routes Next.js côté serveur, wrapper `apps/next/src/lib/owui-client.ts`
+- **Package manager** : Bun (`apps/next/package.json`, `apps/next/bun.lock`)
+- **Conteneur** : Docker multi-stage (Bun alpine, Next.js standalone), contexte = `apps/next/`
 - **Déploiement** : Kubernetes Scaleway, namespace `miraiku`, ingress nginx +
   cert-manager letsencrypt-prod, URL `https://myagents.fake-domain.name`
 
@@ -81,28 +82,37 @@ kubectl -n miraiku logs deploy/agent-builder --tail=50
 
 ```
 .
-├── app/                    Next.js App Router — pages + API BFF
-│   ├── agents/new/         Wizard de création (4 étapes DSFR)
-│   ├── api/ab/             Endpoints BFF (§6 de la spec)
-│   └── api/auth/           NextAuth / Keycloak
-├── src/
-│   ├── lib/                Adaptateurs : env, auth, prisma, clients OWUI/Scaleway, prompt-guard
-│   ├── packages/           Modules isolés réutilisables (prompt-guard : cœur sans dépendance)
-│   └── types/              Augmentations de types (NextAuth)
-├── prisma/                 schema.prisma (tables ab_*) + migrations
-├── tests/redteam/          Suite red-team / prompt-injection (opt-in, voir le README local)
+├── apps/
+│   └── next/               Application Next.js — 100% indépendante (deps, lockfile, Dockerfile)
+│       ├── app/            Next.js App Router — pages + API BFF
+│       │   ├── agents/new/ Wizard de création (4 étapes DSFR)
+│       │   ├── api/ab/     Endpoints BFF (§6 de la spec)
+│       │   └── api/auth/   NextAuth / Keycloak
+│       ├── src/
+│       │   ├── lib/        Adaptateurs : env, auth, prisma, clients OWUI/Scaleway, prompt-guard
+│       │   ├── packages/   Modules isolés réutilisables (prompt-guard : cœur sans dépendance)
+│       │   └── types/      Augmentations de types (NextAuth)
+│       ├── prisma/         schema.prisma (tables ab_*) + migrations
+│       ├── tests/redteam/  Suite red-team / prompt-injection (opt-in, voir le README local)
+│       ├── public/         Assets statiques
+│       ├── package.json  bun.lock
+│       └── Dockerfile      Contexte de build = apps/next/
 ├── deploy/                 Tout le déploiement au même endroit :
-│   ├── *.sh                Scripts build / push / deploy
+│   ├── *.sh                Scripts build / push / deploy (référencent apps/next/Dockerfile)
 │   ├── scripts/            helper load_env.sh (cascade .env)
 │   ├── k8s/base/           Manifestes templates (rendus via envsubst)
 │   └── keycloak/           Client OIDC à importer dans le realm openwebui
-├── public/                 Assets statiques
 ├── docs/                   📚 Toute la documentation — voir docs/README.md
 │   ├── specs/              Spec produit + roadmap V2
 │   └── mockups/            Maquettes DSFR (HTML + PNG)
-├── Dockerfile  docker-compose.yml
+├── docker-compose.yml      Contexte de build : apps/next
+├── Makefile                Cibles délèguent à `cd apps/next && bun ...`
 └── README.md  AGENTS.md    Ce fichier · contexte pour les assistants de code
 ```
+
+Chaque application sous `apps/` est indépendante en dépendances (son propre
+`package.json` + lockfile Bun + Dockerfile). D'autres apps pourront être
+ajoutées sous `apps/<nom>/` sans impacter `apps/next/`.
 
 Toute la documentation vit sous [docs/](docs/) (point d'entrée : [docs/README.md](docs/README.md)).
 

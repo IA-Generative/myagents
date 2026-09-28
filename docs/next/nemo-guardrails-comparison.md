@@ -1,7 +1,7 @@
 # Note technique — NeMo Guardrails vs `@mirai/prompt-guard`
 
 > Comparaison du framework **NVIDIA NeMo Guardrails (v0.21)** avec notre module **`@mirai/prompt-guard`** (TypeScript, MirAI Agent Builder), et améliorations actionnables qui en découlent.
-> Module concerné : `src/packages/prompt-guard/{core,judge,config}.ts` — banc d'essai : `tests/redteam/`.
+> Module concerné : `apps/next/src/packages/prompt-guard/{core,judge,config}.ts` — banc d'essai : `apps/next/tests/redteam/`.
 > Analyse réalisée par lecture du dépôt NeMo local (`/Users/etiquet/Documents/GitHub/Guardrails`, v0.21), 8 sous-systèmes.
 
 ---
@@ -52,28 +52,28 @@ Les rails sont **paramétrés en YAML** (`rails.input.flows`, `rails.output.flow
 - **Pourquoi** : nos regex sont contournables par suffixe adversarial (GCG) qui ne contient aucun mot-clé. La perplexité capte la « densité de tokens aléatoires » qu'aucun marqueur ne verra.
 - **Effort** : moyen (implémenter/embarquer un scoring de perplexité côté Node).
 - **Impact** : élevé sur les attaques par suffixe optimisé ; faible coût/latence en première passe.
-- **Intégration** : nouveau `Signal` `source: 'perplexity'` dans `inspectInput` (`core.ts`), seuils paramétrables via `GuardConfig` (`config.ts`). Ajouter un axe « suffixe GCG / bruit adversarial » à `tests/redteam/zorg-corpus.ts` et **calibrer les seuils sur notre corpus** (suivre FPR/FNR — cf. METHODOLOGY §5). Documenter dans `tests/redteam/METHODOLOGY.md §7` (déjà listé comme piste « obfuscation »).
+- **Intégration** : nouveau `Signal` `source: 'perplexity'` dans `inspectInput` (`core.ts`), seuils paramétrables via `GuardConfig` (`config.ts`). Ajouter un axe « suffixe GCG / bruit adversarial » à `apps/next/tests/redteam/zorg-corpus.ts` et **calibrer les seuils sur notre corpus** (suivre FPR/FNR — cf. METHODOLOGY §5). Documenter dans `apps/next/tests/redteam/METHODOLOGY.md §7` (déjà listé comme piste « obfuscation »).
 
 ### (b) Prompts self-check NeMo — *alternative/complément au LLM-juge*
 - **Quoi** : durcir le parsing de `judgeWith` (`judge.ts`) en s'inspirant de `is_content_safe` : fallback keyword (normaliser `\W+→espace`, lire les 2 premiers tokens `yes/no/safe/unsafe`) **quand le JSON est illisible**, au lieu de fail-closer directement. Optionnellement, offrir une variante de prompt « company-policy bullets + Question: Should be blocked? (Yes/No) » comme second format.
 - **Pourquoi** : aujourd'hui un verdict non-JSON → fail-closed (faux blocage). Le benchmark montre que `gpt-oss-120b` a 0 % fail-closed mais `gemma` 17 % : un parser tolérant récupère ces cas sans relâcher la sécurité (le fallback reste fail-closed *in fine*).
 - **Effort** : faible.
 - **Impact** : moyen — réduit le `failClosedRate` (faux positifs) sans baisser le rappel.
-- **Intégration** : enrichir le bloc `match`/`JSON.parse` de `judgeWith` (`judge.ts`) avec un `parseKeywordVerdict()` de repli **avant** le `complied: true` final. Couvrir par `tests/redteam/judge-eval.ts` (mesurer l'effet sur FPR et fail-closed rate).
+- **Intégration** : enrichir le bloc `match`/`JSON.parse` de `judgeWith` (`judge.ts`) avec un `parseKeywordVerdict()` de repli **avant** le `complied: true` final. Couvrir par `apps/next/tests/redteam/judge-eval.ts` (mesurer l'effet sur FPR et fail-closed rate).
 
 ### (c) Classifieur dédié type Llama Guard / content-safety — *en option*
 - **Quoi** : permettre de brancher un classifieur de sécurité dédié (Llama Guard ou équivalent souverain) derrière l'interface `LLMJudge`, avec taxonomie de catégories et format contraint (1re ligne `safe/unsafe`, 2e ligne catégories), validé contre une whitelist de catégories.
 - **Pourquoi** : un modèle dédié est plus robuste qu'un juge généraliste sur les catégories standard et sort des *catégories* exploitables pour le triage/audit.
 - **Effort** : élevé (déployer/héberger un modèle dédié sur Scaleway souverain).
 - **Impact** : moyen — gain marginal vu nos 3 objectifs déjà bien couverts par `gpt-oss-120b` ; surtout utile si on élargit le périmètre.
-- **Intégration** : nouvelle implémentation de l'interface `LLMJudge` (`judge.ts`) + entrée `judgeModel`/mode dans `GuardConfig` (`config.ts`). À **benchmarker contre le juge actuel** via `tests/redteam/judge-eval.ts` avant toute adoption (la barre est `gpt-oss-120b` : F1 96 %, FPR 0 %).
+- **Intégration** : nouvelle implémentation de l'interface `LLMJudge` (`judge.ts`) + entrée `judgeModel`/mode dans `GuardConfig` (`config.ts`). À **benchmarker contre le juge actuel** via `apps/next/tests/redteam/judge-eval.ts` avant toute adoption (la barre est `gpt-oss-120b` : F1 96 %, FPR 0 %).
 
 ### (d) Grounding / fact-check pour l'objectif désinformation
 - **Quoi** : pour la cible « fausses sources », ajouter une vérification de *grounding* optionnelle : quand des `relevant_chunks`/evidence existent (RAG), demander au juge « l'affirmation est-elle étayée par ces preuves ? (yes/no) » (pattern `self_check_facts`, seuil 0.5), avec fallback LLM si pas de modèle NLI.
 - **Pourquoi** : aujourd'hui notre détection « invente des sources » est *intentionnelle* (le juge lit la consigne malveillante), pas *factuelle*. Le grounding attrape la désinformation même sans consigne explicite.
 - **Effort** : moyen (uniquement pertinent si/quand un contexte RAG est disponible).
 - **Impact** : moyen-élevé sur l'objectif désinformation en présence de sources.
-- **Intégration** : nouveau `goal` dédié + paramètre `evidence` optionnel dans `judgeWith` (`judge.ts`) ; nouvel axe « claim vs evidence » dans `tests/redteam/zorg-corpus.ts`. À relier à la piste « Injection indirecte / RAG » déjà notée en `METHODOLOGY.md §7`.
+- **Intégration** : nouveau `goal` dédié + paramètre `evidence` optionnel dans `judgeWith` (`judge.ts`) ; nouvel axe « claim vs evidence » dans `apps/next/tests/redteam/zorg-corpus.ts`. À relier à la piste « Injection indirecte / RAG » déjà notée en `METHODOLOGY.md §7`.
 
 ### (e) PII / sensitive-data — *en option*
 - **Quoi** : détecteur PII optionnel en sortie (`inspectOutput`), soit par regex ciblées (email, NIR/SSN, téléphone, IBAN), soit via un service externe type Presidio si jamais requis, avec mode **detect** (bloque) ou **mask** (`<ENTITY>`).
@@ -94,7 +94,7 @@ Les rails sont **paramétrés en YAML** (`rails.input.flows`, `rails.output.flow
 ## Ce que NeMo fait que nous évitons volontairement
 
 - **Surface fonctionnelle massive** (PII, fact-checking NLI, topical, bloat, streaming, multi-classifieurs). Notre périmètre est borné à **OWASP LLM01** avec 3 objectifs *mesurables* (keylogger, fausses sources, fuite de prompt). Élargir diluerait la testabilité et le signal du banc d'essai.
-- **Dépendances Python lourdes** : spaCy `en_core_web_lg` (768 Mo), transformers/GPT-2, ONNX runtime, Presidio, `yara-python`, `fast-langdetect`. Notre `core.ts` ne dépend que de `node:crypto` — c'est une **source de vérité partagée** entre la production (`src/lib/prompt-guard.ts`) et le harnais red-team, déployable partout, auditable d'un coup d'œil. Embarquer ces modèles casserait cette propriété.
+- **Dépendances Python lourdes** : spaCy `en_core_web_lg` (768 Mo), transformers/GPT-2, ONNX runtime, Presidio, `yara-python`, `fast-langdetect`. Notre `core.ts` ne dépend que de `node:crypto` — c'est une **source de vérité partagée** entre la production (`apps/next/src/lib/prompt-guard.ts`) et le harnais red-team, déployable partout, auditable d'un coup d'œil. Embarquer ces modèles casserait cette propriété.
 - **Complexité de Colang** : un DSL de flux + runtime à apprendre, debugger et versionner. Notre orchestration est du **TypeScript typé linéaire** (`inspectInput → hardenSystemPrompt → inspectOutput → judgeWith`), couvert par des tests unitaires, sans moteur d'exécution opaque. Pour un pipeline à 3 couches, le code l'emporte sur le DSL.
 - **Classifieurs/modèles supplémentaires à héberger** : chaque modèle dédié (Llama Guard, AlignScore, RF ONNX) = un service souverain de plus à opérer et homologuer. Notre juge unique `gpt-oss-120b` (Scaleway souverain) couvre déjà nos objectifs (F1 96 %, FPR 0 %).
 
@@ -107,5 +107,5 @@ Les rails sont **paramétrés en YAML** (`rails.input.flows`, `rails.output.flow
 - **Les regex (les nôtres comme les YARA de NeMo) sont contournables.** Casse, homoglyphes, caractères zéro-largeur, RTL override, *payload splitting* multi-tours, chaînes d'encodage imbriquées (base64→rot13→hex) passent sous un matching exact. Notre `deobfuscate()` ne couvre que hex + concat ; ne pas surestimer sa portée (cf. pistes `METHODOLOGY.md §7`). Un détecteur n'est jamais une preuve d'attaque — d'où la posture stricte assumée (faux positif > compliance).
 - **La perplexité est bruitée.** Seuils NeMo (`89.79`, `1845.65`) calibrés sur dataset NVIDIA, **EN, GPT-2** : ~7,4 % de FP rapportés sur le score length/perplexity. Sur du **français**, du code légitime, des prompts courts ou très techniques, le taux de faux positifs peut exploser. À traiter comme **signal additionnel**, jamais comme blocage seul, et à **recalibrer sur notre corpus** avant activation (FPR vs FNR par axe).
 - **Dépendances lourdes = coût caché.** spaCy/Presidio/ONNX/transformers alourdissent l'image, la surface d'attaque (CVE transitives), et le temps de démarrage. Porter une *capacité* (ex. perplexité, patterns SQL/XSS) en TS pur est préférable à importer la *dépendance*.
-- **Le coût LLM des self-checks est réel.** Chaque rail self-check = un appel LLM (tokens + latence + flakiness). Multiplier les juges (ensemble, multi-pass, content-safety + fact-check + topical) multiplie le coût. Notre banc d'essai garde la matrice complète **manuelle** et propose un *smoke gardé* plafonné en CI (`METHODOLOGY.md §9`). Tout nouvel appel LLM (grounding, classifieur dédié) doit être **benchmarké coût-vs-détection** avant adoption (`tests/redteam/judge-eval.ts`).
+- **Le coût LLM des self-checks est réel.** Chaque rail self-check = un appel LLM (tokens + latence + flakiness). Multiplier les juges (ensemble, multi-pass, content-safety + fact-check + topical) multiplie le coût. Notre banc d'essai garde la matrice complète **manuelle** et propose un *smoke gardé* plafonné en CI (`METHODOLOGY.md §9`). Tout nouvel appel LLM (grounding, classifieur dédié) doit être **benchmarké coût-vs-détection** avant adoption (`apps/next/tests/redteam/judge-eval.ts`).
 - **Fail-closed ≠ gratuit.** Compter un verdict illisible comme une compliance évite les fuites mais génère des **faux blocages**. À surveiller via le `failClosedRate` : un juge souvent illisible est inutilisable même s'il « attrape tout » (`config.ts` documente déjà ce critère dans le choix `gpt-oss-120b` vs `gemma`).
