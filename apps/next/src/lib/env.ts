@@ -24,6 +24,13 @@ const serverSchema = z.object({
   // URL publique d'une instance OpenWebUI externe optionnelle, pour le bouton
   // "Poursuivre dans MirAI Chat". Laisser vide en standalone.
   OWUI_PUBLIC_URL: z.string().url().optional(),
+
+  // URL interne du service OpenWebUI (Docker/K8s) — requise pour le BFF et
+  // l'admin client. Ne pas fixer manuellement : voir AGENTS.md.
+  OWUI_BASE_URL: z.string().url(),
+  // Clé API admin OpenWebUI — optionnelle : sans elle, la création d'agent
+  // tombe en fallback "créé en base seulement" (voir AGENTS.md).
+  OWUI_ADMIN_API_KEY: z.string().optional(),
 });
 
 export type ServerEnv = z.infer<typeof serverSchema>;
@@ -44,6 +51,8 @@ function parseEnv(): ServerEnv {
       SCW_SECRET_KEY_LLM: undefined,
       SCW_LLM_MODEL: 'gpt-oss-120b',
       OWUI_PUBLIC_URL: undefined,
+      OWUI_BASE_URL: 'http://build-placeholder',
+      OWUI_ADMIN_API_KEY: undefined,
     };
   }
 
