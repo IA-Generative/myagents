@@ -17,22 +17,22 @@ help:
 	@echo "  k8s-logs       Logs du Deployment"
 
 install:
-	npm ci
+	cd apps/next && bun install
 
 dev:
-	npm run dev
+	cd apps/next && bun run dev
 
 build:
-	npm run build
+	cd apps/next && bun run build
 
 lint:
-	npm run lint
+	cd apps/next && bun run lint
 
 typecheck:
-	npm run typecheck
+	cd apps/next && bun run typecheck
 
 test:
-	npm run test
+	cd apps/next && bun run test
 
 docker-build:
 	./deploy/build-image.sh
