@@ -18,16 +18,16 @@ docker build \
   --platform linux/amd64 \
   --target runner \
   -t "${AGENT_BUILDER_IMAGE}" \
-  -f Dockerfile \
-  .
+  -f apps/next/Dockerfile \
+  apps/next
 
 echo "Build de ${AGENT_BUILDER_MIGRATOR_IMAGE} (stage builder — avec CLI prisma)"
 docker build \
   --platform linux/amd64 \
   --target builder \
   -t "${AGENT_BUILDER_MIGRATOR_IMAGE}" \
-  -f Dockerfile \
-  .
+  -f apps/next/Dockerfile \
+  apps/next
 
 echo "Build OK :"
 echo "  - ${AGENT_BUILDER_IMAGE}"

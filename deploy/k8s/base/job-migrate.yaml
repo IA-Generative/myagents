@@ -38,7 +38,7 @@ spec:
           # IfNotPresent reutiliserait le vieux migrator cache sur le node
           # et reecraserait la DB avec un schema obsolete.
           imagePullPolicy: Always
-          command: ["node_modules/.bin/prisma", "migrate", "deploy"]
+          command: ["bunx", "prisma", "migrate", "deploy"]
           envFrom:
             - secretRef:
                 name: agent-builder-secrets
