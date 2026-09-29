@@ -1,0 +1,228 @@
+# -- Master switch for the whole chart
+enabled: true
+
+# -- String to fully override the default application name
+fullnameOverride: ""
+# -- Provide a name in place of the default application name
+nameOverride: ""
+
+# -- Add labels to all the deployed resources
+commonLabels: {}
+
+# =============================================================================
+# Global configuration
+# =============================================================================
+global:
+  # -- Map of environment variables for all containers
+  env: {}
+  # -- Global Docker image registry
+  imageRegistry: ""
+  # -- Image credentials applied to every component
+  imagePullSecrets: []
+
+# =============================================================================
+# Application configuration
+# =============================================================================
+app:
+  # -- Number of replicas
+  replicaCount: 1
+
+  # -- Workload kind: "Deployment" or "StatefulSet"
+  deploymentType: "Deployment"
+
+  image:
+    # -- Registry to use for the app
+    registry: "ghcr.io"
+    # -- Repository to use for the app
+    repository: "wayii/mi-sdid/repos/mes-agents-private/mes-agents"
+    # -- Image pull policy
+    pullPolicy: "IfNotPresent"
+    # -- Tag to use (defaults to Chart.appVersion)
+    tag: ""
+
+  # -- Image credentials configuration
+  imagePullSecrets: []
+
+  # -- Container port number
+  containerPort: 8000
+  # -- Container port name
+  containerPortName: "http"
+
+  # -- Map of environment variables (supports valueFrom)
+  env:
+    ENVIRONMENT: "production"
+    # Sans ces valeurs, le server retombe sur ses défauts localhost (voir apps/server/app/core/config.py).
+    QDRANT_URL: "http://qdrant:6333"
+    LLM_BASE_URL: ""
+    LLM_DEFAULT_MODEL: "gpt-oss-120b"
+    LLM_EMBEDDING_MODEL: "nomic-embed-text"
+    CORS_ORIGINS: '["https://mes-agents.example.com"]'
+    # DATABASE_URL is injected from postgres sub-chart secret when postgres.enabled=true
+    # Override this if using an external database
+    DATABASE_URL:
+      valueFrom:
+        secretKeyRef:
+          name: ""  # Will be set to <release>-postgres by template if postgres.enabled
+          key: "uri"
+
+  # -- Environment variables from ConfigMap
+  envCm: {}
+
+  # -- Environment variables from Secret (for custom secrets), e.g. LLM_API_KEY
+  envSecret: {}
+
+  # -- Pod-level security context
+  podSecurityContext:
+    runAsNonRoot: true
+    fsGroup: 10001
+    seccompProfile:
+      type: "RuntimeDefault"
+
+  # -- Container-level security context
+  securityContext:
+    runAsUser: 10001
+    runAsGroup: 10001
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    readOnlyRootFilesystem: true
+    seccompProfile:
+      type: "RuntimeDefault"
+
+  # -- List of volumes
+  volumes:
+    - name: tmp
+      emptyDir: {}
+    - name: cache
+      emptyDir: {}
+
+  # -- List of volume mounts
+  volumeMounts:
+    - mountPath: /tmp
+      name: tmp
+    - mountPath: /app/.cache
+      name: cache
+
+  # -- Probes configuration
+  probes:
+    startupProbe:
+      httpGet:
+        path: "/api/health"
+        port: 8000
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      failureThreshold: 30
+    readinessProbe:
+      httpGet:
+        path: "/api/health"
+        port: 8000
+      initialDelaySeconds: 5
+      periodSeconds: 10
+    livenessProbe:
+      httpGet:
+        path: "/api/health"
+        port: 8000
+      initialDelaySeconds: 15
+      periodSeconds: 20
+
+  # -- Resources requests and limits
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+  # -- Autoscaling configuration
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+
+  # -- Service configuration
+  service:
+    enabled: true
+    type: "ClusterIP"
+    port: 80
+    portName: "http"
+
+  # -- Ingress configuration
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - name: "mes-agents.example.com"
+        paths:
+          - path: "/"
+            pathType: "Prefix"
+    tls: []
+
+  # -- PodDisruptionBudget
+  pdb:
+    enabled: false
+    minAvailable: ""
+    maxUnavailable: ""
+
+  # -- ServiceAccount
+  serviceAccount:
+    enabled: false
+    create: false
+    name: ""
+    annotations: {}
+    automountServiceAccountToken: false
+
+  # -- Strategy configuration
+  strategy:
+    type: "RollingUpdate"
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  # -- Node selector
+  nodeSelector: {}
+  # -- Tolerations
+  tolerations: []
+  # -- Affinity
+  affinity: {}
+
+# =============================================================================
+# PostgreSQL sub-chart configuration (cloudpirates/postgres)
+# =============================================================================
+postgres:
+  # -- Enable PostgreSQL sub-chart
+  enabled: true
+
+  # -- PostgreSQL username
+  username: "mesagents"
+  # -- PostgreSQL database name
+  database: "mesagents"
+  # -- PostgreSQL password (use existingSecret in production)
+  password: ""
+  # -- Existing secret containing the password
+  existingSecret: ""
+  # -- Key in the existing secret
+  existingSecretKey: "password"
+
+  # -- Image configuration for PostgreSQL
+  image:
+    # -- PostgreSQL image tag (version to deploy)
+    tag: "18.6-alpine"
+
+  # -- Persistence configuration
+  persistence:
+    enabled: true
+    size: 1Gi
+    storageClass: ""
+
+  # -- Resources
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"

@@ -3,8 +3,8 @@
 #
 # Stratégie en cascade (première valeur rencontrée gagne) :
 #   1. Variables déjà exportées dans le shell (CI, override ponctuel)
-#   2. ./.env                       (overrides spécifiques à Agent Builder)
-#   3. ../owuicore-main/.env        (credentials et config partagés du socle)
+#   2. apps/next/.env               (overrides spécifiques à Agent Builder)
+#   3. <parent du dépôt>/owuicore-main/.env (credentials et config partagés du socle)
 #
 # Résultat : on ne ressaisit JAMAIS les credentials Scaleway / Registry /
 # Keycloak dans ce repo. Ils restent dans le .env du socle, source unique
@@ -26,7 +26,8 @@ if [[ -f .env ]]; then
 fi
 
 # 3. .env du socle owuicore-main (credentials partagés)
-SOCLE_ENV="${OWUICORE_ENV_FILE:-${ROOT_DIR}/../owuicore-main/.env}"
+# ROOT_DIR = apps/next : le socle est voisin du dépôt, trois niveaux au-dessus.
+SOCLE_ENV="${OWUICORE_ENV_FILE:-${ROOT_DIR}/../../../owuicore-main/.env}"
 if [[ -f "$SOCLE_ENV" ]]; then
   echo "Chargement du .env du socle : ${SOCLE_ENV}"
   load_dotenv_preserve_existing "$SOCLE_ENV"
@@ -102,7 +103,7 @@ done
 
 if [[ "$missing" -ne 0 ]]; then
   echo "" >&2
-  echo "Astuce : vérifiez que ../owuicore-main/.env est rempli et que .env" >&2
+  echo "Astuce : vérifiez que owuicore-main/.env est rempli et que apps/next/.env" >&2
   echo "contient au moins AGENT_BUILDER_IMAGE, KEYCLOAK_CLIENT_SECRET," >&2
   echo "NEXTAUTH_SECRET et DATABASE_URL." >&2
   exit 1

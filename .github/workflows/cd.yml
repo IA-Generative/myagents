@@ -1,0 +1,51 @@
+name: CD
+
+on:
+  push:
+    branches:
+      # Releases sur preprod uniquement pour l'instant ; main sera câblé plus tard.
+      - preprod
+  workflow_dispatch:
+
+jobs:
+  release:
+    uses: dnum-mi/fabnum-cicd/.github/workflows/release-app.yml@v0
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    with:
+      RELEASE_BRANCH: preprod
+      TAG_MAJOR_AND_MINOR: true
+      RELEASE_CONFIG_FILE: .github/release/release-please-config.json
+      RELEASE_MANIFEST_FILE: .github/release/.release-please-manifest.json
+
+  build-app:
+    needs: release
+    if: ${{ needs.release.outputs.release-created == 'true' }}
+    uses: dnum-mi/fabnum-cicd/.github/workflows/build-docker.yml@v0
+    permissions:
+      contents: read
+      packages: write
+    with:
+      IMAGE_NAME: ghcr.io/${{ github.repository }}/mes-agents
+      IMAGE_TAG: ${{ needs.release.outputs.version }}
+      IMAGE_CONTEXT: ./
+      IMAGE_DOCKERFILE: ./Dockerfile
+      LATEST_TAG: true
+
+  scan-trivy:
+    needs:
+      - release
+      - build-app
+    if: ${{ needs.release.outputs.release-created == 'true' }}
+    uses: dnum-mi/fabnum-cicd/.github/workflows/scan-trivy.yml@v0
+    permissions:
+      contents: read
+      security-events: write
+      packages: read
+      pull-requests: write
+    with:
+      IMAGE: ${{ needs.build-app.outputs.image }}
+      FORMAT: sarif
+      GITHUB_SECURITY_TAB: true

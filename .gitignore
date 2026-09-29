@@ -81,3 +81,9 @@ __MACOSX/
 tests/e2e/.auth/
 tests/e2e/.report/
 playwright-report/
+
+.env
+
+# Downloaded Helm sub-chart archives (regenerated via `helm dependency build`)
+helm/charts/*.tgz
+
