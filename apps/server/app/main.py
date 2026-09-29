@@ -17,6 +17,7 @@ from app.api.routes import (
     favorites,
     knowledge,
     models,
+    openai_compat,
     prompt,
     ratings,
     tools,
@@ -81,6 +82,10 @@ for router in (
 ):
     app.include_router(router, prefix="/api")
 
+# OpenAI-compatible surface for external callers (Open WebUI connection): no /api prefix,
+# Base URL in Open WebUI is the plain OpenAI convention https://<host>/v1.
+app.include_router(openai_compat.router, prefix="/v1")
+
 
 @app.get("/api/health")
 async def health() -> dict[str, str]:
@@ -101,6 +106,8 @@ if static_path.exists():
             # is_relative_to, pas startswith : "static_evil" commence aussi par "static".
             if file_path.is_relative_to(static_root) and file_path.is_file():
                 return FileResponse(file_path)
-        except ValueError, OSError:
+        except ValueError:
+            pass
+        except OSError:
             pass
         return FileResponse(static_root / "index.html")

@@ -72,6 +72,28 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # OpenWebUI local pour tester l'intégration /v1 exposant les agents (voir openai_compat.py).
+  # Appelle le server via le réseau interne compose (http://server:8000) : pas de proxy/pare-feu
+  # à traverser, contrairement à une instance OpenWebUI externe.
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    environment:
+      WEBUI_SECRET_KEY: ${OPENWEBUI_WEBUI_SECRET_KEY:-dev-secret-change-me}
+      OPENAI_API_BASE_URLS: http://server:8000/v1
+      OPENAI_API_KEYS: ${OPENWEBUI_API_KEY:-}
+      ENABLE_OLLAMA_API: "false"
+      # Le transfert HF "Xet" reste bloque derriere un proxy corporate : fallback HTTP classique.
+      HF_HUB_DISABLE_XET: "1"
+    volumes:
+      - openwebui-data:/app/backend/data
+    ports:
+      - "${OPENWEBUI_PORT:-3000}:8080"
+    depends_on:
+      server:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   qdrant-data:
+  openwebui-data:
