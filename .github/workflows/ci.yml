@@ -1,0 +1,130 @@
+name: CI
+
+on:
+  pull_request:
+
+jobs:
+  lint-commits:
+    uses: dnum-mi/fabnum-cicd/.github/workflows/lint-commits.yml@v0
+    if: ${{ !github.event.pull_request.draft }}
+    permissions:
+      contents: read
+      pull-requests: read
+
+  path-filter:
+    runs-on: ubuntu-24.04
+    if: ${{ !github.event.pull_request.draft }}
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      server: ${{ steps.filter.outputs.server }}
+      web: ${{ steps.filter.outputs.web }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            server:
+              - 'apps/server/**'
+            web:
+              - 'apps/web/**'
+
+  test-server:
+    runs-on: ubuntu-24.04
+    needs: path-filter
+    if: ${{ needs.path-filter.outputs.server == 'true' }}
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: apps/server
+    steps:
+      - uses: actions/checkout@v7
+      # Versions alignées sur le Dockerfile racine ; Python lu depuis .python-version.
+      - uses: astral-sh/setup-uv@v10
+        with:
+          version: "0.12.20"
+          working-directory: apps/server
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest
+
+  test-web:
+    runs-on: ubuntu-24.04
+    needs: path-filter
+    if: ${{ needs.path-filter.outputs.web == 'true' }}
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.2"
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run build
+      - run: bun run test
+
+  build-docker:
+    uses: dnum-mi/fabnum-cicd/.github/workflows/build-docker.yml@v0
+    needs: path-filter
+    if: ${{ needs.path-filter.outputs.server == 'true' || needs.path-filter.outputs.web == 'true' }}
+    permissions:
+      contents: read
+      packages: write
+    with:
+      IMAGE_NAME: ghcr.io/${{ github.repository }}/mes-agents
+      IMAGE_TAG: pr-${{ github.event.pull_request.number }}
+      IMAGE_CONTEXT: ./
+      IMAGE_DOCKERFILE: ./Dockerfile
+      PUSH: false
+      BUILD_ARM64: false
+
+  scan-trivy-conf:
+    uses: dnum-mi/fabnum-cicd/.github/workflows/scan-trivy.yml@v0
+    permissions:
+      contents: read
+      security-events: write
+      pull-requests: write
+      packages: read
+    with:
+      PATH: ./
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      GITHUB_SECURITY_TAB: false
+
+  # Workaround for required status checks in branch protection (a job whose
+  # `if:` skips it still reports "success", so listing every job here catches
+  # a real failure that a missing entry would silently let through.
+  all-jobs-passed:
+    name: Check jobs status
+    runs-on: ubuntu-24.04
+    if: ${{ always() }}
+    needs:
+      - lint-commits
+      - path-filter
+      - test-server
+      - test-web
+      - build-docker
+      - scan-trivy-conf
+    steps:
+      - name: Check status of all required jobs
+        run: |-
+          NEEDS_CONTEXT='${{ toJson(needs) }}'
+          JOB_IDS=$(echo "$NEEDS_CONTEXT" | jq -r 'keys[]')
+          for JOB_ID in $JOB_IDS; do
+            RESULT=$(echo "$NEEDS_CONTEXT" | jq -r ".[\"$JOB_ID\"].result")
+            echo "$JOB_ID job result: $RESULT"
+            if [[ $RESULT != "success" && $RESULT != "skipped" ]]; then
+              echo "***"
+              echo "Error: The $JOB_ID job did not pass."
+              exit 1
+            fi
+          done
+          echo "All jobs passed or were skipped."
