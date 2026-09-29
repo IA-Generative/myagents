@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { DEFAULT_MODEL_ID } from '@/lib/models';
 
 type Message = { role: 'user' | 'assistant'; content: string };
 type ConvSummary = { id: string; title: string; updatedAt: string };
@@ -50,7 +51,7 @@ export default function AgentChatPage() {
           systemPrompt: cfg.systemPrompt ?? '',
           greeting: cfg.greeting ?? '',
           examples: Array.isArray(cfg.examples) ? cfg.examples : [],
-          modelId: cfg.modelId ?? 'gpt-oss-120b',
+          modelId: cfg.modelId ?? DEFAULT_MODEL_ID,
           temperature: cfg.temperature ?? 0.7,
         });
         setConversations(convData.conversations ?? []);
