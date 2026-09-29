@@ -1,0 +1,67 @@
+# MirAI Agent Builder — Compose de dev local, 100% standalone.
+#
+# Aucune dépendance externe : Postgres est lancé ici, l'authentification est
+# un stub local (pas de Keycloak) et il n'y a pas d'intégration OpenWebUI.
+
+services:
+  agent-builder:
+    image: ${AGENT_BUILDER_IMAGE:-miraiku-agents:dev}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3001}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://app:app@postgres:5432/agentbuilder?schema=public}
+    ports:
+      - "${AGENT_BUILDER_PORT:-3001}:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: agentbuilder
+    volumes:
+      - agent-builder-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d agentbuilder"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # Job one-shot de migration Prisma — joue prisma migrate deploy puis s'éteint.
+  # Utilise le stage `builder` (node_modules complet incluant le CLI prisma)
+  # plutôt que le runner minimaliste qui n'a que @prisma/client.
+  migrate:
+    image: miraiku-agents:migrator
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://app:app@postgres:5432/agentbuilder?schema=public}
+    command: ["bunx", "prisma", "migrate", "deploy"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  agent-builder-postgres-data:
+

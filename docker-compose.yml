@@ -1,67 +1,77 @@
-# MirAI Agent Builder — Compose de dev local, 100% standalone.
-#
-# Aucune dépendance externe : Postgres est lancé ici, l'authentification est
-# un stub local (pas de Keycloak) et il n'y a pas d'intégration OpenWebUI.
+# Dev local apps/server (FastAPI, hot reload) + apps/web (Vite, hot reload).
+# apps/next tourne séparément : voir apps/next/docker-compose.yml.
+
+name: myagents
 
 services:
-  agent-builder:
-    image: ${AGENT_BUILDER_IMAGE:-miraiku-agents:dev}
-    build:
-      context: apps/next
-      dockerfile: Dockerfile
-    env_file:
-      - .env
-    environment:
-      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3001}
-      DATABASE_URL: ${DATABASE_URL:-postgresql://app:app@postgres:5432/agentbuilder?schema=public}
-    ports:
-      - "${AGENT_BUILDER_PORT:-3001}:3000"
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "bun", "-e", "fetch('http://localhost:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
-      interval: 15s
-      timeout: 5s
-      retries: 10
-
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18.6-alpine
     environment:
-      POSTGRES_USER: app
-      POSTGRES_PASSWORD: app
-      POSTGRES_DB: agentbuilder
+      POSTGRES_USER: agents
+      POSTGRES_PASSWORD: agents
+      POSTGRES_DB: agents
     volumes:
-      - agent-builder-postgres-data:/var/lib/postgresql/data
+      # Postgres 18 : les données vivent sous /var/lib/postgresql/<major>/docker.
+      - postgres-data:/var/lib/postgresql
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U app -d agentbuilder"]
+      test: ["CMD-SHELL", "pg_isready -U agents -d agents"]
       interval: 5s
       timeout: 5s
       retries: 10
     restart: unless-stopped
 
-  # Job one-shot de migration Prisma — joue prisma migrate deploy puis s'éteint.
-  # Utilise le stage `builder` (node_modules complet incluant le CLI prisma)
-  # plutôt que le runner minimaliste qui n'a que @prisma/client.
-  migrate:
-    image: miraiku-agents:migrator
+  qdrant:
+    image: qdrant/qdrant:v1.19.1
+    volumes:
+      - qdrant-data:/qdrant/storage
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+    restart: unless-stopped
+
+  server:
     build:
-      context: apps/next
-      dockerfile: Dockerfile
-      target: builder
+      context: apps/server
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql://app:app@postgres:5432/agentbuilder?schema=public}
-    command: ["bunx", "prisma", "migrate", "deploy"]
+      DATABASE_URL: postgresql+asyncpg://agents:agents@postgres:5432/agents
+      QDRANT_URL: http://qdrant:6333
+      CORS_ORIGINS: '["http://localhost:${WEB_PORT:-5173}"]'
+    volumes:
+      - ./apps/server:/app
+    ports:
+      - "${SERVER_PORT:-8000}:8000"
     depends_on:
       postgres:
         condition: service_healthy
-    restart: "no"
+      qdrant:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u,sys; o=u.build_opener(u.ProxyHandler({})); sys.exit(0 if o.open('http://127.0.0.1:8000/api/health', timeout=4).status == 200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  web:
+    build:
+      context: apps/web
+    environment:
+      API_PROXY_TARGET: http://server:8000
+    volumes:
+      - ./apps/web:/app
+      # Volume anonyme : conserve les node_modules de l'image malgré le montage du source.
+      - /app/node_modules
+    ports:
+      - "${WEB_PORT:-5173}:5173"
+    depends_on:
+      server:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
-  agent-builder-postgres-data:
-
+  postgres-data:
+  qdrant-data:
