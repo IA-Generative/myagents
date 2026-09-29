@@ -54,6 +54,16 @@ async def list_my_agents(db: AsyncSession, creator_id: str) -> list[Agent]:
     return list((await db.execute(stmt)).scalars().all())
 
 
+async def list_exposed_agents(db: AsyncSession) -> list[Agent]:
+    """Agents made available to external OpenAI-compatible callers (all but archived)."""
+    stmt = _with_versions(
+        select(Agent)
+        .where(Agent.status != AgentStatus.archived)
+        .order_by(Agent.updated_at.desc())
+    )
+    return list((await db.execute(stmt)).scalars().all())
+
+
 async def list_catalog(db: AsyncSession, category: str | None = None) -> list[Agent]:
     stmt = _with_versions(
         select(Agent).where(
