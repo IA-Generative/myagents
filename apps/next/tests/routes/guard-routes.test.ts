@@ -49,6 +49,11 @@ vi.mock('@/lib/db', () => ({
 
 vi.mock('@/lib/scw-llm-client', () => ({
   ScwLlmUnavailableError: class ScwLlmUnavailableError extends Error {},
+  // Même règle que la vraie fonction : un nom absent du catalogue n'est pas
+  // transmis (le client retombe alors sur l'alias SCW_LLM_MODEL).
+  resolveServedModel: vi.fn(async (wanted?: string | null) =>
+    !wanted || wanted === 'mistral-small-3.2-24b-instruct-2506' ? undefined : wanted,
+  ),
   scwChatCompletions: vi.fn(
     async ({ messages }: { messages: Array<{ role: string; content: string }> }) => {
       const system = messages.find((m) => m.role === 'system')?.content ?? '';
@@ -129,6 +134,28 @@ describe('garde au niveau des routes — blocage de l’ENTRÉE (attaque keylogg
       params: Promise.resolve({ id: 'agent-1' }),
     });
     expect(res.status).toBe(422);
+  });
+});
+
+describe('chat d’un agent — chemin nominal (régression 502 du 2026-09-23)', () => {
+  it('un modèle disparu du catalogue n’est pas transmis au hub', async () => {
+    // L'agent mocké porte `mistral-small-3.2-24b-instruct-2506` dans son
+    // instantané — exactement les cinq agents trouvés en base. Avant le
+    // correctif, ce nom partait tel quel et le hub rendait 400 → 502.
+    const { scwChatCompletions } = await import('@/lib/scw-llm-client');
+    const res = await agentChat(req({ messages: [{ role: 'user', content: 'Bonjour' }] }), {
+      params: Promise.resolve({ id: 'agent-1' }),
+    });
+    expect(res.status).toBe(200);
+    // Le DERNIER appel est celui du juge de sortie (son propre modèle) : on
+    // cherche l'appel de GÉNÉRATION, celui qui porte le prompt de l'agent.
+    const generation = vi
+      .mocked(scwChatCompletions)
+      .mock.calls.map((c) => c[0])
+      .filter((a) => !a.messages.some((m) => m.content.includes('juge de sécurité')))
+      .at(-1);
+    expect(generation).toBeDefined();
+    expect(generation?.model).toBeUndefined();
   });
 });
 

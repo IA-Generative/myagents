@@ -5,7 +5,11 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { scwChatCompletions, ScwLlmUnavailableError } from '@/lib/scw-llm-client';
+import {
+  scwChatCompletions,
+  resolveServedModel,
+  ScwLlmUnavailableError,
+} from '@/lib/scw-llm-client';
 import { rateLimit, LLM_RATE_LIMIT } from '@/lib/rate-limit';
 import { env } from '@/lib/env';
 import {
@@ -53,7 +57,10 @@ export async function POST(
 
   const snapshot = (agent.versions[0]?.configSnapshot ?? {}) as Record<string, unknown>;
   const systemPrompt = (snapshot.systemPrompt as string) || 'Tu es un assistant.';
-  const modelId = (snapshot.modelId as string) || 'gpt-oss-120b';
+  // PAS de nom de modèle en dur en repli : `gpt-oss-120b` a été renommé
+  // `gptoss-120b` le 2026-08-25 et ne répond plus. Un instantané sans modèle
+  // laisse le client prendre l'alias configuré (SCW_LLM_MODEL).
+  const modelId = (snapshot.modelId as string) || undefined;
   const temperature = (snapshot.temperature as number) || 0.7;
 
   const body = (await req.json().catch(() => ({}))) as {
@@ -111,7 +118,10 @@ export async function POST(
   let content: string;
   try {
     const completion = await scwChatCompletions({
-      model: modelId,
+      // Le nom gardé en base peut avoir disparu du catalogue depuis la création
+      // de l'agent : on le confronte à ce que le hub sert vraiment, sinon
+      // l'agent est muet à vie (502 `upstream_failure` à chaque message).
+      model: await resolveServedModel(modelId),
       temperature,
       messages: [
         { role: 'system', content: hardenedSystem },

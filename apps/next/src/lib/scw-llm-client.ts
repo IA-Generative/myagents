@@ -91,3 +91,51 @@ export async function scwChatCompletions(params: {
 
   return (await res.json()) as ChatCompletion;
 }
+
+// --- Le modèle demandé est-il encore servi ? --------------------------------
+// PANNE DU 2026-09-23. Un agent garde dans son instantané de configuration le
+// NOM du modèle choisi à sa création. Quand l'opérateur renomme ou retire ce
+// modèle, l'agent devient définitivement muet : le hub répond 400 « Invalid
+// model name » et la route rend 502 `upstream_failure` — un message d'erreur
+// qui accuse le réseau alors que la cause est un nom périmé en base.
+//
+// On confronte donc le nom demandé au catalogue RÉELLEMENT servi avant d'appeler.
+// Trois règles :
+//   · nom servi        → on l'utilise, rien ne change ;
+//   · nom inconnu      → on ne l'envoie pas, le client retombe sur SCW_LLM_MODEL
+//                        (l'alias `chat`), et on journalise la substitution ;
+//   · catalogue injoignable → on n'invente rien et on laisse passer le nom
+//                        demandé (échec ouvert) : une panne du catalogue ne doit
+//                        pas changer le modèle de tous les agents en silence.
+// Le catalogue est mis en cache une heure, comme celui de GET /api/ab/models.
+const SERVED_TTL_MS = 60 * 60 * 1000;
+let servedCache: { ids: Set<string>; fetchedAt: number } | null = null;
+
+export async function servedModelIds(): Promise<Set<string> | null> {
+  const now = Date.now();
+  if (servedCache && now - servedCache.fetchedAt < SERVED_TTL_MS) {
+    return servedCache.ids;
+  }
+  try {
+    const live = await scwListModels();
+    servedCache = { ids: new Set(live.map((m) => m.id)), fetchedAt: now };
+    return servedCache.ids;
+  } catch (err) {
+    console.warn('catalogue du hub injoignable, aucun contrôle de modèle', err);
+    return servedCache?.ids ?? null;
+  }
+}
+
+// Rend le nom à envoyer dans le champ `model`, ou `undefined` pour laisser le
+// client retomber sur l'alias configuré.
+export async function resolveServedModel(
+  wanted?: string | null,
+): Promise<string | undefined> {
+  if (!wanted) return undefined;
+  const ids = await servedModelIds();
+  if (!ids || ids.has(wanted)) return wanted;
+  console.warn(
+    `modèle « ${wanted} » absent du catalogue du hub — repli sur « ${env().SCW_LLM_MODEL} »`,
+  );
+  return undefined;
+}
