@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     llm_default_model: str = "gpt-oss-120b"
     llm_embedding_model: str = "nomic-embed-text"
 
+    # Shared secret authenticating inbound calls to /v1/* (Open WebUI connection). Empty disables it.
+    openwebui_api_key: str = ""
+
     # Vector store used for agent knowledge bases (RAG).
     qdrant_url: str = "http://localhost:6333"
 
