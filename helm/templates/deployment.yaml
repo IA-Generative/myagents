@@ -1,0 +1,119 @@
+{{- if .Values.enabled }}
+apiVersion: apps/v1
+kind: {{ .Values.app.deploymentType | default "Deployment" }}
+metadata:
+  name: {{ include "mes-agents.fullname" . }}
+  labels:
+    {{- include "mes-agents.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.app.autoscaling.enabled }}
+  replicas: {{ .Values.app.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "mes-agents.selectorLabels" . | nindent 6 }}
+  {{- if eq .Values.app.deploymentType "Deployment" }}
+  strategy:
+    type: {{ .Values.app.strategy.type }}
+    {{- if eq .Values.app.strategy.type "RollingUpdate" }}
+    rollingUpdate:
+      maxSurge: {{ .Values.app.strategy.rollingUpdate.maxSurge }}
+      maxUnavailable: {{ .Values.app.strategy.rollingUpdate.maxUnavailable }}
+    {{- end }}
+  {{- end }}
+  template:
+    metadata:
+      annotations:
+        {{- if .Values.app.envCm }}
+        checksum/configmap: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- end }}
+        {{- if .Values.app.envSecret }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+      labels:
+        {{- include "mes-agents.labels" . | nindent 8 }}
+    spec:
+      {{- with .Values.app.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.app.serviceAccount.enabled }}
+      serviceAccountName: {{ include "mes-agents.serviceAccountName" . }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.app.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.app.securityContext | nindent 12 }}
+          image: {{ include "mes-agents.image" . }}
+          imagePullPolicy: {{ .Values.app.image.pullPolicy }}
+          ports:
+            - name: {{ .Values.app.containerPortName }}
+              containerPort: {{ .Values.app.containerPort }}
+              protocol: TCP
+          {{- with .Values.app.probes.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.app.probes.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.app.probes.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            {{- include "mes-agents.envVars" .Values.global.env | nindent 12 }}
+            {{- /* Inject DATABASE_URL from postgres sub-chart if enabled */}}
+            {{- if .Values.postgres.enabled }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mes-agents.postgresSecretName" . }}
+                  key: uri
+            {{- end }}
+            {{- /* Include other app env vars, excluding DATABASE_URL if postgres is enabled */}}
+            {{- range $key, $val := .Values.app.env }}
+            {{- if or (not $.Values.postgres.enabled) (ne $key "DATABASE_URL") }}
+            - name: {{ $key }}
+              {{- if kindIs "map" $val }}
+              {{- toYaml $val | nindent 14 }}
+              {{- else }}
+              value: {{ $val | quote }}
+              {{- end }}
+            {{- end }}
+            {{- end }}
+          envFrom:
+            {{- if .Values.app.envCm }}
+            - configMapRef:
+                name: {{ include "mes-agents.fullname" . }}-env
+            {{- end }}
+            {{- if .Values.app.envSecret }}
+            - secretRef:
+                name: {{ include "mes-agents.fullname" . }}-env
+            {{- end }}
+          resources:
+            {{- toYaml .Values.app.resources | nindent 12 }}
+          {{- with .Values.app.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.app.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.app.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.app.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.app.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
