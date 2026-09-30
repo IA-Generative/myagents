@@ -1,17 +1,9 @@
 # Gitleaks configuration
 # Documentation: https://github.com/gitleaks/gitleaks
 
-# Global settings
-[core]
-  # Enable colors in output
-  color = true
-  # File contains secrets that should be detected
-  useBuiltinRules = true
-
-# Paths to ignore
-[[allowlist]]
+[allowlist]
   description = "Ignore documentation files with example secrets and credentials"
   paths = [
-    '''helm/VAULT-SECRETS\.md''',
-    '''keycloak/test-sso\.sh'''
+    "helm/VAULT-SECRETS\\.md",
+    "keycloak/test-sso\\.sh"
   ]
