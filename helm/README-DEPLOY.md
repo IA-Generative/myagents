@@ -1,6 +1,6 @@
 # Helm Chart Deployment Guide
 
-Ce répertoire contient le chart Helm pour déployer `mes-agents` sur Kubernetes via ArgoCD.
+Ce répertoire contient le chart Helm pour déployer `myagents` sur Kubernetes via ArgoCD.
 
 ## Prérequis de sécurité
 
@@ -15,33 +15,69 @@ Ce répertoire contient le chart Helm pour déployer `mes-agents` sur Kubernetes
 ## Structure des fichiers values
 
 - **`values.yaml`** : Configuration de base, portée par défaut
-- **`values-dev.yaml`** : Surcharges pour développement local
-- **`values-staging.yaml`** : Surcharges pour l'environnement staging
+- **`values-beta.yaml`** : Surcharges pour l'environnement de développement/local
+- **`values-preview.yaml`** : Surcharges pour l'environnement preview (PR)
 - **`values-prod.yaml`** : Surcharges pour la production
+
+## Secrets Vault (VaultStaticSecret Operator)
+
+Les secrets sensibles (`LLM_API_KEY`, `OPENWEBUI_API_KEY`) sont synchronisés depuis Vault via Vault Secrets Operator. Le chemin Vault est spécifique à chaque environnement :
+
+| Environnement | Path Vault |
+|---------------|------------|
+| preview | `myagents/preview/app` |
+| beta | `myagents/beta/app` |
+| prod | `myagents/prod/app` |
+
+Le Vault Secrets Operator crée automatiquement un Secret Kubernetes `myagents-secrets` à partir de ces chemins et déclenche un rollout du Deployment.
+
+Configuration requise dans le cluster :
+- Vault Secrets Operator installé et configuré
+- CRD `VaultStaticSecret` nommé `vault-auth` pointant vers le mount KV (`kv`)
+- Policy Vault autorisant la lecture sur `myagents/<env>/app`
+
+```yaml
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultStaticSecret
+metadata:
+  name: myagents-secrets
+spec:
+  mount: kv
+  path: myagents/preview/app
+  type: kv-v2
+  vaultAuthRef: vault-auth
+  destination:
+    create: true
+    name: myagents-secrets
+    type: Opaque
+    rolloutRestartTargets:
+      - kind: Deployment
+        name: mes-agents
+```
 
 ## Déploiement avec ArgoCD
 
-### 1. Application ArgoCD simple (développement)
+### 1. Application ArgoCD - environnement beta (preprod)
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: mes-agents-dev
+  name: myagents-beta
   namespace: argocd
 spec:
   project: default
   source:
-    repoURL: https://github.com/wayii/mi-sdid/repos/mes-agents-private
+    repoURL: https://github.com/ia-generative/myagents
     targetRevision: main
     path: helm/
     helm:
       valuesFiles:
         - values.yaml
-        - values-dev.yaml
+        - values-beta.yaml
   destination:
     server: https://kubernetes.default.svc
-    namespace: mes-agents-dev
+    namespace: myagents-beta
   syncPolicy:
     automated:
       prune: true
@@ -50,31 +86,27 @@ spec:
       - CreateNamespace=true
 ```
 
-### 2. Application ArgoCD pour staging
+### 2. Application ArgoCD - environnement preview (PR)
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: mes-agents-staging
+  name: myagents-preview
   namespace: argocd
 spec:
   project: default
   source:
-    repoURL: https://github.com/wayii/mi-sdid/repos/mes-agents-private
+    repoURL: https://github.com/ia-generative/myagents
     targetRevision: main
     path: helm/
     helm:
       valuesFiles:
         - values.yaml
-        - values-staging.yaml
-      # Optionnel : surcharger le tag d'image via ArgoCD
-      # parameters:
-      #   - name: app.image.tag
-      #     value: v1.2.3
+        - values-preview.yaml
   destination:
     server: https://kubernetes.default.svc
-    namespace: mes-agents-staging
+    namespace: myagents-preview
   syncPolicy:
     automated:
       prune: true
@@ -83,31 +115,27 @@ spec:
       - CreateNamespace=true
 ```
 
-### 3. Application ArgoCD pour production
+### 3. Application ArgoCD - production
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: mes-agents-prod
+  name: myagents-prod
   namespace: argocd
 spec:
   project: default
   source:
-    repoURL: https://github.com/wayii/mi-sdid/repos/mes-agents-private
+    repoURL: https://github.com/ia-generative/myagents
     targetRevision: main
     path: helm/
     helm:
       valuesFiles:
         - values.yaml
         - values-prod.yaml
-      # Surcharger le tag d'image pour chaque release
-      parameters:
-        - name: app.image.tag
-          value: v1.2.3  # À remplacer par la version réelle
   destination:
     server: https://kubernetes.default.svc
-    namespace: mes-agents-prod
+    namespace: myagents-prod
   syncPolicy:
     automated:
       prune: true
@@ -118,34 +146,34 @@ spec:
 
 ## Déploiement en ligne de commande
 
-### Développement
+### Environnement beta
 
 ```bash
-helm install mes-agents helm/ \
+helm install myagents-beta helm/ \
   -f helm/values.yaml \
-  -f helm/values-dev.yaml \
-  -n mes-agents-dev \
+  -f helm/values-beta.yaml \
+  -n myagents-beta \
   --create-namespace
 ```
 
-### Staging
+### Environnement preview
 
 ```bash
-helm install mes-agents helm/ \
+helm install myagents-preview helm/ \
   -f helm/values.yaml \
-  -f helm/values-staging.yaml \
-  -n mes-agents-staging \
+  -f helm/values-preview.yaml \
+  -n myagents-preview \
   --create-namespace
 ```
 
 ### Production
 
 ```bash
-helm install mes-agents helm/ \
+helm install myagents-prod helm/ \
   -f helm/values.yaml \
   -f helm/values-prod.yaml \
   --set app.image.tag=v1.2.3 \
-  -n mes-agents-prod \
+  -n myagents-prod \
   --create-namespace
 ```
 
@@ -176,13 +204,13 @@ helm:
 
 ## Secrets PostgreSQL
 
-En production, la password PostgreSQL doit être gérée via un secret Kubernetes :
+En production, le mot de passe PostgreSQL doit être géré via un secret Kubernetes :
 
 ```bash
 # Créer le secret
 kubectl create secret generic postgres-secret \
   --from-literal=password=<your-secure-password> \
-  -n mes-agents-prod
+  -n myagents-prod
 
 # Le chart utilise ce secret si `postgres.existingSecret` est défini
 ```
@@ -208,17 +236,51 @@ IMAGE_TAG: ${{ needs.release.outputs.version }}  # v1.2.3
 
 Pour mettre à jour le déploiement avec cette image :
 
-1. **Manuellement via ArgoCD UI** : Modifier le paramètre `app.image.tag` dans l'Application
-2. **Automatiquement via Renovate/Dependabot** : Si configuré pour mettre à jour les images
-3. **Via script CI/CD** : Le pipeline peut patcher le tag ArgoCD Application après le build
+1. **Automatiquement via ArgoCD** : L'image est taguée au build, ArgoCD sync automatiquement
+2. **Via script CI/CD** : Le pipeline peut patcher le tag ArgoCD Application après le build
 
 Exemple de mise à jour via `kubectl patch` :
 
 ```bash
-kubectl patch application mes-agents-prod \
+kubectl patch application myagents-prod \
   -n argocd \
   --type merge \
   -p '{"spec":{"source":{"helm":{"parameters":[{"name":"app.image.tag","value":"v1.2.3"}]}}}}'
+```
+
+## Déploiement sur Cloud Pi Native (CPiN)
+
+### Prérequis
+
+- Cluster Kubernetes avec Vault Static Secrets Operator installé
+- Vault configuré avec un mount KV-v2 à `kv`
+- CRD `VaultAuth` nommé `vault-auth` créé dans chaque namespace cible
+- Policy Vault autorisant `myagents/<env>/app` pour chaque environnement
+
+### Déploiement des secrets Vault
+
+Avant de déployer le chart, s'assurer que :
+
+1. Les secrets existent dans Vault :
+   - `myagents/beta/app` → `LLM_API_KEY`, `OPENWEBUI_API_KEY`
+   - `myagents/preview/app` → `LLM_API_KEY`, `OPENWEBUI_API_KEY`
+   - `myagents/prod/app` → `LLM_API_KEY`, `OPENWEBUI_API_KEY`
+
+2. Le Vault Static Secrets Operator crée les secrets Kubernetes `myagents-secrets`
+
+3. Le Deployment `mes-agents` injecte ces secrets via `valueFrom.secretKeyRef`
+
+### Vérifications post-déploiement
+
+```bash
+# Vérifier les VaultStaticSecret
+kubectl get vaultstaticsecret -n myagents-prod
+
+# Vérifier que le secret Kubernetes est créé
+kubectl get secret myagents-secrets -n myagents-prod
+
+# Vérifier que les secrets sont dans le pod
+kubectl exec -it <pod-name> -n myagents-prod -- env | grep API_KEY
 ```
 
 ## Troubleshooting
@@ -226,7 +288,7 @@ kubectl patch application mes-agents-prod \
 ### Vérifier le rendu des templates
 
 ```bash
-helm template mes-agents helm/ \
+helm template myagents helm/ \
   -f helm/values.yaml \
   -f helm/values-prod.yaml \
   --debug

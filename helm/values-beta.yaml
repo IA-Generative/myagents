@@ -14,7 +14,7 @@ app:
   image:
     # Can use local or PR images for testing
     registry: "ghcr.io"
-    repository: "wayii/mi-sdid/repos/mes-agents-private/mes-agents"
+    repository: "ia-generative/myagents/mes-agents"
     # tag: "pr-42"  # Override for testing specific PR builds
 
   # Minimal resources for development
@@ -37,6 +37,11 @@ app:
   # Optional ingress for dev (usually use port-forward)
   ingress:
     enabled: false
+
+# Vault secrets for beta environment
+vaultSecrets:
+  enabled: true
+  basePath: "myagents/beta"
 
 # Development PostgreSQL (minimal)
 postgres:
