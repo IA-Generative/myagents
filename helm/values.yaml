@@ -34,7 +34,7 @@ app:
     # -- Registry to use for the app
     registry: "ghcr.io"
     # -- Repository to use for the app
-    repository: "wayii/mi-sdid/repos/mes-agents-private/mes-agents"
+    repository: "ia-generative/myagents/mes-agents"
     # -- Image pull policy
     pullPolicy: "IfNotPresent"
     # -- Tag to use (defaults to Chart.appVersion)
@@ -74,8 +74,18 @@ app:
   # -- Environment variables from ConfigMap
   envCm: {}
 
-  # -- Environment variables from Secret (for custom secrets), e.g. OPENAI_API_KEY, OPENWEBUI_API_KEY
-  envSecret: {}
+  # -- Environment variables from Secret (for custom secrets)
+  # When vaultSecrets.enabled=true, secrets are synced from Vault to "myagents-secrets"
+  # Keys expected in Vault (under basePath/subPath): LLM_API_KEY, OPENWEBUI_API_KEY
+  envSecret:
+    LLM_API_KEY:
+      secretKeyRef:
+        name: "myagents-secrets"
+        key: "LLM_API_KEY"
+    OPENWEBUI_API_KEY:
+      secretKeyRef:
+        name: "myagents-secrets"
+        key: "OPENWEBUI_API_KEY"
 
   # -- Migrations Alembic jouées après chaque install/upgrade (hook Helm)
   migrations:
@@ -244,3 +254,23 @@ postgres:
     limits:
       memory: "512Mi"
       cpu: "500m"
+
+# =============================================================================
+# Vault Secrets configuration (VaultStaticSecret via Vault Secrets Operator)
+# =============================================================================
+vaultSecrets:
+  # -- Enable VaultStaticSecret resources
+  enabled: false
+  # -- Vault KV mount name
+  mount: "kv"
+  # -- Base path in Vault (environment-specific, e.g., myagents/prod)
+  basePath: "myagents/prod"
+  # -- List of secrets to sync from Vault
+  items:
+    - subPath: "app"
+      destination:
+        name: "myagents-secrets"
+        type: "Opaque"
+        rolloutRestartTargets:
+          - kind: Deployment
+            name: mes-agents
