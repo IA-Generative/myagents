@@ -68,69 +68,6 @@ Ces secrets contiennent les mots de passe PostgreSQL pour l'accès à la base de
   - Généré automatiquement par le chart si non fourni
   - Format: `postgresql://mesagents:<password>@postgres:5432/<database>`
 
-### Exemple de création (Vault CLI)
-
-```bash
-# Production
-vault kv put kv/myagents/prod/postgres \
-  password='prod-secure-password-xyz' \
-  postgres_root_password='prod-root-password-abc'
-
-# Beta
-vault kv put kv/myagents/beta/postgres \
-  password='beta-secure-password-xyz' \
-  postgres_root_password='beta-root-password-abc'
-
-# Preview
-vault kv put kv/myagents/preview/postgres \
-  password='preview-secure-password-xyz' \
-  postgres_root_password='preview-root-password-abc'
-```
-
-## Configuration Vault pour chaque environnement
-
-### Production (`myagents/prod/`)
-
-```bash
-# Secrets application
-vault kv put kv/myagents/prod/app \
-  LLM_API_KEY='votre-cle-api-prod' \
-  OPENWEBUI_API_KEY='votre-cle-openwebui-prod'
-
-# Secrets PostgreSQL
-vault kv put kv/myagents/prod/postgres \
-  password='mot-de-passe-app-prod' \
-  postgres_root_password='mot-de-passe-root-prod'
-```
-
-### Beta/Preprod (`myagents/beta/`)
-
-```bash
-# Secrets application
-vault kv put kv/myagents/beta/app \
-  LLM_API_KEY='votre-cle-api-beta' \
-  OPENWEBUI_API_KEY='votre-cle-openwebui-beta'
-
-# Secrets PostgreSQL
-vault kv put kv/myagents/beta/postgres \
-  password='mot-de-passe-app-beta' \
-  postgres_root_password='mot-de-passe-root-beta'
-```
-
-### Preview/Pull Requests (`myagents/preview/`)
-
-```bash
-# Secrets application
-vault kv put kv/myagents/preview/app \
-  LLM_API_KEY='votre-cle-api-preview' \
-  OPENWEBUI_API_KEY='votre-cle-openwebui-preview'
-
-# Secrets PostgreSQL
-vault kv put kv/myagents/preview/postgres \
-  password='mot-de-passe-app-preview' \
-  postgres_root_password='mot-de-passe-root-preview'
-```
-
 ## Policy Vault
 
 Pour que le Vault Secrets Operator puisse lire ces secrets, une policy Vault est nécessaire :
@@ -188,22 +125,6 @@ kubectl describe secret myagents-secrets -n myagents-prod
 # Vérifier que le secret postgres est utilisé
 kubectl describe secret postgres-secret -n myagents-prod
 ```
-
-## Mise à jour des secrets
-
-Pour mettre à jour un secret dans Vault :
-
-```bash
-# Mettre à jour la clé LLM_API_KEY
-vault kv patch kv/myagents/prod/app \
-  LLM_API_KEY='nouvelle-cle-api'
-
-# Mettre à jour le mot de passe PostgreSQL
-vault kv patch kv/myagents/prod/postgres \
-  password='nouveau-mot-de-passe'
-```
-
-Le Vault Secrets Operator synchronisera automatiquement les changements dans Kubernetes et déclenchera un rollout.
 
 ## Bonnes pratiques
 
