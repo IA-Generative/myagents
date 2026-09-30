@@ -7,7 +7,7 @@ import { env } from './env';
 
 export class OwuiAdminUnavailableError extends Error {
   constructor() {
-    super('OpenWebUI admin API non configure (OWUI_ADMIN_API_KEY manquant).');
+    super('OpenWebUI admin API non configure (OWUI_BASE_URL ou OWUI_ADMIN_API_KEY manquant).');
     this.name = 'OwuiAdminUnavailableError';
   }
 }
@@ -41,7 +41,9 @@ function getHeaders(): HeadersInit {
 }
 
 function baseUrl(): string {
-  return env().OWUI_BASE_URL.replace(/\/$/, '');
+  const url = env().OWUI_BASE_URL;
+  if (!url) throw new OwuiAdminUnavailableError();
+  return url.replace(/\/$/, '');
 }
 
 export async function createOwuiModel(p: CreateModelPayload): Promise<OwuiModelResponse> {

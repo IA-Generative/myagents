@@ -6,7 +6,8 @@ WEB    := apps/web
 IMAGE  ?= mes-agents:dev
 
 .PHONY: help \
-	up down restart build logs logs-server ps sh-server sh-web clean \
+	up up-owui up-sso down restart build logs logs-server logs-owui logs-keycloak ps sh-server sh-web clean \
+	ensure-env bootstrap reset \
 	migrate migration seed \
 	install install-server install-web dev-server dev-web \
 	check test test-server test-web lint lint-server lint-web typecheck-web format \
@@ -20,8 +21,16 @@ help: ## Affiche cette aide
 up: ## Démarre tous les services (build si nécessaire)
 	docker compose up -d --build
 
-down: ## Arrête tous les services
-	docker compose down
+up-owui: ## Démarre la stack + OpenWebUI local (http://localhost:3000)
+	@grep -qE '^OPENWEBUI_API_KEY=.+' .env 2>/dev/null || { echo 'OPENWEBUI_API_KEY manquant dans .env (openssl rand -hex 32)'; exit 1; }
+	docker compose --profile owui up -d --build
+
+up-sso: ## Démarre la stack + Keycloak + OpenWebUI (SSO complet)
+	@grep -qE '^OPENWEBUI_API_KEY=.+' .env 2>/dev/null || { echo 'OPENWEBUI_API_KEY manquant dans .env (openssl rand -hex 32)'; exit 1; }
+	docker compose --profile sso --profile owui up -d --build
+
+down: ## Arrête tous les services (OpenWebUI + Keycloak inclus)
+	docker compose --profile owui --profile sso down
 
 restart: ## Redémarre le backend
 	docker compose restart server
@@ -35,6 +44,12 @@ logs: ## Suit les logs de tous les services
 logs-server: ## Suit les logs du backend
 	docker compose logs -f server
 
+logs-owui: ## Suit les logs d'OpenWebUI
+	docker compose logs -f openwebui
+
+logs-keycloak: ## Suit les logs de Keycloak
+	docker compose logs -f keycloak
+
 ps: ## Liste les conteneurs et leur statut
 	docker compose ps
 
@@ -45,7 +60,21 @@ sh-web: ## Shell dans le conteneur frontend
 	docker compose exec web sh
 
 clean: ## Arrête et SUPPRIME les volumes (perte des données locales)
-	docker compose down -v
+	docker compose --profile owui --profile sso down -v
+
+# --- Environnement complet depuis zéro ---------------------------------------
+
+ensure-env: # Crée .env et génère les clés OpenWebUI absentes (idempotent)
+	@test -f .env || cp .env.example .env
+	@for k in OPENWEBUI_API_KEY OPENWEBUI_WEBUI_SECRET_KEY; do \
+		grep -qE "^$$k=.+" .env || { sed -i -E "/^#? ?$$k=/d" .env; echo "$$k=$$(openssl rand -hex 32)" >> .env; echo "$$k généré dans .env"; }; \
+	done
+
+bootstrap: ensure-env up-sso migrate seed ## Projet complet : .env, stack + Keycloak + OpenWebUI, migrations, seed
+	@p() { v=$$(grep -E "^$$1=" .env | tail -1 | cut -d= -f2); echo "$${v:-$$2}"; }; \
+	echo "web http://localhost:$$(p WEB_PORT 5173) | api http://localhost:$$(p SERVER_PORT 8000)/docs | openwebui http://localhost:$$(p OPENWEBUI_PORT 3000) | keycloak http://localhost:$$(p KEYCLOAK_PORT 8180)"
+
+reset: clean bootstrap ## SUPPRIME les volumes puis reconstruit tout depuis zéro
 
 # --- Base de données ---------------------------------------------------------
 

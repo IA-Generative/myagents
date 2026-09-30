@@ -12,10 +12,18 @@ export class ApiError extends Error {
   }
 }
 
+// Lazy import to avoid a circular dependency (auth store imports nothing from api).
+async function authHeaders(): Promise<Record<string, string>> {
+  const { useAuthStore } = await import('@/stores/auth')
+  const auth = useAuthStore()
+  return auth.token ? { Authorization: `Bearer ${auth.token}` } : {}
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = { 'Content-Type': 'application/json', ...init?.headers, ...(await authHeaders()) }
   const res = await fetch(`${BASE_URL}${path}`, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    headers,
   })
   if (!res.ok) {
     const body = await res.text().catch(() => '')
@@ -33,12 +41,13 @@ export const api = {
     request<T>(path, { method: 'PUT', body: body ? JSON.stringify(body) : undefined }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
   // No Content-Type override: the browser sets the multipart boundary itself.
-  postForm: <T>(path: string, form: FormData) =>
-    fetch(`${BASE_URL}${path}`, { method: 'POST', body: form }).then(async (res) => {
-      if (!res.ok) {
-        const body = await res.text().catch(() => '')
-        throw new ApiError(res.status, body || res.statusText)
-      }
-      return (await res.json()) as T
-    }),
+  postForm: async <T>(path: string, form: FormData) => {
+    const headers = await authHeaders()
+    const res = await fetch(`${BASE_URL}${path}`, { method: 'POST', body: form, headers })
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      throw new ApiError(res.status, body || res.statusText)
+    }
+    return (await res.json()) as T
+  },
 }
