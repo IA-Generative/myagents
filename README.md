@@ -57,6 +57,55 @@ curl -fsS http://localhost:3001/api/health
 Ouvrir http://localhost:3001 → `/sign-in` → bouton "Continuer" (connexion
 locale automatique, pas de SSO) → `/agents`.
 
+## OpenWebUI local
+
+Instance OpenWebUI optionnelle (profil compose `owui`) qui affiche les agents du
+`server` FastAPI (`/v1`) et reçoit les modèles poussés par `apps/next`.
+
+Raccourci : `make bootstrap` crée `.env` (clés générées), lance la stack + Keycloak + OpenWebUI,
+applique les migrations et le seed. `make reset` supprime d'abord les volumes.
+Détail des étapes :
+
+```bash
+# 1. Racine : générer la clé partagée server <-> OpenWebUI dans .env
+cp -n .env.example .env
+#    OPENWEBUI_API_KEY=$(openssl rand -hex 32)
+#    OPENWEBUI_WEBUI_SECRET_KEY=$(openssl rand -hex 32)
+
+# 2. Lancer la stack + OpenWebUI (crée le réseau partagé `myagents-shared`)
+make up-owui
+# → http://localhost:3000 : créer le compte admin (1er inscrit), les agents
+#   apparaissent comme modèles (connexion http://server:8000/v1 auto-configurée).
+
+# 3. apps/next (optionnel) : Paramètres > Compte > Clés API dans OpenWebUI, puis
+#    dans apps/next/.env : OWUI_ADMIN_API_KEY=sk-...  (OWUI_BASE_URL=http://openwebui:8080 par défaut)
+cd apps/next && docker compose up -d --force-recreate agent-builder
+```
+
+`make down` arrête aussi OpenWebUI ; `make clean` supprime ses données.
+
+## SSO Keycloak local
+
+Keycloak (realm `myagents`) fournit un SSO partagé entre `apps/web`, `apps/next`
+et OpenWebUI. Le realm est importé au démarrage depuis
+[`keycloak/realm-myagents.json`](keycloak/realm-myagents.json) :
+
+- **Utilisateurs** : `admin/admin` (rôle `admin`), `user1/user1` (rôle `user`)
+- **Clients** : `myagents-web` (Vue, public PKCE), `miraiku-agents` (Next.js, confidentiel), `open-webui` (OWUI, confidentiel)
+- **Mappers** : `myagents-api` (audience pour le server FastAPI), `groups` (claim `groups`, `full.path=false`)
+
+```bash
+# Racine : lance la stack + Keycloak + OpenWebUI (profils `sso` + `owui`)
+make up-sso
+# → Keycloak   http://localhost:8180  (admin/admin sur la console /admin)
+# → OpenWebUI  http://localhost:3000  (SSO "Keycloak" : admin/admin ou user1/user1)
+# → Server     http://localhost:8000  (OIDC_ENABLED=true, valide les Bearer JWT)
+# → Web        http://localhost:5173  (redirige vers Keycloak si non authentifié)
+```
+
+`make bootstrap` lance aussi le SSO complet (Keycloak + OpenWebUI). Pour activer
+la validation JWT côté server hors Docker, poser `OIDC_ENABLED=true` dans `.env`.
+
 ## Déploiement Kubernetes Scaleway
 
 ```bash

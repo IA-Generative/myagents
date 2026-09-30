@@ -51,6 +51,16 @@ class Settings(BaseSettings):
     # Shared secret authenticating inbound calls to /v1/* (Open WebUI connection). Empty disables it.
     openwebui_api_key: str = ""
 
+    # --- SSO Keycloak / OIDC ---
+    # Issuer URL (sans trailing slash). En local : http://localhost:8180/realms/myagents
+    oidc_issuer: str = ""
+    # Audience attendue dans le claim `aud` du token. Vide = pas de vérification d'audience.
+    oidc_audience: str = "myagents-api"
+    # Désactive la validation JWT en local si vide (fallback sur default_user_id).
+    oidc_enabled: bool = False
+    # JWKS cache TTL (seconds).
+    oidc_jwks_cache_seconds: int = 300
+
     # Vector store used for agent knowledge bases (RAG).
     qdrant_url: str = "http://localhost:6333"
 

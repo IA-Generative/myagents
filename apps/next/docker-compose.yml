@@ -1,7 +1,8 @@
 # MirAI Agent Builder — Compose de dev local, 100% standalone.
 #
-# Aucune dépendance externe : Postgres est lancé ici, l'authentification est
-# un stub local (pas de Keycloak) et il n'y a pas d'intégration OpenWebUI.
+# Aucune dépendance externe : Postgres est lancé ici et l'authentification est
+# un stub local (pas de Keycloak). OpenWebUI est optionnel : lancé par le compose
+# racine (`make up-owui`), il est joignable via le réseau partagé `myagents-shared`.
 
 services:
   agent-builder:
@@ -14,8 +15,17 @@ services:
     environment:
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3001}
       DATABASE_URL: ${DATABASE_URL:-postgresql://app:app@postgres:5432/agentbuilder?schema=public}
+      OWUI_BASE_URL: ${OWUI_BASE_URL:-http://openwebui:8080}
+      OWUI_PUBLIC_URL: ${OWUI_PUBLIC_URL:-http://localhost:3000}
+      # --- SSO Keycloak (realm `myagents`) ---
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-http://keycloak:8080/realms/myagents}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-miraiku-agents}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-dev-miraiku-agents-secret}
     ports:
       - "${AGENT_BUILDER_PORT:-3001}:3000"
+    networks:
+      - default
+      - shared
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -61,6 +71,11 @@ services:
       postgres:
         condition: service_healthy
     restart: "no"
+
+networks:
+  # Même `name:` que dans le compose racine : le premier lancé crée le réseau.
+  shared:
+    name: myagents-shared
 
 volumes:
   agent-builder-postgres-data:
