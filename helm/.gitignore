@@ -1,0 +1,21 @@
+# Helm chart local artifacts
+charts/
+Chart.lock
+*.tgz
+
+# Environment-specific values (should be in private repo)
+values-*.local.yaml
+values-*.secret.yaml
+
+# IDE
+.DS_Store
+.vscode/
+.idea/
+
+# Temp files
+*.tmp
+*.bak
+*~
+
+# Local Helm cache
+.helm/

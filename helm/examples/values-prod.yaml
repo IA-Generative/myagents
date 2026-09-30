@@ -1,0 +1,157 @@
+# ============================================================================
+# Production Values - MyAgents Helm Chart
+# ============================================================================
+# Environment-specific configuration for PRODUCTION.
+# Place this file in a PRIVATE repository with restricted access.
+#
+# This file MUST include all production-specific settings including:
+# - Vault paths and secrets configuration
+# - PostgreSQL credentials (via existingSecret)
+# - Ingress configuration with real domains
+# - Resource limits and scaling parameters
+#
+# Usage:
+#   helm install myagents-prod ./helm \
+#     -f common.yaml \
+#     -f values-prod.yaml \
+#     -n myagents-prod
+
+app:
+  # -- Production replica count
+  replicaCount: 3
+  
+  # -- Production image tag (set by CD pipeline)
+  image:
+    tag: ""  # Set via CI/CD: --set app.image.tag=v1.2.3
+  
+  # -- Production resource allocation
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+  
+  # -- Enable autoscaling in production
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  
+  # -- Pod Disruption Budget for high availability
+  pdb:
+    enabled: true
+    minAvailable: 2
+  
+  # -- Production ingress configuration
+  ingress:
+    enabled: true
+    className: "nginx"
+    annotations:
+      cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    hosts:
+      - name: "mes-agents.example.com"
+        paths:
+          - path: "/"
+            pathType: "Prefix"
+    tls:
+      - secretName: "mes-agents-tls"
+        hosts:
+          - "mes-agents.example.com"
+  
+  # -- Production environment variables
+  # These MUST be set in the private values file
+  env: {}
+    # ENVIRONMENT: "production"
+    # QDRANT_URL: "http://qdrant:6333"
+    # LLM_BASE_URL: "https://api.openai.com"
+    # LLM_DEFAULT_MODEL: "gpt-4"
+    # LLM_EMBEDDING_MODEL: "text-embedding-3-large"
+    # CORS_ORIGINS: '["https://mes-agents.example.com"]'
+  
+  # -- Production secrets from Vault
+  # These MUST be configured in private values
+  envSecret: {}
+    # LLM_API_KEY:
+    #   secretKeyRef:
+    #     name: "myagents-secrets"
+    #     key: "LLM_API_KEY"
+    # OPENWEBUI_API_KEY:
+    #   secretKeyRef:
+    #     name: "myagents-secrets"
+    #     key: "OPENWEBUI_API_KEY"
+    # DATABASE_URL:
+    #   secretKeyRef:
+    #     name: "postgres-secret"
+    #     key: "uri"
+
+# =============================================================================
+# PostgreSQL - Production settings
+# =============================================================================
+postgres:
+  # -- Production database user
+  username: "mesagents"
+  database: "mesagents"
+  
+  # -- Password MUST be empty - use existingSecret instead
+  password: ""
+  
+  # -- Reference the production PostgreSQL secret from Vault
+  # This secret MUST exist in Kubernetes and be synced from Vault by VSO
+  existingSecret: "postgres-secret"
+  existingSecretKey: "password"
+  
+  # -- Production storage
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: "fast-ssd"  # Adjust to your cluster's storage class
+  
+  # -- Production resource allocation for PostgreSQL
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+
+# =============================================================================
+# Vault Secrets Operator - Production configuration
+# =============================================================================
+vaultSecrets:
+  # -- Enable secret synchronization from Vault
+  enabled: true
+  
+  # -- Vault KV mount
+  mount: "kv"
+  
+  # -- Vault base path for production
+  # Set to your production path in Vault (e.g., "myagents/prod")
+  basePath: "myagents/prod"
+  
+  # -- Secrets to synchronize from Vault
+  # Each item creates a Kubernetes Secret from a Vault path
+  items:
+    # -- Application secrets (LLM_API_KEY, OPENWEBUI_API_KEY)
+    - subPath: "app"
+      destination:
+        name: "myagents-secrets"
+        type: "Opaque"
+        rolloutRestartTargets:
+          - kind: Deployment
+            name: mes-agents
+    
+    # -- PostgreSQL secrets (password, postgres_root_password)
+    - subPath: "postgres"
+      destination:
+        name: "postgres-secret"
+        type: "Opaque"
+        rolloutRestartTargets:
+          - kind: StatefulSet
+            name: postgres
+          - kind: Deployment
+            name: mes-agents

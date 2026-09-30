@@ -89,7 +89,7 @@ jobs:
       IMAGE_TAG: pr-${{ github.event.pull_request.number }}
       IMAGE_CONTEXT: ./
       IMAGE_DOCKERFILE: ./Dockerfile
-      PUSH: false
+      PUSH: true
       BUILD_ARM64: false
 
   scan-trivy-conf:
