@@ -3,8 +3,8 @@ name: CD
 on:
   push:
     branches:
-      # Releases sur preprod uniquement pour l'instant ; main sera câblé plus tard.
-      - preprod
+      # Releases sur beta uniquement pour l'instant ; main sera câblé plus tard.
+      - beta
   workflow_dispatch:
 
 jobs:
@@ -15,7 +15,7 @@ jobs:
       issues: write
       pull-requests: write
     with:
-      RELEASE_BRANCH: preprod
+      RELEASE_BRANCH: beta
       TAG_MAJOR_AND_MINOR: true
       RELEASE_CONFIG_FILE: .github/release/release-please-config.json
       RELEASE_MANIFEST_FILE: .github/release/.release-please-manifest.json
