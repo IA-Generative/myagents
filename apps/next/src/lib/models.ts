@@ -30,6 +30,57 @@ export type ModelProfile = {
 };
 
 export const AVAILABLE_MODELS: ModelProfile[] = [
+  // --- Les ALIAS du hub MirAI -------------------------------------------------
+  // Ils sont EN TÊTE parce qu'ils sont les seuls noms stables : l'opérateur
+  // renomme ses modèles (le 2026-08-25 `gpt-oss-120b` est devenu `gptoss-120b`,
+  // `mistral-small-3.2-24b-instruct-2506` a simplement disparu), les alias non.
+  // Ce sont aussi les trois que « Mon assistant » propose à ses testeurs.
+  // Ils servent DEUX fois : de choix par défaut du wizard, et de liste de secours
+  // quand le hub est injoignable — un repli sur des noms datés ne proposerait que
+  // des modèles morts.
+  {
+    id: 'chat',
+    label: 'Conversation courante (chat)',
+    family: 'Hub MirAI',
+    tier: 'balanced',
+    shortPitch: "Le modèle de conversation par défaut du ministère. Rapide, à l'aise en français administratif.",
+    strengths: [
+      'Toujours servi : alias stable, insensible aux renommages',
+      'Bon équilibre vitesse / qualité',
+      'Le même moteur que les tâches de fond de Mon assistant',
+    ],
+    tradeoffs: ['Moins à l\'aise que `chat-pro` sur un raisonnement long'],
+    cost: 2,
+    latency: 5,
+    recommendedFor: [
+      'Agents de guichet, FAQ, reformulation',
+      'Tout agent dont on ne sait pas encore ce qu\'il demandera',
+    ],
+  },
+  {
+    id: 'chat-pro',
+    label: 'Réponses élaborées (chat-pro)',
+    family: 'Hub MirAI',
+    tier: 'power',
+    shortPitch: 'Réponses plus fouillées, plus lentes. Le modèle par défaut de Mon assistant.',
+    strengths: ['Raisonnement en plusieurs étapes', 'Synthèses longues', 'Alias stable'],
+    tradeoffs: ['Nettement plus lent', 'Inutilement coûteux pour une reformulation'],
+    cost: 4,
+    latency: 2,
+    recommendedFor: ['Analyse de dossier', 'Rédaction longue', 'Comparaison d\'options'],
+  },
+  {
+    id: 'vision',
+    label: 'Lecture d\'image (vision)',
+    family: 'Hub MirAI',
+    tier: 'multimodal',
+    shortPitch: 'Lit une image ou un document scanné en plus du texte.',
+    strengths: ['Documents scannés, captures d\'écran', 'Alias stable'],
+    tradeoffs: ['Sans image à lire, `chat` fait mieux et plus vite'],
+    cost: 3,
+    latency: 3,
+    recommendedFor: ['Agents qui reçoivent des pièces jointes scannées'],
+  },
   {
     id: 'mistral-small-3.2-24b-instruct-2506',
     label: 'Mistral Small 3.2 (24B)',
@@ -313,7 +364,13 @@ export function mergeLiveModels(
   return [...curated, ...extras];
 }
 
-export const DEFAULT_MODEL_ID = 'mistral-small-3.2-24b-instruct-2506';
+// Le choix par défaut du wizard. IL DOIT ÊTRE UN ALIAS.
+// Panne du 2026-09-23 : ce défaut valait `mistral-small-3.2-24b-instruct-2506`,
+// retiré du catalogue le 2026-08-25. Un testeur qui ne touchait pas au sélecteur
+// de l'étape 2 créait donc un agent que le hub refusait — 400 « Invalid model
+// name » rendu en 502 `upstream_failure` à CHAQUE message. Cinq des dix versions
+// d'agents en base portaient ce nom mort.
+export const DEFAULT_MODEL_ID = 'chat';
 
 export const TIER_LABELS: Record<ModelTier, string> = {
   light: 'Léger',

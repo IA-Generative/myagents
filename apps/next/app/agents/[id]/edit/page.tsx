@@ -11,6 +11,7 @@ import { StepIdentity } from '../../new/_components/step-identity';
 import { StepBehavior } from '../../new/_components/step-behavior';
 import { StepKnowledge } from '../../new/_components/step-knowledge';
 import { useWizard } from '../../new/_context';
+import { DEFAULT_MODEL_ID } from '@/lib/models';
 
 const STEPS = [
   { id: 1, title: 'Identite' },
@@ -48,7 +49,7 @@ function EditAgentInner() {
           systemPrompt: cfg.systemPrompt ?? '',
           greeting: cfg.greeting ?? '',
           examples: Array.isArray(cfg.examples) ? cfg.examples : [],
-          modelId: cfg.modelId ?? 'mistral-small-3.2-24b-instruct-2506',
+          modelId: cfg.modelId ?? DEFAULT_MODEL_ID,
           temperature: cfg.temperature ?? 0.7,
         });
       })
