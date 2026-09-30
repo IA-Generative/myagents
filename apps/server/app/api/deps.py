@@ -41,8 +41,16 @@ async def get_current_user(
 async def require_openwebui_key(
     authorization: str | None = Header(default=None),
 ) -> None:
-    """Auth for inbound /v1/* calls: static shared key as a Bearer token."""
-    expected = get_settings().openwebui_api_key
+    """Auth for inbound /v1/* calls: static shared key as a Bearer token.
+
+    Bypassed in dev mode (OIDC_ENABLED=false) so the Swagger UI can test /v1/*
+    endpoints without a key. In production, the key must match OPENWEBUI_API_KEY.
+    """
+    settings = get_settings()
+    if not settings.oidc_enabled:
+        # Dev mode : pas de vérification de clé pour faciliter les tests Swagger.
+        return
+    expected = settings.openwebui_api_key
     provided = (authorization or "").removeprefix("Bearer ").strip()
     if not expected or not hmac.compare_digest(provided, expected):
         raise HTTPException(status_code=401, detail="invalid_api_key")
