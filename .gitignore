@@ -82,4 +82,34 @@ tests/e2e/.auth/
 tests/e2e/.report/
 playwright-report/
 
-*__pycache__/
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# --- Vite / Vue ---
+.vite/
+*.local
+
+# --- Bases locales ---
+*.db
+*.sqlite
+*.sqlite3
+
+# --- Env : ignorer tout sauf les exemples ---
+.env.*
+!.env.example
+
+# --- Éditeurs / outils ---
+*.swo
+.copilot/
+.cursor/
+Thumbs.db
