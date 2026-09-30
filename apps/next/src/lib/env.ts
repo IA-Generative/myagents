@@ -25,8 +25,17 @@ const serverSchema = z.object({
   // "Poursuivre dans MirAI Chat". Laisser vide en standalone.
   OWUI_PUBLIC_URL: z.string().url().optional(),
 
+  // URL interne (reseau docker/K8s) utilisee pour les appels API vers OpenWebUI.
+  OWUI_BASE_URL: z.string().url().optional(),
+
   // Cle API admin OpenWebUI pour creer/supprimer des modeles via /api/v1/models/create
   OWUI_ADMIN_API_KEY: z.string().optional(),
+
+  // --- SSO Keycloak (realm `myagents`) ---
+  // Issuer complet : http://localhost:8180/realms/myagents en local.
+  KEYCLOAK_ISSUER: z.string().url(),
+  KEYCLOAK_CLIENT_ID: z.string().default('miraiku-agents'),
+  KEYCLOAK_CLIENT_SECRET: z.string().min(1),
 
   // Restriction d'acces a un groupe du realm. Optionnel : non renseigne, tout
   // utilisateur du realm entre — c'est le comportement historique. Renseigne,
@@ -52,7 +61,11 @@ function parseEnv(): ServerEnv {
       SCW_SECRET_KEY_LLM: undefined,
       SCW_LLM_MODEL: 'gpt-oss-120b',
       OWUI_PUBLIC_URL: undefined,
+      OWUI_BASE_URL: undefined,
       OWUI_ADMIN_API_KEY: undefined,
+      KEYCLOAK_ISSUER: 'http://build-placeholder/realms/build',
+      KEYCLOAK_CLIENT_ID: 'build',
+      KEYCLOAK_CLIENT_SECRET: 'build-placeholder',
       OIDC_GROUPE_EXIGE: undefined,
     };
   }

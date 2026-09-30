@@ -5,7 +5,7 @@ import { env } from './env';
 
 export class OwuiClient {
   constructor(
-    private readonly baseUrl: string = env().OWUI_BASE_URL,
+    private readonly baseUrl: string = env().OWUI_BASE_URL ?? '',
     private readonly accessToken?: string,
   ) {}
 

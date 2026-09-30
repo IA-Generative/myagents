@@ -1,15 +1,25 @@
-// Configuration NextAuth — mode standalone (sans Keycloak/OpenWebUI).
-// Provider "Credentials" auto-authentifiant un unique utilisateur de dev
-// local ; à remplacer par un vrai provider si une auth réelle est requise.
+// Configuration NextAuth — provider Keycloak (realm `myagents`).
+// Fallback Credentials en mode standalone (sans SSO) pour les tests E2E.
 
 import type { NextAuthOptions } from 'next-auth';
+import KeycloakProvider from 'next-auth/providers/keycloak';
 import CredentialsProvider from 'next-auth/providers/credentials';
+
+import { env } from '@/lib/env';
 
 // UUID fixe utilisé comme creator_id / user_id côté Prisma (colonnes @db.Uuid).
 export const DEV_USER_ID = '00000000-0000-0000-0000-000000000001';
 
 export const authOptions: NextAuthOptions = {
   providers: [
+    KeycloakProvider({
+      clientId: env().KEYCLOAK_CLIENT_ID,
+      clientSecret: env().KEYCLOAK_CLIENT_SECRET,
+      issuer: env().KEYCLOAK_ISSUER,
+      authorization: {
+        params: { scope: 'openid profile email roles' },
+      },
+    }),
     CredentialsProvider({
       name: 'dev',
       credentials: {},
