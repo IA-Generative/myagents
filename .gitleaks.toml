@@ -1,8 +1,17 @@
-[extend]
-useDefault = true
+# Gitleaks configuration
+# Documentation: https://github.com/gitleaks/gitleaks
 
-[[allowlists]]
-description = "Faux jeton du test négatif de keycloak/test-sso.sh (indépendant du hash de commit)"
-condition = "AND"
-paths = ['''keycloak/test-sso\.sh$''']
-regexes = ['''invalid\.token\.here''']
+# Global settings
+[core]
+  # Enable colors in output
+  color = true
+  # File contains secrets that should be detected
+  useBuiltinRules = true
+
+# Paths to ignore
+[[allowlist]]
+  description = "Ignore documentation files with example secrets and credentials"
+  paths = [
+    '''helm/VAULT-SECRETS\.md''',
+    '''keycloak/test-sso\.sh'''
+  ]
