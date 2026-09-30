@@ -10,6 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.openapi.utils import get_openapi
 
 from app.api.routes import (
     agents,
@@ -44,7 +45,56 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     logger.info("arrêt de %s", settings.app_name)
 
 
-app = FastAPI(title=settings.app_name, lifespan=lifespan)
+app = FastAPI(
+    title=settings.app_name,
+    lifespan=lifespan,
+    swagger_ui_parameters={
+        # Pré-remplit les headers dans le Swagger UI "Try it out"
+        "persistAuthorization": True,
+    },
+)
+
+
+def custom_openapi():
+    """Injecte les schémas de sécurité pour le bouton 'Authorize' du Swagger UI.
+
+    - BearerAuth : token JWT ou clé OpenWebUI (header Authorization: Bearer <token>)
+    - XUserIdAuth : header X-User-ID pour le dev local (OIDC désactivé)
+    """
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(
+        title=app.title,
+        version="1.0.0",
+        routes=app.routes,
+    )
+    schema["components"]["securitySchemes"] = {
+        "BearerAuth": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": (
+                "Token JWT Keycloak (OIDC) ou clé OpenWebUI API. "
+                "En dev (OIDC_ENABLED=false), n'importe quelle valeur est acceptée."
+            ),
+        },
+        "XUserIdAuth": {
+            "type": "apiKey",
+            "in": "header",
+            "name": "X-User-ID",
+            "description": (
+                "ID utilisateur pour le dev local (OIDC désactivé). "
+                "Optionnel : si absent, utilise DEFAULT_USER_ID."
+            ),
+        },
+    }
+    # Applique les deux schémas globalement à toutes les routes.
+    schema["security"] = [{"BearerAuth": []}, {"XUserIdAuth": []}]
+    app.openapi_schema = schema
+    return schema
+
+
+app.openapi = custom_openapi
 
 app.add_middleware(
     CORSMiddleware,
