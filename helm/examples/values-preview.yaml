@@ -1,0 +1,123 @@
+# ============================================================================
+# Preview Values - MyAgents Helm Chart
+# ============================================================================
+# Environment-specific configuration for PREVIEW (Pull Requests).
+# Place this file in a PRIVATE repository.
+#
+# Usage:
+#   helm install myagents-preview ./helm \
+#     -f common.yaml \
+#     -f values-preview.yaml \
+#     -n myagents-preview
+
+app:
+  # -- Single replica for preview
+  replicaCount: 1
+  
+  # -- Resource allocation for preview (minimal)
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+  
+  # -- Autoscaling disabled in preview
+  autoscaling:
+    enabled: false
+  
+  # -- Pod Disruption Budget disabled in preview
+  pdb:
+    enabled: false
+  
+  # -- Ingress disabled in preview (use port-forward instead)
+  ingress:
+    enabled: false
+  
+  # -- Preview environment variables
+  # These MUST be set in the private values file
+  env: {}
+    # ENVIRONMENT: "preview"
+    # QDRANT_URL: "http://qdrant:6333"
+    # LLM_BASE_URL: "https://api.openai.com"
+    # LLM_DEFAULT_MODEL: "gpt-4"
+    # LLM_EMBEDDING_MODEL: "text-embedding-3-large"
+    # CORS_ORIGINS: '["https://mes-agents-pr-*.example.com"]'
+  
+  # -- Preview secrets from Vault
+  envSecret: {}
+    # LLM_API_KEY:
+    #   secretKeyRef:
+    #     name: "myagents-secrets"
+    #     key: "LLM_API_KEY"
+    # OPENWEBUI_API_KEY:
+    #   secretKeyRef:
+    #     name: "myagents-secrets"
+    #     key: "OPENWEBUI_API_KEY"
+
+# =============================================================================
+# PostgreSQL - Preview settings
+# =============================================================================
+postgres:
+  # -- Preview database user
+  username: "mesagents_preview"
+  database: "mesagents_preview"
+  
+  # -- Password MUST be empty - use existingSecret instead
+  password: ""
+  
+  # -- Reference the preview PostgreSQL secret from Vault
+  existingSecret: "postgres-secret"
+  existingSecretKey: "password"
+  
+  # -- Preview storage (minimal)
+  persistence:
+    enabled: true
+    size: 1Gi
+    storageClass: ""
+  
+  # -- Preview resource allocation for PostgreSQL
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+
+# =============================================================================
+# Vault Secrets Operator - Preview configuration
+# =============================================================================
+vaultSecrets:
+  # -- Enable secret synchronization from Vault
+  enabled: true
+  
+  # -- Vault KV mount
+  mount: "kv"
+  
+  # -- Vault base path for preview environment
+  # Set to your preview path in Vault (e.g., "myagents/preview")
+  basePath: "myagents/preview"
+  
+  # -- Secrets to synchronize from Vault
+  items:
+    # -- Application secrets
+    - subPath: "app"
+      destination:
+        name: "myagents-secrets"
+        type: "Opaque"
+        rolloutRestartTargets:
+          - kind: Deployment
+            name: mes-agents
+    
+    # -- PostgreSQL secrets
+    - subPath: "postgres"
+      destination:
+        name: "postgres-secret"
+        type: "Opaque"
+        rolloutRestartTargets:
+          - kind: StatefulSet
+            name: postgres
+          - kind: Deployment
+            name: mes-agents
