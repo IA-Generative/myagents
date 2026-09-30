@@ -84,7 +84,8 @@ services:
     image: ghcr.io/open-webui/open-webui:${OPENWEBUI_IMAGE_TAG:-v0.8.12}
     environment:
       WEBUI_SECRET_KEY: ${OPENWEBUI_WEBUI_SECRET_KEY:-dev-secret-change-me}
-      WEBUI_URL: http://localhost:${OPENWEBUI_PORT:-3000}
+      # URL publique vue par le navigateur (code-server ou localhost)
+      WEBUI_URL: ${OPENWEBUI_PUBLIC_URL:-http://localhost:${OPENWEBUI_PORT:-3000}}
       ENABLE_API_KEY: "true"
       # Les variables d'env restent la source de vérité (sinon la connexion est figée en base au 1er boot).
       ENABLE_PERSISTENT_CONFIG: "false"
@@ -98,7 +99,6 @@ services:
       ENABLE_OAUTH_SIGNUP: ${ENABLE_OAUTH_SIGNUP:-true}
       OAUTH_CLIENT_ID: open-webui
       OAUTH_CLIENT_SECRET: ${OPENWEBUI_OAUTH_CLIENT_SECRET:-dev-openwebui-secret}
-      OPENID_PROVIDER_URL: http://keycloak:8080/realms/myagents
       OAUTH_PROVIDER_NAME: Keycloak
       OAUTH_SCOPES: openid email profile roles
       OAUTH_ROLES_CLAIM: roles
@@ -106,6 +106,19 @@ services:
       OAUTH_ALLOWED_ROLES: admin,user
       ENABLE_OAUTH_ROLE_MANAGEMENT: "true"
       OAUTH_MERGE_ACCOUNTS_BY_EMAIL: "true"
+      # OWUI construit le redirect_uri par défaut avec son port interne (8080).
+      # Il faut forcer le redirect_uri avec l'URL publique (code-server ou localhost)
+      # pour que le navigateur puisse recevoir le callback après authentification Keycloak.
+      OPENID_REDIRECT_URI: ${OPENWEBUI_PUBLIC_URL:-http://localhost:${OPENWEBUI_PORT:-3000}}/oauth/oidc/callback
+      # Le proxy corporate Orion intercepte les appels HTTP internes (keycloak, server).
+      # On bypass le proxy pour les hôtes du réseau Docker afin que OWUI joigne
+      # directement Keycloak et le server sans transiter par Orion.
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,host.docker.internal,keycloak,server,openwebui,postgres,qdrant}
+      no_proxy: ${NO_PROXY:-localhost,127.0.0.1,host.docker.internal,keycloak,server,openwebui,postgres,qdrant}
+      # authlib (utilisé par OWUI) n'ajoute PAS automatiquement le suffixe
+      # /.well-known/openid-configuration à OPENID_PROVIDER_URL. Il faut pointer
+      # directement sur l'endpoint de découverte OIDC.
+      OPENID_PROVIDER_URL: http://keycloak:8080/realms/myagents/.well-known/openid-configuration
     volumes:
       - openwebui-data:/app/backend/data
     ports:
@@ -115,6 +128,15 @@ services:
       shared:
         aliases:
           - openwebui
+    healthcheck:
+      # Le healthcheck par défaut de l'image utilise `curl` sans `--noproxy`, ce qui
+      # fait transiter la requête vers localhost par le proxy corporate Orion (bloqué).
+      # On surcharge avec `--noproxy '*'` pour bypasser le proxy sur ce check interne.
+      test: ["CMD-SHELL", "curl --silent --fail --noproxy '*' http://localhost:${PORT:-8080}/health | jq -ne 'input.status == true' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     depends_on:
       server:
         condition: service_healthy
@@ -131,12 +153,14 @@ services:
     command:
       - start-dev
       - --import-realm
-      - --hostname=${KEYCLOAK_HOSTNAME:-http://localhost:${KEYCLOAK_PORT:-8180}}
+      - --hostname=${KEYCLOAK_HOSTNAME:-${KEYCLOAK_PUBLIC_URL:-http://localhost:${KEYCLOAK_PORT:-8180}}}
       - --hostname-strict=false
       - --hostname-backchannel-dynamic=true
     environment:
-      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      # Keycloak 26+ a renommé KEYCLOAK_ADMIN[_PASSWORD] en KC_BOOTSTRAP_ADMIN_*.
+      # Les anciens noms émettent un warning KC-SERVICES0110 au démarrage.
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
       KC_HEALTH_ENABLED: "true"
     volumes:
       - ./keycloak/realm-myagents.json:/opt/keycloak/data/import/realm-myagents.json:ro
