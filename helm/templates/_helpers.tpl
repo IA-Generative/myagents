@@ -34,7 +34,7 @@ Common labels
 {{- define "mes-agents.labels" -}}
 helm.sh/chart: {{ include "mes-agents.chart" . }}
 {{ include "mes-agents.selectorLabels" . }}
-app.kubernetes.io/version: {{ .Values.app.image.tag | default .Chart.AppVersion | quote }}
+app.kubernetes.io/version: {{ ((.Values.app.image).tag) | default .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- with .Values.commonLabels }}
 {{ toYaml . }}
