@@ -14,7 +14,7 @@ app:
   image:
     # Production GHCR image
     registry: "ghcr.io"
-    repository: "wayii/mi-sdid/repos/mes-agents-private/mes-agents"
+    repository: "ia-generative/myagent/mes-agents"
     # tag is set by CD pipeline (via ArgoCD sync or Kustomize)
 
   # Production resource allocation
@@ -54,6 +54,11 @@ app:
       - secretName: "mes-agents-tls"
         hosts:
           - "mes-agents.example.com"
+
+# Vault secrets for production environment
+vaultSecrets:
+  enabled: true
+  basePath: "myagents/prod"
 
 # Production PostgreSQL settings
 postgres:
