@@ -43,7 +43,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       # Versions alignées sur le Dockerfile racine ; Python lu depuis .python-version.
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v7
         with:
           version: "0.12.20"
           working-directory: apps/server
