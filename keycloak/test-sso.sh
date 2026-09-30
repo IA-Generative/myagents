@@ -97,8 +97,9 @@ if [[ "$OIDC_STATE" == "true" ]]; then
 
   # --- 6b. Server rejette un token invalide ---
   info "Test 6b: Server rejette un Bearer invalide"
+  # `invalid.token.here` est un faux jeton délibérément invalide (test négatif).
   STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$SERVER_URL/api/agents" \
-    -H "Authorization: Bearer invalid.token.here" || echo "000")
+    -H "Authorization: Bearer invalid.token.here" || echo "000") # gitleaks:allow
   [[ "$STATUS" == "401" ]] || fail "Server devrait renvoyer 401 (HTTP $STATUS)"
   green "Server rejette le token invalide (HTTP 401)"
 

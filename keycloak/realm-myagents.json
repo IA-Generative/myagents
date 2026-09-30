@@ -56,10 +56,10 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "frontchannelLogout": true,
-      "redirectUris": ["http://localhost:5173/*", "http://localhost:5174/*"],
-      "webOrigins": ["http://localhost:5173", "http://localhost:5174"],
+      "redirectUris": ["http://localhost:5173/*", "http://localhost:5174/*", "REMOVED_URL", "REMOVED_URL", "REMOVED_URL", "REMOVED_URL"],
+      "webOrigins": ["http://localhost:5173", "http://localhost:5174", "REMOVED_URL", "REMOVED_URL", "REMOVED_URL", "REMOVED_URL"],
       "attributes": {
-        "post.logout.redirect.uris": "http://localhost:5173/*##http://localhost:5174/*",
+        "post.logout.redirect.uris": "http://localhost:5173/*##http://localhost:5174/*##REMOVED_URL##REMOVED_URL",
         "pkce.code.challenge.method": "S256"
       },
       "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "email", "myagents-api", "groups"],
@@ -78,11 +78,15 @@
       "frontchannelLogout": true,
       "redirectUris": [
         "http://localhost:3001/api/auth/callback/keycloak",
-        "http://localhost:3001/*"
+        "http://localhost:3001/*",
+        "REMOVED_URL",
+        "REMOVED_URL",
+        "REMOVED_URL",
+        "REMOVED_URL"
       ],
-      "webOrigins": ["http://localhost:3001"],
+      "webOrigins": ["http://localhost:3001", "REMOVED_URL", "REMOVED_URL"],
       "attributes": {
-        "post.logout.redirect.uris": "http://localhost:3001/*"
+        "post.logout.redirect.uris": "http://localhost:3001/*##REMOVED_URL"
       },
       "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "email", "myagents-api", "groups"],
       "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"]
@@ -98,10 +102,10 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "frontchannelLogout": true,
-      "redirectUris": ["http://localhost:3000/*", "http://localhost:8080/*"],
-      "webOrigins": ["http://localhost:3000", "http://localhost:8080"],
+      "redirectUris": ["http://localhost:3000/*", "http://localhost:8080/*", "REMOVED_URL", "REMOVED_URL"],
+      "webOrigins": ["http://localhost:3000", "http://localhost:8080", "REMOVED_URL", "REMOVED_URL"],
       "attributes": {
-        "post.logout.redirect.uris": "http://localhost:3000/*##http://localhost:8080/*"
+        "post.logout.redirect.uris": "http://localhost:3000/*##http://localhost:8080/*##REMOVED_URL"
       },
       "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "email", "myagents-api", "groups"],
       "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"]
@@ -247,6 +251,41 @@
             "userinfo.token.claim": "true"
           }
         }
+      ]
+    },
+    {
+      "name": "address",
+      "description": "OpenID Connect built-in scope: address claims",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "true", "consent.screen.text": "${addressScopeConsentText}" },
+      "protocolMappers": [
+        { "name": "address", "protocol": "openid-connect", "protocolMapper": "oidc-address-mapper", "consentRequired": false, "config": { "user.attribute.formatted": "formatted", "user.attribute.street": "street", "user.attribute.locality": "locality", "user.attribute.region": "region", "user.attribute.postal_code": "postal_code", "user.attribute.country": "country", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true" } }
+      ]
+    },
+    {
+      "name": "phone",
+      "description": "OpenID Connect built-in scope: phone claims",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "true", "consent.screen.text": "${phoneScopeConsentText}" },
+      "protocolMappers": [
+        { "name": "phone number", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-attribute-mapper", "consentRequired": false, "config": { "user.attribute": "phoneNumber", "claim.name": "phone_number", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true" } },
+        { "name": "phone number verified", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-attribute-mapper", "consentRequired": false, "config": { "user.attribute": "phoneNumberVerified", "claim.name": "phone_number_verified", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true" } }
+      ]
+    },
+    {
+      "name": "offline_access",
+      "description": "OpenID Connect built-in scope: offline_access",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "true", "consent.screen.text": "${offlineAccessScopeConsentText}" }
+    },
+    {
+      "name": "microprofile-jwt",
+      "description": "Microprofile JWT scope: upn and groups claims",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "true", "consent.screen.text": "${microprofileScopeConsentText}" },
+      "protocolMappers": [
+        { "name": "upn", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-property-mapper", "consentRequired": false, "config": { "user.attribute": "username", "claim.name": "upn", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true" } },
+        { "name": "groups", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-realm-role-mapper", "consentRequired": false, "config": { "user.attribute": "realmRoles", "claim.name": "groups", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true", "multivalued": "true" } }
       ]
     }
   ],
