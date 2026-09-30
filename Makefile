@@ -21,11 +21,11 @@ help: ## Affiche cette aide
 up: ## Démarre tous les services (build si nécessaire)
 	docker compose up -d --build
 
-up-owui: ensure-env ## Démarre la stack + OpenWebUI local (http://localhost:3000)
+up-owui: ## Démarre la stack + OpenWebUI local (http://localhost:3000)
 	@grep -qE '^OPENWEBUI_API_KEY=.+' .env 2>/dev/null || { echo 'OPENWEBUI_API_KEY manquant dans .env (openssl rand -hex 32)'; exit 1; }
 	docker compose --profile owui up -d --build
 
-up-sso: ensure-env ## Démarre la stack + Keycloak + OpenWebUI (SSO complet)
+up-sso: ## Démarre la stack + Keycloak + OpenWebUI (SSO complet)
 	@grep -qE '^OPENWEBUI_API_KEY=.+' .env 2>/dev/null || { echo 'OPENWEBUI_API_KEY manquant dans .env (openssl rand -hex 32)'; exit 1; }
 	docker compose --profile sso --profile owui up -d --build
 
@@ -64,9 +64,9 @@ clean: ## Arrête et SUPPRIME les volumes (perte des données locales)
 
 # --- Environnement complet depuis zéro ---------------------------------------
 
-ensure-env: # Crée .env et génère les clés et mots de passe de dev absents (idempotent)
+ensure-env: # Crée .env et génère les clés OpenWebUI absentes (idempotent)
 	@test -f .env || cp .env.example .env
-	@for k in OPENWEBUI_API_KEY OPENWEBUI_WEBUI_SECRET_KEY KEYCLOAK_ADMIN_PASSWORD KEYCLOAK_DEV_ADMIN_PASSWORD KEYCLOAK_DEV_USER_PASSWORD; do \
+	@for k in OPENWEBUI_API_KEY OPENWEBUI_WEBUI_SECRET_KEY; do \
 		grep -qE "^$$k=.+" .env || { sed -i -E "/^#? ?$$k=/d" .env; echo "$$k=$$(openssl rand -hex 32)" >> .env; echo "$$k généré dans .env"; }; \
 	done
 
