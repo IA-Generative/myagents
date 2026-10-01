@@ -67,42 +67,8 @@ spec:
           livenessProbe:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          env:
-            {{- include "mes-agents.envVars" .Values.global.env | nindent 12 }}
-            {{- /* Inject DATABASE_URL from postgres sub-chart if enabled */}}
-            {{- if .Values.postgres.enabled }}
-            - name: DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "mes-agents.postgresSecretName" . }}
-                  key: uri
-            {{- end }}
-            {{- /* Include other app env vars, excluding DATABASE_URL if postgres is enabled */}}
-            {{- range $key, $val := .Values.app.env }}
-            {{- if or (not $.Values.postgres.enabled) (ne $key "DATABASE_URL") }}
-            - name: {{ $key }}
-              {{- if kindIs "map" $val }}
-              {{- toYaml $val | nindent 14 }}
-              {{- else }}
-              value: {{ $val | quote }}
-              {{- end }}
-            {{- end }}
-            {{- end }}
-            {{- /* Inject envSecret as valueFrom references */}}
-            {{- if .Values.app.envSecret }}
-            {{- range $key, $val := .Values.app.envSecret }}
-            - name: {{ $key }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ $val.secretKeyRef.name }}
-                  key: {{ $val.secretKeyRef.key }}
-            {{- end }}
-            {{- end }}
           envFrom:
-            {{- if .Values.app.envCm }}
-            - configMapRef:
-                name: {{ include "mes-agents.fullname" . }}-env
-            {{- end }}
+            {{- include "mes-agents.containerEnvFrom" . | nindent 12 }}
           resources:
             {{- toYaml .Values.app.resources | nindent 12 }}
           {{- with .Values.app.volumeMounts }}
