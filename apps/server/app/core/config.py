@@ -61,6 +61,13 @@ class Settings(BaseSettings):
     # Shared secret authenticating inbound calls to /v1/* (Open WebUI connection). Empty disables it.
     openwebui_api_key: str = ""
 
+    # URL publique du server vue par le navigateur (liens de téléchargement des présentations).
+    public_base_url: str = "http://localhost:8000"
+    # Secret de signature des liens ; vide = repli sur openwebui_api_key, et sans l'un ni l'autre
+    # la génération de liens est refusée.
+    presentation_link_secret: str = ""
+    presentation_ttl_minutes: int = 60
+
     # --- SSO Keycloak / OIDC ---
     # Issuer URL (sans trailing slash). En local : http://localhost:8180/realms/myagents
     oidc_issuer: str = ""
