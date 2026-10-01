@@ -47,6 +47,13 @@ services:
       OIDC_ISSUER: ${KEYCLOAK_HOSTNAME:-${KEYCLOAK_PUBLIC_URL:-http://localhost:${KEYCLOAK_PORT:-8180}}}/realms/myagents
       OIDC_JWKS_URL: http://keycloak:8080/realms/myagents/protocol/openid-connect/certs
       OIDC_AUDIENCE: myagents-api
+      # Flux OIDC mené par le server (BFF) : le navigateur n'a qu'un cookie de session.
+      OIDC_CLIENT_ID: myagents-server
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-dev-myagents-server-secret}
+      OIDC_INTERNAL_URL: http://keycloak:8080/realms/myagents
+      # Origine du front vue par le navigateur (redirect_uri, cookie, contrôle d'Origin) ; vide =
+      # https://<WEB_PORT>.<CODE_SERVER_DOMAIN> si le domaine code-server est défini, sinon localhost.
+      WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:-}
     volumes:
       - ./apps/server:/app
     ports:
@@ -68,6 +75,8 @@ services:
       context: apps/web
     environment:
       API_PROXY_TARGET: http://server:8000
+      # Le websocket HMR doit viser l'URL publique (wss, port 443) et non localhost:5173.
+      HMR_HOST: ${CODE_SERVER_DOMAIN:+${WEB_PORT:-5173}.${CODE_SERVER_DOMAIN}}
     volumes:
       - ./apps/web:/app
       # Volume anonyme : conserve les node_modules de l'image malgré le montage du source.

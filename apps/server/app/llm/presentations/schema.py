@@ -8,6 +8,8 @@ from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, Field, StringConstraints, model_validator
 
+from app.llm.presentations.themes import DEFAULT_THEME
+
 MAX_SLIDES = 40
 
 Title = Annotated[str, StringConstraints(min_length=1, max_length=120)]
@@ -35,7 +37,10 @@ class TableSpec(BaseModel):
 
 class ChartSeries(BaseModel):
     name: Cell
-    values: Annotated[list[float], Field(min_length=1, max_length=20)]
+    values: Annotated[
+        list[Annotated[float, Field(allow_inf_nan=False)]],
+        Field(min_length=1, max_length=20),
+    ]
 
 
 class ChartSpec(BaseModel):
@@ -87,7 +92,7 @@ class DeckSpec(BaseModel):
     subtitle: Line = ""
     author: Annotated[str, StringConstraints(max_length=120)] = ""
     theme: str = Field(
-        default="institutionnel",
+        default=DEFAULT_THEME,
         description="Nom d'un thème (voir list_presentation_themes).",
     )
     slides: Annotated[list[SlideSpec], Field(min_length=1, max_length=MAX_SLIDES)]

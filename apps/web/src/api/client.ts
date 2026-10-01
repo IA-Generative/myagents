@@ -12,31 +12,20 @@ export class ApiError extends Error {
   }
 }
 
-// Lazy import to avoid a circular dependency (auth store imports nothing from api).
-async function authStore() {
-  const { useAuthStore } = await import('@/stores/auth')
-  return useAuthStore()
-}
+// Authentification : cookie de session HttpOnly posé par le server ; l'en-tête custom sert de
+// garde CSRF pour les requêtes mutantes (refusées par le server sans lui).
+const CSRF_HEADERS = { 'X-Requested-With': 'XMLHttpRequest' }
 
-async function authHeaders(): Promise<Record<string, string>> {
-  const auth = await authStore()
-  return auth.token ? { Authorization: `Bearer ${auth.token}` } : {}
-}
-
-// Sur 401 (jeton expiré) : un renouvellement silencieux puis un seul nouvel essai, sinon re-connexion.
-async function fetchWithAuth(
-  path: string,
-  build: (auth: Record<string, string>) => RequestInit,
-): Promise<Response> {
-  const send = async () => fetch(`${BASE_URL}${path}`, build(await authHeaders()))
-  let res = await send()
+// Sur 401 (session absente ou expirée) : retour vers le login mené par le server.
+async function fetchWithAuth(path: string, init: RequestInit): Promise<Response> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    ...init,
+    credentials: 'same-origin',
+    headers: { ...CSRF_HEADERS, ...init.headers },
+  })
   if (res.status === 401) {
-    const auth = await authStore()
-    if (await auth.silentRenew()) {
-      res = await send()
-    } else {
-      await auth.login()
-    }
+    const { useAuthStore } = await import('@/stores/auth')
+    useAuthStore().login()
   }
   if (!res.ok) {
     const body = await res.text().catch(() => '')
@@ -45,11 +34,11 @@ async function fetchWithAuth(
   return res
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetchWithAuth(path, (auth) => ({
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const res = await fetchWithAuth(path, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...init?.headers, ...auth },
-  }))
+    headers: { 'Content-Type': 'application/json', ...init.headers },
+  })
   if (res.status === 204) return undefined as T
   return (await res.json()) as T
 }
@@ -63,11 +52,7 @@ export const api = {
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
   // No Content-Type override: the browser sets the multipart boundary itself.
   postForm: async <T>(path: string, form: FormData) => {
-    const res = await fetchWithAuth(path, (auth) => ({
-      method: 'POST',
-      body: form,
-      headers: auth,
-    }))
+    const res = await fetchWithAuth(path, { method: 'POST', body: form })
     return (await res.json()) as T
   },
 }
