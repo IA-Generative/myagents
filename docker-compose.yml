@@ -102,7 +102,6 @@ services:
       ENABLE_OAUTH_SIGNUP: ${ENABLE_OAUTH_SIGNUP:-true}
       OAUTH_CLIENT_ID: open-webui
       OAUTH_CLIENT_SECRET: ${OPENWEBUI_OAUTH_CLIENT_SECRET:-dev-openwebui-secret}
-      OPENID_PROVIDER_URL: http://keycloak:8080/realms/myagents
       OAUTH_PROVIDER_NAME: Keycloak
       OAUTH_SCOPES: openid email profile roles
       OAUTH_ROLES_CLAIM: roles
