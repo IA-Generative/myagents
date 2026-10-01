@@ -5,51 +5,74 @@ from unittest.mock import patch
 from langchain_core.messages import AIMessage
 
 from app.api.deps import require_openwebui_key
+from app.core.config import get_settings
 from app.llm.client import LlmClient
 from app.main import app
 from tests.fakes import FakeToolCallingModel
 from tests.test_agents_api import _create_agent
 
+SHARED = {"visibility": "community", "status": "published"}
 
-async def test_models_endpoint_rejects_missing_key(client):
-    with patch("app.api.deps.get_settings") as mock_settings:
-        mock_settings.return_value.openwebui_api_key = "expected-secret"
-        res = await client.get("/v1/models")
+
+async def test_models_endpoint_rejects_missing_key(client, monkeypatch):
+    monkeypatch.setattr(get_settings(), "openwebui_api_key", "expected-secret")
+    res = await client.get("/v1/models")
     assert res.status_code == 401
 
 
-async def test_models_endpoint_rejects_wrong_key(client):
-    with patch("app.api.deps.get_settings") as mock_settings:
-        mock_settings.return_value.openwebui_api_key = "expected-secret"
-        res = await client.get("/v1/models", headers={"Authorization": "Bearer wrong"})
+async def test_models_endpoint_rejects_wrong_key(client, monkeypatch):
+    monkeypatch.setattr(get_settings(), "openwebui_api_key", "expected-secret")
+    res = await client.get("/v1/models", headers={"Authorization": "Bearer wrong"})
     assert res.status_code == 401
 
 
-async def test_models_endpoint_rejects_when_integration_disabled(client):
-    with patch("app.api.deps.get_settings") as mock_settings:
-        mock_settings.return_value.openwebui_api_key = ""
-        res = await client.get(
-            "/v1/models", headers={"Authorization": "Bearer anything"}
-        )
+async def test_models_endpoint_accepts_right_key_even_in_dev(client, monkeypatch):
+    monkeypatch.setattr(get_settings(), "openwebui_api_key", "expected-secret")
+    res = await client.get(
+        "/v1/models", headers={"Authorization": "Bearer expected-secret"}
+    )
+    assert res.status_code == 200
+
+
+async def test_models_endpoint_rejects_when_integration_disabled(client, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "openwebui_api_key", "")
+    monkeypatch.setattr(settings, "oidc_enabled", True)
+    res = await client.get("/v1/models", headers={"Authorization": "Bearer anything"})
     assert res.status_code == 401
 
 
-async def test_models_endpoint_lists_all_non_archived_agents(client):
+async def test_models_endpoint_lists_only_shared_agents(client):
     app.dependency_overrides[require_openwebui_key] = lambda: None
-    private_draft = await _create_agent(client, visibility="private", status="draft")
-    published = await _create_agent(client, visibility="community", status="published")
-    to_archive = await _create_agent(client, visibility="community", status="published")
+    await _create_agent(client, visibility="private", status="draft")
+    await _create_agent(client, visibility="private", status="published")
+    await _create_agent(client, visibility="community", status="draft")
+    published = await _create_agent(client, **SHARED)
+    to_archive = await _create_agent(client, **SHARED)
     await client.delete(f"/api/agents/{to_archive['id']}")
 
     res = await client.get("/v1/models")
     assert res.status_code == 200
     ids = {m["id"] for m in res.json()["data"]}
-    assert ids == {private_draft["id"], published["id"]}
+    assert ids == {published["id"]}
+
+
+async def test_chat_completions_hides_private_agent(client):
+    app.dependency_overrides[require_openwebui_key] = lambda: None
+    private = await _create_agent(client)
+    res = await client.post(
+        "/v1/chat/completions",
+        json={
+            "model": private["id"],
+            "messages": [{"role": "user", "content": "Salut"}],
+        },
+    )
+    assert res.status_code == 404
 
 
 async def test_chat_completions_returns_openai_shaped_response(client):
     app.dependency_overrides[require_openwebui_key] = lambda: None
-    created = await _create_agent(client)
+    created = await _create_agent(client, **SHARED)
     fake_model = FakeToolCallingModel(responses=[AIMessage(content="Bonjour !")])
 
     with patch.object(LlmClient, "chat_model", return_value=fake_model):
@@ -78,7 +101,7 @@ async def test_chat_completions_unknown_model_returns_404(client):
 
 async def test_chat_completions_stream_returns_sse(client):
     app.dependency_overrides[require_openwebui_key] = lambda: None
-    created = await _create_agent(client)
+    created = await _create_agent(client, **SHARED)
     fake_model = FakeToolCallingModel(responses=[AIMessage(content="Bonjour !")])
 
     with patch.object(LlmClient, "chat_model", return_value=fake_model):

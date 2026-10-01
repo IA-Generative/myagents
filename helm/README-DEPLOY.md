@@ -2,6 +2,16 @@
 
 Ce répertoire contient le chart Helm pour déployer `mes-agents` sur Kubernetes via ArgoCD.
 
+## Prérequis de sécurité
+
+- **SSO obligatoire** : avec `ENVIRONMENT=production` (défaut du chart), le server refuse de
+  démarrer sans `OIDC_ENABLED=true` et `OIDC_ISSUER`. Renseigner `app.env.OIDC_ISSUER` (claim `iss`
+  exact des tokens) et, si besoin, `OIDC_JWKS_URL` (adresse interne du cluster).
+- **Secrets** : `OPENAI_API_KEY` et `OPENWEBUI_API_KEY` (sans elle, `/v1/*` répond 401) via
+  `app.envSecret` ou un secret externe.
+- **Migrations** : un Job Helm (`post-install`/`post-upgrade`) joue `alembic upgrade head`
+  (désactivable via `app.migrations.enabled`). Sous ArgoCD, il s'exécute en `PostSync`.
+
 ## Structure des fichiers values
 
 - **`values.yaml`** : Configuration de base, portée par défaut

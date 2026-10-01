@@ -27,10 +27,10 @@ class LlmParseError(RuntimeError):
 class LlmClient:
     def __init__(self, base_url: str | None = None, api_key: str | None = None) -> None:
         settings = get_settings()
-        self.base_url = (base_url or settings.llm_base_url).rstrip("/")
+        self.base_url = (base_url or settings.openai_base_url).rstrip("/")
         # Most self-hosted OpenAI-compatible servers (Ollama, OpenWebUI...) ignore the
         # key but the OpenAI SDK requires a non-empty value.
-        self.api_key = api_key or settings.llm_api_key or "not-needed"
+        self.api_key = api_key or settings.openai_api_key or "not-needed"
 
     def _headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}

@@ -45,6 +45,26 @@ async def get_agent(db: AsyncSession, agent_id: uuid.UUID) -> Agent | None:
     return (await db.execute(stmt)).scalar_one_or_none()
 
 
+_CATALOG_STATUSES = (AgentStatus.published, AgentStatus.submitted)
+
+
+def is_catalog_visible(agent: Agent) -> bool:
+    """Agent shared with other users: non-private and published/submitted."""
+    return agent.visibility != Visibility.private and agent.status in _CATALOG_STATUSES
+
+
+async def get_accessible_agent(
+    db: AsyncSession, agent_id: uuid.UUID, user_id: str
+) -> Agent | None:
+    """Agent readable by `user_id`: their own (non-archived) or one shared in the catalog."""
+    agent = await get_agent(db, agent_id)
+    if agent is None:
+        return None
+    if agent.creator_id == user_id and agent.status != AgentStatus.archived:
+        return agent
+    return agent if is_catalog_visible(agent) else None
+
+
 async def list_my_agents(db: AsyncSession, creator_id: str) -> list[Agent]:
     stmt = _with_versions(
         select(Agent)
@@ -55,10 +75,13 @@ async def list_my_agents(db: AsyncSession, creator_id: str) -> list[Agent]:
 
 
 async def list_exposed_agents(db: AsyncSession) -> list[Agent]:
-    """Agents made available to external OpenAI-compatible callers (all but archived)."""
+    """Agents made available to external OpenAI-compatible callers (catalog-visible only)."""
     stmt = _with_versions(
         select(Agent)
-        .where(Agent.status != AgentStatus.archived)
+        .where(
+            Agent.visibility != Visibility.private,
+            Agent.status.in_(_CATALOG_STATUSES),
+        )
         .order_by(Agent.updated_at.desc())
     )
     return list((await db.execute(stmt)).scalars().all())
@@ -68,7 +91,7 @@ async def list_catalog(db: AsyncSession, category: str | None = None) -> list[Ag
     stmt = _with_versions(
         select(Agent).where(
             Agent.visibility != Visibility.private,
-            Agent.status.in_([AgentStatus.published, AgentStatus.submitted]),
+            Agent.status.in_(_CATALOG_STATUSES),
         )
     )
     agents = list((await db.execute(stmt)).scalars().all())
@@ -141,6 +164,9 @@ async def submit_agent(db: AsyncSession, agent: Agent) -> Agent:
 
 async def fork_agent(db: AsyncSession, source: Agent, creator_id: str) -> Agent:
     config = current_config(source)
+    if source.creator_id != creator_id:
+        # Les bases de connaissances appartiennent à l'auteur d'origine.
+        config = config.model_copy(update={"knowledge_ids": []})
     payload = AgentCreate(
         visibility=Visibility.private,
         status=AgentStatus.draft,

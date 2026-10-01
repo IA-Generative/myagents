@@ -13,22 +13,43 @@ export class ApiError extends Error {
 }
 
 // Lazy import to avoid a circular dependency (auth store imports nothing from api).
-async function authHeaders(): Promise<Record<string, string>> {
+async function authStore() {
   const { useAuthStore } = await import('@/stores/auth')
-  const auth = useAuthStore()
+  return useAuthStore()
+}
+
+async function authHeaders(): Promise<Record<string, string>> {
+  const auth = await authStore()
   return auth.token ? { Authorization: `Bearer ${auth.token}` } : {}
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers = { 'Content-Type': 'application/json', ...init?.headers, ...(await authHeaders()) }
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...init,
-    headers,
-  })
+// Sur 401 (jeton expiré) : un renouvellement silencieux puis un seul nouvel essai, sinon re-connexion.
+async function fetchWithAuth(
+  path: string,
+  build: (auth: Record<string, string>) => RequestInit,
+): Promise<Response> {
+  const send = async () => fetch(`${BASE_URL}${path}`, build(await authHeaders()))
+  let res = await send()
+  if (res.status === 401) {
+    const auth = await authStore()
+    if (await auth.silentRenew()) {
+      res = await send()
+    } else {
+      await auth.login()
+    }
+  }
   if (!res.ok) {
     const body = await res.text().catch(() => '')
     throw new ApiError(res.status, body || res.statusText)
   }
+  return res
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetchWithAuth(path, (auth) => ({
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...init?.headers, ...auth },
+  }))
   if (res.status === 204) return undefined as T
   return (await res.json()) as T
 }
@@ -42,12 +63,11 @@ export const api = {
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
   // No Content-Type override: the browser sets the multipart boundary itself.
   postForm: async <T>(path: string, form: FormData) => {
-    const headers = await authHeaders()
-    const res = await fetch(`${BASE_URL}${path}`, { method: 'POST', body: form, headers })
-    if (!res.ok) {
-      const body = await res.text().catch(() => '')
-      throw new ApiError(res.status, body || res.statusText)
-    }
+    const res = await fetchWithAuth(path, (auth) => ({
+      method: 'POST',
+      body: form,
+      headers: auth,
+    }))
     return (await res.json()) as T
   },
 }

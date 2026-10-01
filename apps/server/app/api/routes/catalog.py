@@ -5,18 +5,21 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user_id, limit_llm_user
 from app.db.session import get_db
 from app.llm import agent_runtime
 from app.llm.client import LlmClient, LlmUnavailableError
 from app.schemas.agent import AgentDetail, AgentListItem, ChatRequest, ChatResponse
 from app.services import agents as agents_service
 
-router = APIRouter(prefix="/catalog", tags=["catalog"])
+router = APIRouter(
+    prefix="/catalog", tags=["catalog"], dependencies=[Depends(get_current_user_id)]
+)
 
 
 async def _get_public_agent(db: AsyncSession, agent_id: uuid.UUID):
     agent = await agents_service.get_agent(db, agent_id)
-    if agent is None or agent.visibility.value == "private":
+    if agent is None or not agents_service.is_catalog_visible(agent):
         raise HTTPException(status_code=404, detail="not_found")
     return agent
 
@@ -40,7 +43,10 @@ async def get_catalog_agent(agent_id: uuid.UUID, db: AsyncSession = Depends(get_
 
 @router.post("/{agent_id}/chat", response_model=ChatResponse)
 async def chat_with_catalog_agent(
-    agent_id: uuid.UUID, payload: ChatRequest, db: AsyncSession = Depends(get_db)
+    agent_id: uuid.UUID,
+    payload: ChatRequest,
+    db: AsyncSession = Depends(get_db),
+    _user_id: str = Depends(limit_llm_user),
 ):
     """Try out any published/community/ministry agent — no ownership required."""
     agent = await _get_public_agent(db, agent_id)

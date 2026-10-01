@@ -17,6 +17,8 @@ const userManager = new UserManager({
   response_type: 'code',
   scope: 'openid profile email roles',
   loadUserInfo: true,
+  // Renouvelle le jeton via le refresh token Keycloak avant son expiration.
+  automaticSilentRenew: true,
   stateStore: new WebStorageStateStore({ store: window.sessionStorage }),
   userStore: new WebStorageStateStore({ store: window.sessionStorage }),
 })
@@ -53,6 +55,8 @@ interface AuthState {
   error: string | null
 }
 
+let listening = false
+
 export const useAuthStore = defineStore('auth', {
   state: (): AuthState => ({
     user: null,
@@ -67,8 +71,17 @@ export const useAuthStore = defineStore('auth', {
     async init() {
       this.loading = true
       try {
+        if (!listening) {
+          listening = true
+          userManager.events.addUserLoaded((u) => {
+            this.user = mapUser(u)
+          })
+          userManager.events.addUserUnloaded(() => {
+            this.user = null
+          })
+        }
         const oidcUser = await userManager.getUser()
-        this.user = oidcUser ? mapUser(oidcUser) : null
+        this.user = oidcUser && !oidcUser.expired ? mapUser(oidcUser) : null
       } catch (e: unknown) {
         this.error = e instanceof Error ? e.message : 'init failed'
       } finally {
@@ -103,6 +116,7 @@ export const useAuthStore = defineStore('auth', {
       } catch {
         this.user = null
       }
+      return this.user !== null
     },
   },
 })

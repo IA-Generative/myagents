@@ -25,8 +25,8 @@ class OpenAIChatCompletionRequest(BaseModel):
     # the agent's own stored config always drives the actual LLM call.
     model_config = ConfigDict(extra="ignore")
 
-    model: str
-    messages: list[ChatMessage]
+    model: str = Field(max_length=255)
+    messages: list[ChatMessage] = Field(max_length=500)
     stream: bool = False
 
 

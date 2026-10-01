@@ -1,11 +1,13 @@
 """Routes: create/list/delete knowledge bases, upload documents for RAG ingestion."""
 
 import uuid
+from pathlib import PurePath
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user_id
+from app.api.deps import get_current_user_id, limit_llm_user
+from app.core.config import get_settings
 from app.db.session import get_db
 from app.llm.client import LlmUnavailableError
 from app.schemas.knowledge import (
@@ -42,6 +44,10 @@ async def create_knowledge_base(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_current_user_id),
 ):
+    settings = get_settings()
+    existing = await knowledge_service.list_my_knowledge_bases(db, user_id)
+    if len(existing) >= settings.max_knowledge_bases_per_user:
+        raise HTTPException(status_code=409, detail="knowledge_base_quota_exceeded")
     return await knowledge_service.create_knowledge_base(db, user_id, payload)
 
 
@@ -70,14 +76,21 @@ async def upload_document(
     kb_id: uuid.UUID,
     file: UploadFile,
     db: AsyncSession = Depends(get_db),
-    user_id: str = Depends(get_current_user_id),
+    user_id: str = Depends(limit_llm_user),
 ):
     kb = await _get_owned_kb(db, kb_id, user_id)
-    filename = file.filename or "document.txt"
+    if len(kb.documents) >= get_settings().max_documents_per_knowledge_base:
+        raise HTTPException(status_code=409, detail="document_quota_exceeded")
+    # Basename seul, tronqué à la taille de la colonne.
+    filename = PurePath((file.filename or "document.txt").replace("\\", "/")).name
+    filename = filename[-255:] or "document.txt"
     if not filename.lower().endswith(_ALLOWED_EXTENSIONS):
         raise HTTPException(status_code=422, detail="unsupported_file_type")
 
-    raw = await file.read()
+    max_bytes = get_settings().max_upload_bytes
+    raw = await file.read(max_bytes + 1)
+    if len(raw) > max_bytes:
+        raise HTTPException(status_code=413, detail="file_too_large")
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError as exc:

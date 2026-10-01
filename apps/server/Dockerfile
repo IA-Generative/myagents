@@ -6,16 +6,23 @@ FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
 
 FROM python:${PYTHON_VERSION}-slim-trixie
 COPY --from=uv /uv /uvx /bin/
+# UID aligné sur l'utilisateur hôte (1000 par défaut) : le code monté en volume reste lisible/modifiable.
+ARG APP_UID=1000
+RUN useradd --uid ${APP_UID} --create-home app \
+    && mkdir -p /opt/venv /app \
+    && chown app /opt/venv /app
 # Venv hors de /app : le montage du code source en compose ne doit pas le masquer.
 ENV UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never \
-    UV_PROJECT_ENVIRONMENT=/opt/venv
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_CACHE_DIR=/tmp/uv-cache
 
+USER app
 WORKDIR /app
-COPY pyproject.toml uv.lock ./
+COPY --chown=app pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project
 
-COPY . .
+COPY --chown=app . .
 RUN uv sync --frozen
 
 EXPOSE 8000
