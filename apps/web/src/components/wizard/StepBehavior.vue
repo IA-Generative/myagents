@@ -33,6 +33,8 @@ async function loadModels() {
     if (!wizard.draft.config.model_id && models.value.length > 0) {
       wizard.updateConfig({ model_id: models.value[0].id })
     }
+  } catch (err) {
+    error.value = apiErrorMessage(err, 'Impossible de charger la liste des modèles.')
   } finally {
     modelsLoading.value = false
   }

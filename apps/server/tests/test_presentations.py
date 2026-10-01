@@ -103,6 +103,24 @@ def test_build_pptx_renders_all_layouts():
     assert prs.slide_width == Inches(13.333)
 
 
+def test_dsfr_is_the_default_theme():
+    deck = DeckSpec.model_validate(DECK)
+    assert deck.theme == "dsfr"
+
+    prs = Presentation(io.BytesIO(build_pptx(deck)))
+    cover_text = " ".join(
+        shape.text_frame.text for shape in prs.slides[0].shapes if shape.has_text_frame
+    )
+    assert "RÉPUBLIQUE" in cover_text
+    assert "Marianne" in {
+        run.font.name
+        for shape in prs.slides[1].shapes
+        if shape.has_text_frame
+        for paragraph in shape.text_frame.paragraphs
+        for run in paragraph.runs
+    }
+
+
 def test_build_pptx_rejects_unknown_theme():
     with pytest.raises(ValueError, match="thème inconnu"):
         build_pptx(DeckSpec.model_validate({**DECK, "theme": "inexistant"}))
@@ -179,7 +197,7 @@ def test_signing_unavailable_without_secret(monkeypatch):
 
 
 def test_list_presentation_themes_names_defaults():
-    assert "institutionnel" in list_presentation_themes.invoke({})
+    assert "dsfr" in list_presentation_themes.invoke({})
 
 
 async def _stored_file(db_session, ttl_minutes: int = 60):

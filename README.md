@@ -92,7 +92,7 @@ et OpenWebUI. Le realm est importé au démarrage depuis
 
 - **Utilisateurs** : `admin` (rôle `admin`) et `user1` (rôle `user`). Leurs mots de passe sont
   `KEYCLOAK_DEV_ADMIN_PASSWORD` et `KEYCLOAK_DEV_USER_PASSWORD` dans `.env` (générés par `make ensure-env`)
-- **Clients** : `myagents-web` (Vue, public PKCE), `miraiku-agents` (Next.js, confidentiel), `open-webui` (OWUI, confidentiel)
+- **Clients** : `myagents-server` (FastAPI, confidentiel, flux code + PKCE côté serveur pour le front Vue), `miraiku-agents` (Next.js, confidentiel), `open-webui` (OWUI, confidentiel)
 - **Mappers** : `myagents-api` (audience pour le server FastAPI), `groups` (claim `groups`, `full.path=false`)
 
 ```bash
@@ -100,9 +100,14 @@ et OpenWebUI. Le realm est importé au démarrage depuis
 make up-sso
 # → Keycloak   http://localhost:8180  (console /admin : compte `admin`, mot de passe KEYCLOAK_ADMIN_PASSWORD)
 # → OpenWebUI  http://localhost:3000  (SSO "Keycloak" : `admin` ou `user1`)
-# → Server     http://localhost:8000  (OIDC_ENABLED=true, valide les Bearer JWT)
-# → Web        http://localhost:5173  (redirige vers Keycloak si non authentifié)
+# → Server     http://localhost:8000  (OIDC_ENABLED=true : /api/auth/* mène le flux OIDC, accepte aussi les Bearer JWT)
+# → Web        http://localhost:5173  (redirige vers /api/auth/login si non authentifié)
 ```
+
+Le front Vue ne manipule aucun jeton : le server échange le code avec Keycloak, garde les jetons
+chiffrés en base (`auth_sessions`) et ne remet au navigateur qu'un cookie de session `HttpOnly`.
+Le realm n'est importé qu'au premier démarrage de Keycloak : sur une base existante, créer le client
+`myagents-server` (ou `make reset`).
 
 `make bootstrap` lance aussi le SSO complet (Keycloak + OpenWebUI). Pour activer
 la validation JWT côté server hors Docker, poser `OIDC_ENABLED=true` dans `.env`.

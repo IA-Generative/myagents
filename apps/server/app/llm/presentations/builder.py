@@ -114,14 +114,46 @@ def _content_title(slide: Slide, spec: SlideSpec, theme: Theme) -> None:
     _bar(slide, theme.accent, _MARGIN, 1.5, 1.2)
 
 
+def _add_marque(slide: Slide, theme: Theme) -> None:
+    """Bloc "République Française" (texte + liseré tricolore) ; le logo officiel n'est pas embarqué."""
+    left, top = 0.9, 0.6
+    for index, color in enumerate(("000091", "FFFFFF", "E1000F")):
+        stripe = slide.shapes.add_shape(
+            MSO_SHAPE.RECTANGLE,
+            Inches(left + index * 0.3),
+            Inches(top),
+            Inches(0.3),
+            Inches(0.1),
+        )
+        stripe.fill.solid()
+        stripe.fill.fore_color.rgb = _rgb(color)
+        stripe.line.color.rgb = _rgb("DDDDDD" if color == "FFFFFF" else color)
+    box = slide.shapes.add_textbox(
+        Inches(left - 0.1), Inches(top + 0.15), Inches(4), Inches(1.4)
+    )
+    frame = box.text_frame
+    frame.word_wrap = True
+    lines = (
+        ("RÉPUBLIQUE", True),
+        ("FRANÇAISE", True),
+        ("Liberté Égalité Fraternité", False),
+    )
+    for index, (text, bold) in enumerate(lines):
+        paragraph = frame.paragraphs[0] if index == 0 else frame.add_paragraph()
+        paragraph.text = text
+        _style_runs(paragraph, 16 if bold else 11, "161616", theme, bold=bold)
+
+
 def _add_cover(prs: PptxPresentation, deck: DeckSpec, theme: Theme) -> None:
     slide = prs.slides.add_slide(prs.slide_layouts[_LAYOUT_TITLE])
-    _background(slide, theme.primary)
+    _background(slide, theme.cover_background)
+    if theme.marque:
+        _add_marque(slide, theme)
     _set_title(
         slide.shapes.title,
         deck.title,
         size=44,
-        color=theme.on_primary,
+        color=theme.cover_title_color,
         theme=theme,
         left=0.9,
         top=2.1,
@@ -143,17 +175,17 @@ def _add_cover(prs: PptxPresentation, deck: DeckSpec, theme: Theme) -> None:
         paragraph = frame.paragraphs[0] if index == 0 else frame.add_paragraph()
         paragraph.text = text
         paragraph.alignment = PP_ALIGN.LEFT
-        _style_runs(paragraph, 24 if index == 0 else 18, theme.on_primary, theme)
+        _style_runs(paragraph, 24 if index == 0 else 18, theme.cover_text_color, theme)
 
 
 def _add_section(prs: PptxPresentation, spec: SlideSpec, theme: Theme) -> Slide:
     slide = prs.slides.add_slide(prs.slide_layouts[_LAYOUT_SECTION])
-    _background(slide, theme.primary)
+    _background(slide, theme.cover_background)
     _set_title(
         slide.shapes.title,
         spec.title,
         size=40,
-        color=theme.on_primary,
+        color=theme.cover_title_color,
         theme=theme,
         left=0.9,
         top=2.4,
@@ -171,7 +203,7 @@ def _add_section(prs: PptxPresentation, spec: SlideSpec, theme: Theme) -> Slide:
     body.text_frame.word_wrap = True
     body.text_frame.text = spec.subtitle
     body.text_frame.paragraphs[0].alignment = PP_ALIGN.LEFT
-    _style_runs(body.text_frame.paragraphs[0], 22, theme.on_primary, theme)
+    _style_runs(body.text_frame.paragraphs[0], 22, theme.cover_text_color, theme)
     return slide
 
 
@@ -245,7 +277,9 @@ def _add_table(prs: PptxPresentation, spec: SlideSpec, theme: Theme) -> Slide:
                 cell.fill.fore_color.rgb = _rgb(theme.primary)
                 color = theme.on_primary
             else:
-                cell.fill.fore_color.rgb = _rgb("F2F2F2" if r % 2 == 0 else "FFFFFF")
+                cell.fill.fore_color.rgb = _rgb(
+                    theme.stripe if r % 2 == 0 else "FFFFFF"
+                )
                 color = theme.text_color
             _style_runs(cell.text_frame.paragraphs[0], size, color, theme, bold=r == 0)
     return slide

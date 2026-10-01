@@ -262,7 +262,9 @@ DEFAULT_AGENTS: list[dict] = [
                 "puis recopie le lien markdown renvoyé par l'outil exactement tel quel (ne le "
                 "modifie ni ne l'invente), précise qu'il expire au bout d'une heure et résume "
                 "en quelques lignes la structure obtenue. Si l'outil renvoie une erreur, "
-                "corrige le plan et réessaie une fois."
+                "corrige le plan et réessaie une fois.\n"
+                "Style : le thème par défaut est le DSFR (design de l'État : bleu France, rouge "
+                "Marianne, police Marianne) ; renseigne l'organisation émettrice dans `author`."
             ),
             greeting=(
                 "Bonjour, décrivez-moi la présentation souhaitée (sujet, public, durée) et je "

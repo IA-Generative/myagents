@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import (
     agents,
+    auth,
     catalog,
     favorites,
     knowledge,
@@ -149,6 +150,7 @@ async def log_requests(request: Request, call_next):
 
 for router in (
     tools.router,
+    auth.router,
     agents.router,
     catalog.router,
     ratings.router,
