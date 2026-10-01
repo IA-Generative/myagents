@@ -31,7 +31,13 @@ app:
   
   # -- Workload kind
   deploymentType: "Deployment"
-  
+
+  # -- Extra annotations merged onto the Pod template (spec.template.metadata.annotations,
+  # not just the Deployment's own metadata). Changing a value here forces a rollout even when
+  # nothing else in the rendered manifest changes — e.g. a preview environment reusing a stable
+  # image tag across commits can carry the commit SHA here to force a fresh pull on every push.
+  podAnnotations: {}
+
   image:
     # -- Image registry
     registry: ""
