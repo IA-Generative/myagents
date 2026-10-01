@@ -4,4 +4,6 @@
 
 # keycloak/test-sso.sh — faux jeton `invalid.token.here` utilisé comme test
 # négatif (le server doit le rejeter). Règle `curl-auth-header` déclenchée à tort.
+# Le hash change à chaque réécriture d'historique : un fingerprint par hash.
 11470b221bc4c8da3ef8d1b2528340cf32f34768:keycloak/test-sso.sh:curl-auth-header:100
+688b5e850eccea16204f46c7b113034fb0b31b29:keycloak/test-sso.sh:curl-auth-header:100
