@@ -8,14 +8,18 @@ Les secrets sont organisés par environnement et par service dans Vault :
 
 ```
 kv/
-├── myagents/
-│   ├── prod/
+├── prod/
+│   ├── myagents/
 │   │   ├── app/          → Secrets application
 │   │   └── postgres/     → Secrets PostgreSQL
-│   ├── beta/
-│   │   ├── app/
-│   │   └── postgres/
-│   └── preview/
+│   ├── myportail/
+│       ├── app/
+│       └── postgres/
+├── preview/
+│   ├── myagents/
+│   │   ├── app/          → Secrets application
+│   │   └── postgres/     → Secrets PostgreSQL
+│   ├── myportail/
 │       ├── app/
 │       └── postgres/
 ```
@@ -33,17 +37,17 @@ Ces secrets contiennent les clés API et tokens nécessaires pour l'application.
 
 ```bash
 # Production
-vault kv put kv/myagents/prod/app \
+vault kv put kv/prod/myagents/app \
   LLM_API_KEY='sk-proj-xxx' \
   OPENWEBUI_API_KEY='sk-xxx'
 
 # Beta
-vault kv put kv/myagents/beta/app \
+vault kv put kv/beta/myagents/app \
   LLM_API_KEY='sk-proj-xxx' \
   OPENWEBUI_API_KEY='sk-xxx'
 
 # Preview
-vault kv put kv/myagents/preview/app \
+vault kv put kv/preview/myagents/app \
   LLM_API_KEY='sk-proj-xxx' \
   OPENWEBUI_API_KEY='sk-xxx'
 ```
@@ -74,17 +78,17 @@ Pour que le Vault Secrets Operator puisse lire ces secrets, une policy Vault est
 
 ```hcl
 # Policy pour myagents-prod
-path "kv/data/myagents/prod/*" {
+path "kv/data/prod/myagents/*" {
   capabilities = ["read", "list"]
 }
 
 # Policy pour myagents-beta
-path "kv/data/myagents/beta/*" {
+path "kv/data/beta/myagents/*" {
   capabilities = ["read", "list"]
 }
 
 # Policy pour myagents-preview
-path "kv/data/myagents/preview/*" {
+path "kv/data/preview/myagents/*" {
   capabilities = ["read", "list"]
 }
 ```
@@ -93,21 +97,21 @@ path "kv/data/myagents/preview/*" {
 
 ```bash
 # Lister les secrets d'un environnement
-vault kv list kv/myagents/prod/
+vault kv list kv/prod/myagents/
 
 # Vérifier le contenu d'un secret (application)
-vault kv get kv/myagents/prod/app
+vault kv get kv/prod/myagents/app
 
 # Vérifier le contenu d'un secret (postgres)
-vault kv get kv/myagents/prod/postgres
+vault kv get kv/prod/myagents/postgres
 ```
 
 ## Intégration avec Vault Secrets Operator
 
 Une fois les secrets créés dans Vault, le Vault Secrets Operator :
 
-1. Crée un Secret Kubernetes `myagents-secrets` à partir de `kv/myagents/<env>/app`
-2. Crée un Secret Kubernetes `postgres-secret` à partir de `kv/myagents/<env>/postgres`
+1. Crée un Secret Kubernetes `myagents-secrets` à partir de `kv/<env>/myagents/app`
+2. Crée un Secret Kubernetes `postgres-secret` à partir de `kv/<env>/myagents/postgres`
 3. Déclenche un rollout du Deployment `mes-agents` et de la StatefulSet `postgres`
 
 ### Vérification dans le cluster Kubernetes
