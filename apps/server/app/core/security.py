@@ -12,6 +12,7 @@ Usage in deps.py::
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from typing import Any
@@ -54,7 +55,10 @@ def _get_jwks_client() -> PyJWKClient:
         settings = get_settings()
         if not settings.oidc_issuer:
             raise OIDCError("OIDC_ISSUER not configured")
-        jwks_uri = f"{settings.oidc_issuer.rstrip('/')}/protocol/openid-connect/certs"
+        jwks_uri = (
+            settings.oidc_jwks_url
+            or f"{settings.oidc_issuer.rstrip('/')}/protocol/openid-connect/certs"
+        )
         _jwks_client = PyJWKClient(
             jwks_uri,
             cache_keys=True,
@@ -134,7 +138,8 @@ async def get_current_user(authorization: str | None = None) -> AuthUser:
 
     token = authorization.split(" ", 1)[1].strip()
     try:
-        claims = _decode_token(token)
+        # PyJWKClient fait des appels réseau synchrones : hors de la boucle d'événements.
+        claims = await asyncio.to_thread(_decode_token, token)
     except jwt.PyJWTError as exc:
         logger.warning("JWT validation failed: %s", exc)
         raise OIDCError("invalid token") from exc

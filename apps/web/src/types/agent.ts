@@ -80,7 +80,6 @@ export interface KnowledgeBase {
 export interface Rating {
   id: string
   agent_id: string
-  user_id: string
   score: number
   comment: string | null
   created_at: string

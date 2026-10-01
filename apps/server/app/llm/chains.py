@@ -18,6 +18,7 @@ from langchain_core.output_parsers import PydanticOutputParser, StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import Runnable
 
+from app.core.config import get_settings
 from app.llm.client import LlmClient, LlmParseError, LlmUnavailableError
 from app.schemas.agent import (
     ChatMessage,
@@ -98,7 +99,7 @@ _ASSIST_PROMPT = ChatPromptTemplate.from_messages(
 async def assist_prompt(
     client: LlmClient, hints: dict[str, str], current_prompt: str
 ) -> str:
-    model = "gpt-oss-120b"
+    model = get_settings().llm_assist_model
     chain = _ASSIST_PROMPT | client.chat_model(model, 0.5) | StrOutputParser()
     user_message = (
         f"Informations fournies par l'utilisateur :\n{json.dumps(hints, ensure_ascii=False)}\n\n"
@@ -121,7 +122,7 @@ _OPTIMIZE_PROMPT = ChatPromptTemplate.from_messages(
 
 
 async def optimize_prompt(client: LlmClient, prompt: str) -> str:
-    model = "gpt-oss-120b"
+    model = get_settings().llm_assist_model
     chain = _OPTIMIZE_PROMPT | client.chat_model(model, 0.4) | StrOutputParser()
     reply = await _ainvoke(
         chain, {"prompt": prompt}, label="optimize_prompt", model=model
@@ -149,7 +150,7 @@ _STARTERS_PROMPT = ChatPromptTemplate.from_messages(
 async def suggest_starters(
     client: LlmClient, prompt: str, count: int
 ) -> SuggestStartersResponse:
-    model = "gpt-oss-120b"
+    model = get_settings().llm_assist_model
     chain = _STARTERS_PROMPT | client.chat_model(model, 0.8) | _starters_parser
     user_message = (
         f"Voici le prompt système de l'agent :\n\n{prompt}\n\n"
@@ -182,7 +183,7 @@ _ONBOARDING_PROMPT = ChatPromptTemplate.from_messages(
 async def onboarding_turn(
     client: LlmClient, history: list[OnboardingMessage]
 ) -> OnboardingTurn:
-    model = "mistral-small-3.2-24b-instruct-2506"
+    model = get_settings().llm_onboarding_model
     chain = _ONBOARDING_PROMPT | client.chat_model(model, 0.6) | _onboarding_parser
     return await _ainvoke(
         chain,

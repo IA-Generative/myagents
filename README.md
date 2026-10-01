@@ -90,15 +90,16 @@ Keycloak (realm `myagents`) fournit un SSO partagé entre `apps/web`, `apps/next
 et OpenWebUI. Le realm est importé au démarrage depuis
 [`keycloak/realm-myagents.json`](keycloak/realm-myagents.json) :
 
-- **Utilisateurs** : `admin/admin` (rôle `admin`), `user1/user1` (rôle `user`)
+- **Utilisateurs** : `admin` (rôle `admin`) et `user1` (rôle `user`). Leurs mots de passe sont
+  `KEYCLOAK_DEV_ADMIN_PASSWORD` et `KEYCLOAK_DEV_USER_PASSWORD` dans `.env` (générés par `make ensure-env`)
 - **Clients** : `myagents-web` (Vue, public PKCE), `miraiku-agents` (Next.js, confidentiel), `open-webui` (OWUI, confidentiel)
 - **Mappers** : `myagents-api` (audience pour le server FastAPI), `groups` (claim `groups`, `full.path=false`)
 
 ```bash
 # Racine : lance la stack + Keycloak + OpenWebUI (profils `sso` + `owui`)
 make up-sso
-# → Keycloak   http://localhost:8180  (admin/admin sur la console /admin)
-# → OpenWebUI  http://localhost:3000  (SSO "Keycloak" : admin/admin ou user1/user1)
+# → Keycloak   http://localhost:8180  (console /admin : compte `admin`, mot de passe KEYCLOAK_ADMIN_PASSWORD)
+# → OpenWebUI  http://localhost:3000  (SSO "Keycloak" : `admin` ou `user1`)
 # → Server     http://localhost:8000  (OIDC_ENABLED=true, valide les Bearer JWT)
 # → Web        http://localhost:5173  (redirige vers Keycloak si non authentifié)
 ```

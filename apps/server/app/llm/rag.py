@@ -3,7 +3,9 @@ Qdrant collection filtered by `knowledge_base_id` (avoids one collection per
 knowledge base).
 """
 
+import asyncio
 import logging
+from functools import lru_cache
 
 from langchain_core.tools import BaseTool, tool
 from langchain_qdrant import QdrantVectorStore
@@ -21,27 +23,39 @@ COLLECTION_NAME = "agent_knowledge"
 _splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
 
 
-def _knowledge_base_filter(knowledge_ids: list[str]) -> Filter:
+def _filter_on(key: str, values: list[str]) -> Filter:
     return Filter(
-        must=[
-            FieldCondition(
-                key="metadata.knowledge_base_id", match=MatchAny(any=knowledge_ids)
-            )
-        ]
+        must=[FieldCondition(key=f"metadata.{key}", match=MatchAny(any=values))]
     )
 
 
-def ingest_text(knowledge_base_id: str, filename: str, text: str) -> int:
+def _knowledge_base_filter(knowledge_ids: list[str]) -> Filter:
+    return _filter_on("knowledge_base_id", knowledge_ids)
+
+
+@lru_cache
+def _client(url: str) -> QdrantClient:
+    return QdrantClient(url=url)
+
+
+def ingest_text(
+    knowledge_base_id: str,
+    filename: str,
+    text: str,
+    document_id: str | None = None,
+) -> int:
     """Split, embed and store a document's chunks. Returns the number of chunks stored."""
     chunks = _splitter.split_text(text)
     if not chunks:
         return 0
     settings = get_settings()
+    metadata = {"knowledge_base_id": knowledge_base_id, "filename": filename}
+    if document_id:
+        metadata["document_id"] = document_id
     QdrantVectorStore.from_texts(
         chunks,
         embedding=LlmClient().embeddings(),
-        metadatas=[{"knowledge_base_id": knowledge_base_id, "filename": filename}]
-        * len(chunks),
+        metadatas=[dict(metadata) for _ in chunks],
         collection_name=COLLECTION_NAME,
         url=settings.qdrant_url,
         force_recreate=False,
@@ -49,33 +63,43 @@ def ingest_text(knowledge_base_id: str, filename: str, text: str) -> int:
     return len(chunks)
 
 
-def delete_knowledge_base(knowledge_base_id: str) -> None:
-    """Purge all vector points belonging to a knowledge base (called on KB deletion)."""
-    settings = get_settings()
-    client = QdrantClient(url=settings.qdrant_url)
+def _delete_where(flt: Filter) -> None:
+    client = _client(get_settings().qdrant_url)
     if not client.collection_exists(COLLECTION_NAME):
         return
-    client.delete(
-        collection_name=COLLECTION_NAME,
-        points_selector=_knowledge_base_filter([knowledge_base_id]),
-    )
+    client.delete(collection_name=COLLECTION_NAME, points_selector=flt)
+
+
+def delete_knowledge_base(knowledge_base_id: str) -> None:
+    """Purge all vector points belonging to a knowledge base (called on KB deletion)."""
+    _delete_where(_knowledge_base_filter([knowledge_base_id]))
+
+
+def delete_document(document_id: str) -> None:
+    """Purge the vector points of a single document (partial ingestion cleanup)."""
+    _delete_where(_filter_on("document_id", [document_id]))
 
 
 def build_retriever_tool(knowledge_ids: list[str]) -> BaseTool:
     """A tool the agent can call to search the selected knowledge bases."""
     settings = get_settings()
-    client = QdrantClient(url=settings.qdrant_url)
+    client = _client(settings.qdrant_url)
 
-    @tool
-    async def knowledge_search(query: str) -> str:
-        """Recherche des informations pertinentes dans les bases de connaissances de l'agent."""
+    def _make_store() -> QdrantVectorStore | None:
         if not client.collection_exists(COLLECTION_NAME):
-            return "Aucun document indexé pour l'instant."
-        store = QdrantVectorStore(
+            return None
+        return QdrantVectorStore(
             client=client,
             collection_name=COLLECTION_NAME,
             embedding=LlmClient().embeddings(),
         )
+
+    @tool
+    async def knowledge_search(query: str) -> str:
+        """Recherche des informations pertinentes dans les bases de connaissances de l'agent."""
+        store = await asyncio.to_thread(_make_store)
+        if store is None:
+            return "Aucun document indexé pour l'instant."
         docs = await store.asimilarity_search(
             query, k=4, filter=_knowledge_base_filter(knowledge_ids)
         )

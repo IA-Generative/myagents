@@ -1,12 +1,15 @@
 """Route exposing available LLM models (live list merged with a static fallback)."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from app.api.deps import get_current_user_id
 from app.llm.catalog import FALLBACK_MODELS
 from app.llm.client import LlmClient, LlmUnavailableError
 from app.schemas.agent import ModelProfile
 
-router = APIRouter(prefix="/models", tags=["models"])
+router = APIRouter(
+    prefix="/models", tags=["models"], dependencies=[Depends(get_current_user_id)]
+)
 
 
 @router.get("", response_model=list[ModelProfile])

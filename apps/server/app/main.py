@@ -6,11 +6,11 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.openapi.utils import get_openapi
 
 from app.api.routes import (
     agents,
@@ -24,6 +24,7 @@ from app.api.routes import (
     tools,
 )
 from app.core.config import get_settings
+from app.core.csp import CSP_EXEMPT_PATHS, build_csp
 from app.core.logging import setup_logging
 
 setup_logging()
@@ -35,10 +36,10 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     logger.info(
-        "démarrage de %s (env=%s, llm_base_url=%s, llm_default_model=%s)",
+        "démarrage de %s (env=%s, openai_base_url=%s, llm_default_model=%s)",
         settings.app_name,
         settings.environment,
-        settings.llm_base_url,
+        settings.openai_base_url,
         settings.llm_default_model,
     )
     yield
@@ -48,6 +49,10 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title=settings.app_name,
     lifespan=lifespan,
+    # Pas de documentation interactive en production.
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None if settings.is_production else "/redoc",
+    openapi_url=None if settings.is_production else "/openapi.json",
     swagger_ui_parameters={
         # Pré-remplit les headers dans le Swagger UI "Try it out"
         "persistAuthorization": True,
@@ -99,10 +104,31 @@ app.openapi = custom_openapi
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "X-User-ID"],
+    allow_headers=["Content-Type", "Authorization", "X-User-ID"],
 )
+
+_SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+}
+_CSP = build_csp(settings)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    for name, value in _SECURITY_HEADERS.items():
+        response.headers.setdefault(name, value)
+    if request.url.path not in CSP_EXEMPT_PATHS:
+        response.headers.setdefault("Content-Security-Policy", _CSP)
+    if settings.is_production:
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+        )
+    return response
 
 
 @app.middleware("http")
@@ -151,6 +177,8 @@ if static_path.exists():
     @app.get("/{path:path}")
     async def serve_spa(path: str) -> FileResponse:
         """Catch-all serving the Vue.js SPA (client-side routing)."""
+        if path.split("/", 1)[0] in {"api", "v1"}:
+            raise HTTPException(status_code=404, detail="not_found")
         try:
             file_path = (static_root / path).resolve()
             # is_relative_to, pas startswith : "static_evil" commence aussi par "static".

@@ -3,13 +3,13 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.knowledge import DocumentStatus
 
 
 class KnowledgeBaseCreate(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=255)
 
 
 class KnowledgeBaseRead(BaseModel):

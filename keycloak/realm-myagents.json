@@ -1,7 +1,7 @@
 {
   "realm": "myagents",
   "enabled": true,
-  "sslRequired": "none",
+  "sslRequired": "external",
   "registrationAllowed": false,
   "loginWithEmailAllowed": true,
   "duplicateEmailsAllowed": false,
@@ -28,7 +28,7 @@
       "email": "admin@myagents.local",
       "firstName": "Admin",
       "lastName": "MyAgents",
-      "credentials": [{ "type": "password", "value": "admin", "temporary": false }],
+      "credentials": [{ "type": "password", "value": "${KEYCLOAK_DEV_ADMIN_PASSWORD}", "temporary": false }],
       "realmRoles": ["admin", "user"],
       "groups": ["myagents-admin"]
     },
@@ -40,7 +40,7 @@
       "email": "user1@myagents.local",
       "firstName": "User",
       "lastName": "One",
-      "credentials": [{ "type": "password", "value": "user1", "temporary": false }],
+      "credentials": [{ "type": "password", "value": "${KEYCLOAK_DEV_USER_PASSWORD}", "temporary": false }],
       "realmRoles": ["user"],
       "groups": ["myagents-user"]
     }
@@ -185,6 +185,8 @@
           "consentRequired": false,
           "config": {
             "user.attribute": "realmRoles",
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String",
             "id.token.claim": "true",
             "access.token.claim": "true",
             "userinfo.token.claim": "true",
@@ -198,6 +200,8 @@
           "consentRequired": false,
           "config": {
             "user.attribute": "clientRoles",
+            "claim.name": "resource_access.${client_id}.roles",
+            "jsonType.label": "String",
             "id.token.claim": "true",
             "access.token.claim": "true",
             "userinfo.token.claim": "true",

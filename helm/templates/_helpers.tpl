@@ -90,3 +90,43 @@ PostgreSQL secret name (from cloudpirates/postgres sub-chart)
 {{- define "mes-agents.postgresSecretName" -}}
 {{- printf "%s-postgres" (include "mes-agents.fullname" .) -}}
 {{- end }}
+
+{{/*
+Container env list shared by the app Deployment and the migration Job
+*/}}
+{{- define "mes-agents.containerEnv" -}}
+{{- include "mes-agents.envVars" .Values.global.env }}
+{{- /* Inject DATABASE_URL from postgres sub-chart if enabled */}}
+{{- if .Values.postgres.enabled }}
+- name: DATABASE_URL
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "mes-agents.postgresSecretName" . }}
+      key: uri
+{{- end }}
+{{- /* Include other app env vars, excluding DATABASE_URL if postgres is enabled */}}
+{{- range $key, $val := .Values.app.env }}
+{{- if or (not $.Values.postgres.enabled) (ne $key "DATABASE_URL") }}
+- name: {{ $key }}
+  {{- if kindIs "map" $val }}
+  {{- toYaml $val | nindent 2 }}
+  {{- else }}
+  value: {{ $val | quote }}
+  {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+Container envFrom list (ConfigMap / Secret) shared by the app Deployment and the migration Job
+*/}}
+{{- define "mes-agents.containerEnvFrom" -}}
+{{- if .Values.app.envCm }}
+- configMapRef:
+    name: {{ include "mes-agents.fullname" . }}-env
+{{- end }}
+{{- if .Values.app.envSecret }}
+- secretRef:
+    name: {{ include "mes-agents.fullname" . }}-env
+{{- end }}
+{{- end }}

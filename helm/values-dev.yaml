@@ -5,6 +5,12 @@
 app:
   replicaCount: 1
 
+  # Dev uniquement : sans SSO, le server utilise une identité locale (refusé en production).
+  env:
+    ENVIRONMENT: "development"
+    OIDC_ENABLED: "false"
+    OIDC_ISSUER: ""
+
   image:
     # Can use local or PR images for testing
     registry: "ghcr.io"

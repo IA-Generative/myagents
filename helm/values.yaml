@@ -53,10 +53,16 @@ app:
     ENVIRONMENT: "production"
     # Sans ces valeurs, le server retombe sur ses défauts localhost (voir apps/server/app/core/config.py).
     QDRANT_URL: "http://qdrant:6333"
-    LLM_BASE_URL: ""
+    OPENAI_BASE_URL: ""
     LLM_DEFAULT_MODEL: "gpt-oss-120b"
     LLM_EMBEDDING_MODEL: "nomic-embed-text"
     CORS_ORIGINS: '["https://mes-agents.example.com"]'
+    # Authentification obligatoire : le server refuse de démarrer en production sans OIDC.
+    OIDC_ENABLED: "true"
+    # Issuer exact des tokens Keycloak (claim `iss`), ex. https://sso.example.com/realms/myagents
+    OIDC_ISSUER: "https://sso.example.com/realms/myagents"
+    OIDC_AUDIENCE: "myagents-api"
+    # OIDC_JWKS_URL: adresse interne du endpoint JWKS si l'issuer n'est pas joignable depuis le cluster.
     # DATABASE_URL is injected from postgres sub-chart secret when postgres.enabled=true
     # Override this if using an external database
     DATABASE_URL:
@@ -68,8 +74,20 @@ app:
   # -- Environment variables from ConfigMap
   envCm: {}
 
-  # -- Environment variables from Secret (for custom secrets), e.g. LLM_API_KEY
+  # -- Environment variables from Secret (for custom secrets), e.g. OPENAI_API_KEY, OPENWEBUI_API_KEY
   envSecret: {}
+
+  # -- Migrations Alembic jouées après chaque install/upgrade (hook Helm)
+  migrations:
+    enabled: true
+    backoffLimit: 10
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "50m"
+      limits:
+        memory: "256Mi"
+        cpu: "250m"
 
   # -- Pod-level security context
   podSecurityContext:
