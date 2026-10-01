@@ -1,0 +1,8 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Faux jeton du test négatif de keycloak/test-sso.sh (indépendant du hash de commit)"
+condition = "AND"
+paths = ['''keycloak/test-sso\.sh$''']
+regexes = ['''invalid\.token\.here''']
