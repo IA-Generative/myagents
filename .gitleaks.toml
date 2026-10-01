@@ -1,9 +1,8 @@
-# Gitleaks configuration
-# Documentation: https://github.com/gitleaks/gitleaks
+[extend]
+useDefault = true
 
-[allowlist]
-  description = "Ignore documentation files with example secrets and credentials"
-  paths = [
-    "helm/VAULT-SECRETS\\.md",
-    "keycloak/test-sso\\.sh"
-  ]
+[[allowlists]]
+description = "Faux jeton du test négatif de keycloak/test-sso.sh (indépendant du hash de commit)"
+condition = "AND"
+paths = ['''keycloak/test-sso\.sh$''']
+regexes = ['''invalid\.token\.here''']
