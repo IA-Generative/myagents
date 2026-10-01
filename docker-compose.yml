@@ -42,7 +42,10 @@ services:
       CORS_ORIGINS: '["http://localhost:${WEB_PORT:-5173}"]'
       # --- SSO Keycloak (activé quand le profil `sso` ou `owui` tourne) ---
       OIDC_ENABLED: ${OIDC_ENABLED:-false}
-      OIDC_ISSUER: http://keycloak:8080/realms/myagents
+      # L'issuer des tokens est l'URL publique de Keycloak (--hostname) ; les clés JWKS
+      # sont récupérées par le réseau compose interne.
+      OIDC_ISSUER: ${KEYCLOAK_HOSTNAME:-${KEYCLOAK_PUBLIC_URL:-http://localhost:${KEYCLOAK_PORT:-8180}}}/realms/myagents
+      OIDC_JWKS_URL: http://keycloak:8080/realms/myagents/protocol/openid-connect/certs
       OIDC_AUDIENCE: myagents-api
     volumes:
       - ./apps/server:/app
@@ -160,7 +163,10 @@ services:
       # Keycloak 26+ a renommé KEYCLOAK_ADMIN[_PASSWORD] en KC_BOOTSTRAP_ADMIN_*.
       # Les anciens noms émettent un warning KC-SERVICES0110 au démarrage.
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
-      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-}
+      # Mots de passe des comptes de dev du realm (substitués dans realm-myagents.json) ; `make ensure-env` les génère.
+      KEYCLOAK_DEV_ADMIN_PASSWORD: ${KEYCLOAK_DEV_ADMIN_PASSWORD:-}
+      KEYCLOAK_DEV_USER_PASSWORD: ${KEYCLOAK_DEV_USER_PASSWORD:-}
       KC_HEALTH_ENABLED: "true"
     volumes:
       - ./keycloak/realm-myagents.json:/opt/keycloak/data/import/realm-myagents.json:ro

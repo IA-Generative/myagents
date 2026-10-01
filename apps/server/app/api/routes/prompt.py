@@ -9,7 +9,7 @@ validate input, invoke a chain, and map errors to HTTP responses.
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.api.deps import get_current_user_id
+from app.api.deps import get_current_user_id, limit_llm_user
 from app.llm import chains
 from app.llm.client import LlmClient, LlmParseError, LlmUnavailableError
 from app.llm.guard import validate_system_prompt
@@ -30,7 +30,7 @@ router = APIRouter(prefix="/agents", tags=["prompt"])
 
 @router.post("/prompt/assist", response_model=PromptResponse)
 async def assist_prompt(
-    payload: PromptAssistRequest, user_id: str = Depends(get_current_user_id)
+    payload: PromptAssistRequest, user_id: str = Depends(limit_llm_user)
 ):
     client = LlmClient()
     try:
@@ -42,7 +42,7 @@ async def assist_prompt(
 
 @router.post("/prompt/optimize", response_model=PromptResponse)
 async def optimize_prompt(
-    payload: PromptAssistRequest, user_id: str = Depends(get_current_user_id)
+    payload: PromptAssistRequest, user_id: str = Depends(limit_llm_user)
 ):
     if not payload.prompt.strip():
         raise HTTPException(status_code=400, detail="prompt_required")
@@ -56,7 +56,7 @@ async def optimize_prompt(
 
 @router.post("/prompt/suggest-starters", response_model=SuggestStartersResponse)
 async def suggest_starters(
-    payload: SuggestStartersRequest, user_id: str = Depends(get_current_user_id)
+    payload: SuggestStartersRequest, user_id: str = Depends(limit_llm_user)
 ):
     if len(payload.prompt.strip()) < 20:
         raise HTTPException(status_code=400, detail="prompt_too_short")
@@ -83,7 +83,7 @@ async def validate_prompt(
 
 @router.post("/onboarding-chat", response_model=OnboardingChatResponse)
 async def onboarding_chat(
-    payload: OnboardingChatRequest, user_id: str = Depends(get_current_user_id)
+    payload: OnboardingChatRequest, user_id: str = Depends(limit_llm_user)
 ):
     if not payload.messages:
         raise HTTPException(status_code=400, detail="messages_required")

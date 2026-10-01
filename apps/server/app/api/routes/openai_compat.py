@@ -5,6 +5,7 @@ Open WebUI is the plain OpenAI convention: https://<host>/v1.
 """
 
 import json
+import logging
 import time
 import uuid
 from collections.abc import AsyncIterator
@@ -13,11 +14,10 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_openwebui_key
+from app.api.deps import limit_llm_openwebui, require_openwebui_key
 from app.db.session import get_db
 from app.llm import agent_runtime
 from app.llm.client import LlmClient, LlmParseError, LlmUnavailableError
-from app.models.enums import AgentStatus
 from app.schemas.agent import ChatMessage
 from app.schemas.openai_compat import (
     OpenAIChatCompletionChoice,
@@ -31,6 +31,7 @@ from app.services import agents as agents_service
 router = APIRouter(
     tags=["openai-compat"], dependencies=[Depends(require_openwebui_key)]
 )
+logger = logging.getLogger(__name__)
 
 
 def _model_not_found(model: str) -> JSONResponse:
@@ -88,7 +89,7 @@ async def _sse_full_reply(model: str, reply: str) -> AsyncIterator[str]:
     yield "data: [DONE]\n\n"
 
 
-@router.post("/chat/completions")
+@router.post("/chat/completions", dependencies=[Depends(limit_llm_openwebui)])
 async def chat_completions(
     payload: OpenAIChatCompletionRequest, db: AsyncSession = Depends(get_db)
 ):
@@ -98,7 +99,7 @@ async def chat_completions(
         return _model_not_found(payload.model)
 
     agent = await agents_service.get_agent(db, agent_id)
-    if agent is None or agent.status == AgentStatus.archived:
+    if agent is None or not agents_service.is_catalog_visible(agent):
         return _model_not_found(payload.model)
 
     config = agents_service.current_config(agent)
@@ -112,11 +113,12 @@ async def chat_completions(
             temperature=config.temperature,
         )
     except (LlmUnavailableError, LlmParseError) as exc:
+        logger.error("chat/completions: échec LLM (agent=%s): %s", agent_id, exc)
         return JSONResponse(
             status_code=502,
             content={
                 "error": {
-                    "message": str(exc),
+                    "message": "llm_unavailable",
                     "type": "api_error",
                     "code": "llm_unavailable",
                 }

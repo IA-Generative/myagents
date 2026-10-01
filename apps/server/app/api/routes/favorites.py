@@ -2,12 +2,13 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user_id
 from app.db.session import get_db
 from app.schemas.agent import FavoriteRead
+from app.services import agents as agents_service
 from app.services import favorites as favorites_service
 
 router = APIRouter(prefix="/favorites", tags=["favorites"])
@@ -26,6 +27,8 @@ async def add_favorite(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_current_user_id),
 ):
+    if await agents_service.get_accessible_agent(db, agent_id, user_id) is None:
+        raise HTTPException(status_code=404, detail="not_found")
     return await favorites_service.add_favorite(db, agent_id, user_id)
 
 

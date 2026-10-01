@@ -1,0 +1,49 @@
+{{- if and .Values.enabled .Values.app.migrations.enabled }}
+{{- /* post-* : la base et son secret (sous-chart postgres) doivent exister avant le job. */}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "mes-agents.fullname" . }}-migrate
+  labels:
+    {{- include "mes-agents.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.app.migrations.backoffLimit }}
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        {{- include "mes-agents.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migrate
+    spec:
+      restartPolicy: OnFailure
+      {{- with .Values.app.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.app.podSecurityContext | nindent 8 }}
+      containers:
+        - name: migrate
+          securityContext:
+            {{- toYaml .Values.app.securityContext | nindent 12 }}
+          image: {{ include "mes-agents.image" . }}
+          imagePullPolicy: {{ .Values.app.image.pullPolicy }}
+          command: ["alembic", "upgrade", "head"]
+          env:
+            {{- include "mes-agents.containerEnv" . | nindent 12 }}
+          envFrom:
+            {{- include "mes-agents.containerEnvFrom" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.app.migrations.resources | nindent 12 }}
+          {{- with .Values.app.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.app.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

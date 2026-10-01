@@ -2,42 +2,54 @@
 
 import uuid
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from app.models.enums import AgentStatus, Visibility
+
+ShortText = Annotated[str, StringConstraints(max_length=255)]
+TagList = Annotated[list[ShortText], Field(max_length=20)]
+MAX_PROMPT_CHARS = 20_000
+MAX_MESSAGES = 100
 
 
 class ConfigSnapshot(BaseModel):
     """Full wizard draft — mirrors the frontend's wizard store shape."""
 
-    name: str
-    description: str = ""
-    category: str = ""
-    community_path: str | None = None
-    system_prompt: str = ""
-    greeting: str = ""
-    examples: list[str] = Field(default_factory=list)
-    model_id: str = ""
-    temperature: float = 0.7
-    knowledge_ids: list[str] = Field(default_factory=list)
-    tool_ids: list[str] = Field(default_factory=list)
+    name: str = Field(max_length=200)
+    description: str = Field(default="", max_length=2_000)
+    category: ShortText = ""
+    community_path: ShortText | None = None
+    system_prompt: str = Field(default="", max_length=MAX_PROMPT_CHARS)
+    greeting: str = Field(default="", max_length=2_000)
+    examples: Annotated[
+        list[Annotated[str, StringConstraints(max_length=500)]], Field(max_length=20)
+    ] = Field(default_factory=list)
+    model_id: ShortText = ""
+    temperature: float = Field(default=0.7, ge=0, le=2)
+    knowledge_ids: Annotated[list[ShortText], Field(max_length=20)] = Field(
+        default_factory=list
+    )
+    tool_ids: Annotated[list[ShortText], Field(max_length=20)] = Field(
+        default_factory=list
+    )
 
 
 class AgentCreate(BaseModel):
     visibility: Visibility = Visibility.private
     status: AgentStatus = AgentStatus.draft
-    category: list[str] = Field(default_factory=list)
-    tags: list[str] = Field(default_factory=list)
+    category: TagList = Field(default_factory=list)
+    tags: TagList = Field(default_factory=list)
     config: ConfigSnapshot
 
 
 class AgentUpdate(BaseModel):
     visibility: Visibility | None = None
     status: AgentStatus | None = None
-    category: list[str] | None = None
-    tags: list[str] | None = None
-    changelog: str | None = None
+    category: TagList | None = None
+    tags: TagList | None = None
+    changelog: str | None = Field(default=None, max_length=500)
     config: ConfigSnapshot
 
 
@@ -62,12 +74,12 @@ class AgentDetail(AgentListItem):
 
 
 class ChatMessage(BaseModel):
-    role: str
-    content: str
+    role: str = Field(max_length=32)
+    content: str = Field(max_length=MAX_PROMPT_CHARS)
 
 
 class ChatRequest(BaseModel):
-    messages: list[ChatMessage]
+    messages: list[ChatMessage] = Field(max_length=MAX_MESSAGES)
 
 
 class ChatResponse(BaseModel):
@@ -76,7 +88,7 @@ class ChatResponse(BaseModel):
 
 class RatingCreate(BaseModel):
     score: int = Field(ge=1, le=5)
-    comment: str | None = None
+    comment: str | None = Field(default=None, max_length=1000)
 
 
 class RatingRead(BaseModel):
@@ -84,7 +96,6 @@ class RatingRead(BaseModel):
 
     id: uuid.UUID
     agent_id: uuid.UUID
-    user_id: str
     score: int
     comment: str | None
     created_at: datetime
@@ -112,8 +123,11 @@ class ToolProfile(BaseModel):
 
 
 class PromptAssistRequest(BaseModel):
-    prompt: str = ""
-    hints: dict[str, str] = Field(default_factory=dict)
+    prompt: str = Field(default="", max_length=MAX_PROMPT_CHARS)
+    hints: Annotated[
+        dict[Annotated[str, StringConstraints(max_length=100)], str],
+        Field(max_length=20),
+    ] = Field(default_factory=dict)
 
 
 class PromptResponse(BaseModel):
@@ -121,8 +135,8 @@ class PromptResponse(BaseModel):
 
 
 class SuggestStartersRequest(BaseModel):
-    prompt: str
-    count: int = 4
+    prompt: str = Field(max_length=MAX_PROMPT_CHARS)
+    count: int = Field(default=4, ge=1, le=10)
 
 
 class SuggestStartersResponse(BaseModel):
@@ -135,7 +149,7 @@ class SuggestStartersResponse(BaseModel):
 
 
 class PromptValidateRequest(BaseModel):
-    prompt: str
+    prompt: str = Field(max_length=MAX_PROMPT_CHARS)
 
 
 class PromptValidateResponse(BaseModel):
@@ -144,12 +158,12 @@ class PromptValidateResponse(BaseModel):
 
 
 class OnboardingMessage(BaseModel):
-    role: str
-    content: str
+    role: str = Field(max_length=32)
+    content: str = Field(max_length=MAX_PROMPT_CHARS)
 
 
 class OnboardingChatRequest(BaseModel):
-    messages: list[OnboardingMessage]
+    messages: list[OnboardingMessage] = Field(max_length=MAX_MESSAGES)
 
 
 class OnboardingAgentConfig(BaseModel):

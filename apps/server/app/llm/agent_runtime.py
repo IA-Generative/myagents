@@ -29,6 +29,8 @@ async def arun_agent_chat(
     temperature: float,
 ) -> str:
     tools = resolve_tools(config.tool_ids, config.knowledge_ids)
+    # Le prompt système de l'agent fait foi : on ignore les messages "system" fournis par l'appelant.
+    history = [m for m in history if m.role != "system"]
     agent = create_agent(
         client.chat_model(model, temperature),
         tools=tools,

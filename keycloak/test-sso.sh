@@ -9,6 +9,17 @@ REALM="myagents"
 CLIENT_ID="miraiku-agents"
 CLIENT_SECRET="dev-miraiku-agents-secret"
 
+# Mots de passe des comptes de dev : variables d'environnement, sinon `.env` à la racine.
+ENV_FILE="$(dirname "$0")/../.env"
+env_or_file() {
+  local v="${!1:-}"
+  [[ -z "$v" && -f "$ENV_FILE" ]] && v=$(grep -E "^$1=" "$ENV_FILE" | tail -1 | cut -d= -f2- || true)
+  printf '%s' "$v"
+}
+ADMIN_PASSWORD=$(env_or_file KEYCLOAK_DEV_ADMIN_PASSWORD)
+USER_PASSWORD=$(env_or_file KEYCLOAK_DEV_USER_PASSWORD)
+[[ -n "$ADMIN_PASSWORD" && -n "$USER_PASSWORD" ]] || { echo "KEYCLOAK_DEV_ADMIN_PASSWORD / KEYCLOAK_DEV_USER_PASSWORD manquants (make ensure-env)"; exit 1; }
+
 green() { printf "\033[32m✓ %s\033[0m\n" "$1"; }
 red()   { printf "\033[31m✗ %s\033[0m\n" "$1"; }
 info()  { printf "\033[36m→ %s\033[0m\n" "$1"; }
@@ -23,13 +34,13 @@ echo "$DISCOVERY" | python3 -c "import sys,json; d=json.load(sys.stdin); assert 
 green "Realm accessible, discovery OK"
 
 # --- 2. Token pour admin ---
-info "Test 2: Password grant admin/admin"
+info "Test 2: Password grant admin"
 TOKEN_RESP=$(curl -s "$KEYCLOAK_URL/realms/$REALM/protocol/openid-connect/token" \
   -d "grant_type=password" \
   -d "client_id=$CLIENT_ID" \
   -d "client_secret=$CLIENT_SECRET" \
   -d "username=admin" \
-  -d "password=admin" \
+  --data-urlencode "password=$ADMIN_PASSWORD" \
   -d "scope=openid profile email" || echo "")
 ADMIN_TOKEN=$(echo "$TOKEN_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('access_token',''))" 2>/dev/null || echo "")
 [[ -n "$ADMIN_TOKEN" ]] || fail "Pas d'access_token pour admin (resp: $TOKEN_RESP)"
@@ -57,13 +68,13 @@ print(f'  aud: {c.get(\"aud\")}')
 green "Claims admin OK (role admin, group myagents-admin)"
 
 # --- 4. Token pour user1 ---
-info "Test 4: Password grant user1/user1"
+info "Test 4: Password grant user1"
 USER_TOKEN=$(curl -s "$KEYCLOAK_URL/realms/$REALM/protocol/openid-connect/token" \
   -d "grant_type=password" \
   -d "client_id=$CLIENT_ID" \
   -d "client_secret=$CLIENT_SECRET" \
   -d "username=user1" \
-  -d "password=user1" \
+  --data-urlencode "password=$USER_PASSWORD" \
   -d "scope=openid profile email" | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null || echo "")
 [[ -n "$USER_TOKEN" ]] || fail "Pas d'access_token pour user1"
 echo "$USER_TOKEN" | python3 -c "
