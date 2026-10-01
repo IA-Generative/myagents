@@ -1,0 +1,32 @@
+name: Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # L'image pr-<n> est déjà construite et poussée par le job build-docker de
+  # ci.yml, qui tourne sur toute PR (pas seulement labellisée "preview") —
+  # pas besoin de la reconstruire ici, seulement de commenter une fois la PR
+  # labellisée.
+  comment:
+    # Seulement les PR labellisées "preview", jamais une PR de fork (pas d'accès aux secrets/packages).
+    if: >-
+      contains(github.event.pull_request.labels.*.name, 'preview') &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Comment preview URL
+        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
+        with:
+          header: preview
+          message: |
+            🔍 Preview: https://myagents-pr-${{ github.event.pull_request.number }}.preview.mirai-hp.cpin.numerique-interieur.com
+
+            *Déployée par ArgoCD, la mise à jour peut prendre quelques minutes.*
