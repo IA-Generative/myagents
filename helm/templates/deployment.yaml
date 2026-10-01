@@ -30,6 +30,9 @@ spec:
         {{- if .Values.app.envSecret }}
         checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
         {{- end }}
+        {{- with .Values.app.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       labels:
         {{- include "mes-agents.labels" . | nindent 8 }}
     spec:
