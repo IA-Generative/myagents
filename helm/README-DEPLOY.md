@@ -10,6 +10,9 @@ Ce répertoire contient le chart Helm pour déployer `myagents` sur Kubernetes.
   exact des tokens) et, si besoin, `OIDC_JWKS_URL` (adresse interne du cluster).
 - **Secrets** : `OPENAI_API_KEY` et `OPENWEBUI_API_KEY` (sans elle, `/v1/*` répond 401) via
   `app.envSecret` ou un secret externe.
+- **Présentations PowerPoint** : `PUBLIC_BASE_URL` doit être l'URL du server joignable depuis le
+  navigateur des utilisateurs d'Open WebUI (liens de téléchargement signés). La signature utilise
+  `PRESENTATION_LINK_SECRET`, à défaut `OPENWEBUI_API_KEY`.
 - **Migrations** : un Job Helm (`post-install`/`post-upgrade`) joue `alembic upgrade head`
   (désactivable via `app.migrations.enabled`). Sous ArgoCD, il s'exécute en `PostSync`.
 

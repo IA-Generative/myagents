@@ -19,6 +19,7 @@ from app.api.routes import (
     knowledge,
     models,
     openai_compat,
+    presentations,
     prompt,
     ratings,
     tools,
@@ -155,6 +156,7 @@ for router in (
     models.router,
     prompt.router,
     knowledge.router,
+    presentations.router,
 ):
     app.include_router(router, prefix="/api")
 
