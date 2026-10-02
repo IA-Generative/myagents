@@ -23,7 +23,9 @@ _ENV_FILES = tuple(p for p in (_repo_root_env_file(), ".env") if p)
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=_ENV_FILES or ".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=_ENV_FILES or ".env", extra="ignore", hide_input_in_errors=True
+    )
 
     app_name: str = "mes-agents-server"
     environment: str = "development"
