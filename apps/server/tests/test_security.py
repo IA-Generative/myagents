@@ -79,3 +79,45 @@ async def test_get_current_user_oidc_enabled_no_token_raises(monkeypatch):
     monkeypatch.setattr(settings, "oidc_issuer", "http://keycloak:8080/realms/myagents")
     with pytest.raises(OIDCError, match="missing bearer token"):
         await get_current_user(authorization=None)
+
+
+def _signed_token(private_key, aud: str) -> str:
+    import time
+
+    import jwt
+
+    now = int(time.time())
+    claims = {
+        "iss": "http://kc/realms/r",
+        "aud": aud,
+        "iat": now,
+        "exp": now + 60,
+        "sub": "u",
+    }
+    return jwt.encode(claims, private_key, algorithm="RS256")
+
+
+@pytest.mark.parametrize(("configured", "ok"), [("", True), ("myagents-api", False)])
+def test_decode_token_audience(monkeypatch, configured, ok):
+    from types import SimpleNamespace
+
+    import jwt
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    from app.core import security
+    from app.core.config import get_settings
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    settings = get_settings()
+    monkeypatch.setattr(settings, "oidc_issuer", "http://kc/realms/r")
+    monkeypatch.setattr(settings, "oidc_audience", configured)
+    monkeypatch.setattr(
+        security, "_signing_key", lambda _t: SimpleNamespace(key=key.public_key())
+    )
+
+    token = _signed_token(key, aud="account")
+    if ok:
+        assert security._decode_token(token)["sub"] == "u"
+    else:
+        with pytest.raises(jwt.InvalidAudienceError):
+            security._decode_token(token)

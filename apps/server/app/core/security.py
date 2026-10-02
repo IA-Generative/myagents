@@ -91,13 +91,18 @@ def _decode_token(token: str, audience: str | None = None) -> dict[str, Any]:
     if not settings.oidc_issuer:
         raise OIDCError("OIDC_ISSUER not configured")
 
+    expected_audience = audience or settings.oidc_audience or None
     return jwt.decode(
         token,
         _signing_key(token).key,
         algorithms=["RS256"],
-        audience=audience or settings.oidc_audience or None,
+        audience=expected_audience,
         issuer=settings.oidc_issuer,
-        options={"require": ["exp", "iat", "iss"]},
+        # Sans audience attendue, PyJWT rejette tout jeton portant un `aud` : on désactive le contrôle.
+        options={
+            "require": ["exp", "iat", "iss"],
+            "verify_aud": expected_audience is not None,
+        },
     )
 
 
