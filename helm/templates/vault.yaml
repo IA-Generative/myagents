@@ -11,16 +11,16 @@ spec:
   path: {{ $vaultPath }}
   type: kv-v2
   vaultAuthRef: vault-auth
+  {{- with $secret.rolloutRestartTargets }}
+  rolloutRestartTargets:
+    {{- . | toYaml | nindent 4 }}
+  {{- end }}
   destination:
     create: true
     name: {{ $secret.destination.name }}
     type: {{ $secret.destination.type }}
     {{- with $secret.destination.transformation }}
     transformation:
-      {{- . | toYaml | nindent 6 }}
-    {{- end }}
-    {{- with $secret.destination.rolloutRestartTargets }}
-    rolloutRestartTargets:
       {{- . | toYaml | nindent 6 }}
     {{- end }}
 {{- end -}}
