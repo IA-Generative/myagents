@@ -96,7 +96,9 @@ async def _token_request(data: dict[str, str]) -> TokenSet:
             detail = f"{err.get('error', '')}: {err.get('error_description', '')}"
         except ValueError:
             detail = ""
-        raise OIDCError(f"token request rejected ({response.status_code}) {detail}".rstrip())
+        raise OIDCError(
+            f"token request rejected ({response.status_code}) {detail}".rstrip()
+        )
     body = response.json()
     return TokenSet(
         access_token=body.get("access_token", ""),
