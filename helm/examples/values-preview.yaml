@@ -36,15 +36,12 @@ app:
     enabled: false
   
   # -- Non-secret variables. Le host Keycloak, l'URL du LLM et le modele restent dans Vault.
-  # WEB_PUBLIC_URL / PUBLIC_BASE_URL / CORS_ORIGINS dependent de la PR : a surcharger par ArgoCD
-  # (ApplicationSet : helm.parameters ou valuesObject avec {{number}}).
+  # WEB_PUBLIC_URL / PUBLIC_BASE_URL / CORS_ORIGINS sont derives du 1er host d'ingress (pose par
+  # l'ApplicationSet avec le numero de PR) ; les definir ici les surchargerait.
   env:
     ENVIRONMENT: "preview"
     OIDC_ENABLED: "true"
-    OIDC_CLIENT_ID: "myagents-server"
-    WEB_PUBLIC_URL: "https://myagents-pr-CHANGE_ME.preview.mirai-hp.cpin.numerique-interieur.com"
-    PUBLIC_BASE_URL: "https://myagents-pr-CHANGE_ME.preview.mirai-hp.cpin.numerique-interieur.com"
-    CORS_ORIGINS: '["https://myagents-pr-CHANGE_ME.preview.mirai-hp.cpin.numerique-interieur.com"]'
+    OIDC_CLIENT_ID: "myagents-server-preview"
   
   # -- Tout le Secret synchronise depuis Vault (kv/<basePath>/app) est injecte en variables d'env.
   # Cles attendues dans Vault : DATABASE_URL, OIDC_ISSUER, OIDC_CLIENT_SECRET, OPENAI_BASE_URL,

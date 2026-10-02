@@ -108,6 +108,24 @@ Container env list shared by the app Deployment and the migration Job
       name: {{ .Values.postgres.auth.existingSecret | default (include "mes-agents.postgresSecretName" .) }}
       key: uri
 {{- end }}
+{{- /* URLs publiques derivees du 1er host d'ingress, sauf si definies explicitement dans app.env */}}
+{{- $appEnv := .Values.app.env | default dict }}
+{{- if and .Values.app.ingress.enabled .Values.app.ingress.hosts }}
+{{- $scheme := ternary "https" "http" (not (empty .Values.app.ingress.tls)) }}
+{{- $origin := printf "%s://%s" $scheme (first .Values.app.ingress.hosts).name }}
+{{- if not (hasKey $appEnv "WEB_PUBLIC_URL") }}
+- name: WEB_PUBLIC_URL
+  value: {{ $origin | quote }}
+{{- end }}
+{{- if not (hasKey $appEnv "PUBLIC_BASE_URL") }}
+- name: PUBLIC_BASE_URL
+  value: {{ $origin | quote }}
+{{- end }}
+{{- if not (hasKey $appEnv "CORS_ORIGINS") }}
+- name: CORS_ORIGINS
+  value: {{ list $origin | toJson | quote }}
+{{- end }}
+{{- end }}
 {{- /* Include other app env vars if postgres is enabled */}}
 {{- range $key, $val := .Values.app.env }}
 - name: {{ $key }}
