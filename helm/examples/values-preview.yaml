@@ -78,6 +78,6 @@ vaultSecrets:
       destination:
         name: "myagents-secrets"
         type: "Opaque"
-        rolloutRestartTargets:
-          - kind: Deployment
-            name: mes-agents
+      rolloutRestartTargets:
+        - kind: Deployment
+          name: mes-agents

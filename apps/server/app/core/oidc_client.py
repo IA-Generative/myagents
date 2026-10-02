@@ -90,7 +90,13 @@ async def _token_request(data: dict[str, str]) -> TokenSet:
         except httpx.HTTPError as exc:
             raise OIDCError("issuer unavailable") from exc
     if response.status_code != 200:
-        raise OIDCError(f"token request rejected ({response.status_code})")
+        # `error` / `error_description` (RFC 6749 §5.2) ne contiennent pas de secret.
+        try:
+            err = response.json()
+            detail = f"{err.get('error', '')}: {err.get('error_description', '')}"
+        except ValueError:
+            detail = ""
+        raise OIDCError(f"token request rejected ({response.status_code}) {detail}".rstrip())
     body = response.json()
     return TokenSet(
         access_token=body.get("access_token", ""),
