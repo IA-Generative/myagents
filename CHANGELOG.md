@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.3.0](https://github.com/IA-Generative/myagents/compare/v0.2.0...v0.3.0) (2026-10-02)
+
+
+### Features
+
+* add owui & keycloak for local dev ([32c3682](https://github.com/IA-Generative/myagents/commit/32c368213da8eb210cd9bcb0bf5097fb246c8aab))
+* **ci:** force build image ([630aaab](https://github.com/IA-Generative/myagents/commit/630aaabc04e633488b596198254017c50ba65fcb))
+* **helm:** ajouter sync Vault et restructurer les environnements ([1b2e855](https://github.com/IA-Generative/myagents/commit/1b2e855e83ad71fe3ea027fb601d64622384f71e))
+* **helm:** update secrets doc ([b86da84](https://github.com/IA-Generative/myagents/commit/b86da8465d9563e27f169d8799c81d8b56874fff))
+* swagger ui auth simplify ([5bb3498](https://github.com/IA-Generative/myagents/commit/5bb3498e85a7947bd3610f80499745d5e5cbce2d))
+
+
+### Bug Fixes
+
+* **ci:** configure gitleaks to ignore documentation with example secrets ([c8ceb71](https://github.com/IA-Generative/myagents/commit/c8ceb710aab4edc7c036c7ae17caa3859d1cb381))
+* **ci:** configure gitleaks to ignore documentation with example secrets ([4b0d1d7](https://github.com/IA-Generative/myagents/commit/4b0d1d70ecc3b83797c1175413df69bf5978cb6f))
+* **helm:** fix helpers ([8d4379d](https://github.com/IA-Generative/myagents/commit/8d4379d3feddb85313405269dab6334572dc40a3))
+* **helm:** prioriser version HEAD sur les fichiers en conflit ([3260121](https://github.com/IA-Generative/myagents/commit/32601210f2c7340b11b502d301def610574638ea))
+* **helm:** prioriser version HEAD sur les fichiers en conflit ([36c5022](https://github.com/IA-Generative/myagents/commit/36c502266170c059efa3639bb8cc92ed9ce9c2e9))
+* **preview:** compléter le câblage preview (placeholders, doublon de build, rollout) ([0d31cdb](https://github.com/IA-Generative/myagents/commit/0d31cdbadd23cbc7a5cfa5bc52e75e7d7c685f5e))
+
 ## [0.2.0](https://github.com/IA-Generative/myagents/compare/v0.1.0...v0.2.0) (2026-10-01)
 
 
