@@ -135,7 +135,7 @@ def user_from_tokens(tokens: TokenSet, nonce: str | None = None) -> AuthUser:
             if not hmac.compare_digest(str(id_claims.get("nonce", "")), nonce):
                 raise OIDCError("nonce mismatch")
     except jwt.PyJWTError as exc:
-        raise OIDCError("invalid token") from exc
+        raise OIDCError(f"invalid token: {type(exc).__name__}: {exc}") from exc
     except httpx.HTTPError as exc:
         raise OIDCError("issuer unavailable") from exc
     return security._extract_user(access_claims)
