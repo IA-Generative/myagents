@@ -67,6 +67,8 @@ spec:
           livenessProbe:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          env:
+            {{- include "mes-agents.containerEnv" . | nindent 12 }}
           envFrom:
             {{- include "mes-agents.containerEnvFrom" . | nindent 12 }}
           resources:
