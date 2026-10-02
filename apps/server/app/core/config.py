@@ -23,7 +23,9 @@ _ENV_FILES = tuple(p for p in (_repo_root_env_file(), ".env") if p)
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=_ENV_FILES or ".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=_ENV_FILES or ".env", extra="ignore", hide_input_in_errors=True
+    )
 
     app_name: str = "mes-agents-server"
     environment: str = "development"
@@ -61,6 +63,13 @@ class Settings(BaseSettings):
     # Shared secret authenticating inbound calls to /v1/* (Open WebUI connection). Empty disables it.
     openwebui_api_key: str = ""
 
+    # URL publique du server vue par le navigateur (liens de téléchargement des présentations).
+    public_base_url: str = "http://localhost:8000"
+    # Secret de signature des liens ; vide = repli sur openwebui_api_key, et sans l'un ni l'autre
+    # la génération de liens est refusée.
+    presentation_link_secret: str = ""
+    presentation_ttl_minutes: int = 60
+
     # --- SSO Keycloak / OIDC ---
     # Issuer URL (sans trailing slash). En local : http://localhost:8180/realms/myagents
     oidc_issuer: str = ""
@@ -72,6 +81,21 @@ class Settings(BaseSettings):
     oidc_jwks_url: str = ""
     # JWKS cache TTL (seconds).
     oidc_jwks_cache_seconds: int = 300
+    # Client confidentiel Keycloak : le server fait seul le flux code + PKCE (BFF), le navigateur
+    # ne reçoit qu'un cookie de session.
+    oidc_client_id: str = "myagents-server"
+    oidc_client_secret: str = ""
+    # URL du realm joignable depuis le server (ex. http://keycloak:8080/realms/myagents) ; vide =
+    # oidc_issuer. L'issuer reste l'URL publique, seule vue par le navigateur.
+    oidc_internal_url: str = ""
+    # Origine publique du front (redirect_uri = <origine>/api/auth/callback, cookie de session).
+    # Vide = https://<web_port>.<code_server_domain> derrière code-server, sinon localhost.
+    web_public_url: str = ""
+    web_port: int = 5173
+    code_server_domain: str = ""
+    # Clé de chiffrement des jetons en base ; vide = repli sur oidc_client_secret.
+    session_secret: str = ""
+    session_ttl_hours: int = 12
 
     # Vector store used for agent knowledge bases (RAG).
     qdrant_url: str = "http://localhost:6333"
@@ -81,6 +105,16 @@ class Settings(BaseSettings):
 
     # Origines supplémentaires autorisées en `connect-src` du CSP (ex. un second IdP).
     csp_extra_connect_src: list[str] = []
+
+    @model_validator(mode="after")
+    def _default_web_public_url(self) -> Settings:
+        if not self.web_public_url:
+            self.web_public_url = (
+                f"https://{self.web_port}.{self.code_server_domain}"
+                if self.code_server_domain
+                else f"http://localhost:{self.web_port}"
+            )
+        return self
 
     @model_validator(mode="after")
     def _require_auth_in_production(self) -> Settings:
@@ -93,6 +127,10 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.environment.lower() in {"production", "prod"}
+
+    @property
+    def cookie_secure(self) -> bool:
+        return self.web_public_url.startswith("https://")
 
 
 @lru_cache

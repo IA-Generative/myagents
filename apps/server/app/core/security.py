@@ -14,12 +14,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
 import jwt
-from jwt import PyJWKClient
+from jwt import PyJWK, PyJWKSet
 
 from app.core.config import get_settings
 
@@ -46,43 +47,62 @@ class OIDCDisabled(OIDCError):
     """Raised when OIDC is disabled but a caller tried to use the security dep."""
 
 
-_jwks_client: PyJWKClient | None = None
+_jwks_cache: tuple[float, PyJWKSet] | None = None
 
 
-def _get_jwks_client() -> PyJWKClient:
-    global _jwks_client
-    if _jwks_client is None:
-        settings = get_settings()
-        if not settings.oidc_issuer:
-            raise OIDCError("OIDC_ISSUER not configured")
-        jwks_uri = (
-            settings.oidc_jwks_url
-            or f"{settings.oidc_issuer.rstrip('/')}/protocol/openid-connect/certs"
-        )
-        _jwks_client = PyJWKClient(
-            jwks_uri,
-            cache_keys=True,
-            lifespan=settings.oidc_jwks_cache_seconds,
-        )
-        logger.info("JWKS client initialized: %s", jwks_uri)
-    return _jwks_client
+def _fetch_jwks(force: bool = False) -> PyJWKSet:
+    global _jwks_cache
+    settings = get_settings()
+    now = time.monotonic()
+    if (
+        not force
+        and _jwks_cache is not None
+        and now - _jwks_cache[0] < settings.oidc_jwks_cache_seconds
+    ):
+        return _jwks_cache[1]
+
+    if not settings.oidc_issuer:
+        raise OIDCError("OIDC_ISSUER not configured")
+    base = (settings.oidc_internal_url or settings.oidc_issuer).rstrip("/")
+    jwks_uri = settings.oidc_jwks_url or f"{base}/protocol/openid-connect/certs"
+    # Adresse interne (réseau compose/cluster) : on ignore le proxy d'entreprise.
+    internal = bool(settings.oidc_jwks_url or settings.oidc_internal_url)
+    response = httpx.get(jwks_uri, timeout=10, trust_env=not internal)
+    response.raise_for_status()
+    jwks = PyJWKSet.from_dict(response.json())
+    _jwks_cache = (now, jwks)
+    logger.info("JWKS chargé: %s", jwks_uri)
+    return jwks
 
 
-def _decode_token(token: str) -> dict[str, Any]:
-    """Decode and validate a JWT access token against the Keycloak JWKS."""
+def _signing_key(token: str) -> PyJWK:
+    kid = jwt.get_unverified_header(token).get("kid")
+    # Une seconde tentative sans cache couvre la rotation des clés Keycloak.
+    for force in (False, True):
+        for key in _fetch_jwks(force).keys:
+            if key.key_id == kid:
+                return key
+    raise jwt.PyJWKClientError(f"clé de signature introuvable (kid={kid})")
+
+
+def _decode_token(token: str, audience: str | None = None) -> dict[str, Any]:
+    """Decode and validate a Keycloak JWT (access token by default, else the given audience)."""
     settings = get_settings()
     if not settings.oidc_issuer:
         raise OIDCError("OIDC_ISSUER not configured")
 
-    jwks = _get_jwks_client()
-    signing_key = jwks.get_signing_key_from_jwt(token)
+    expected_audience = audience or settings.oidc_audience or None
     return jwt.decode(
         token,
-        signing_key.key,
+        _signing_key(token).key,
         algorithms=["RS256"],
-        audience=settings.oidc_audience or None,
+        audience=expected_audience,
         issuer=settings.oidc_issuer,
-        options={"require": ["exp", "iat", "iss"]},
+        # Sans audience attendue, PyJWT rejette tout jeton portant un `aud` : on désactive le contrôle.
+        options={
+            "require": ["exp", "iat", "iss"],
+            "verify_aud": expected_audience is not None,
+        },
     )
 
 

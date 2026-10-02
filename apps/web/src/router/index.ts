@@ -1,11 +1,23 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
+// Pages légales du pied de page DSFR (liens par défaut de DsfrFooter), accessibles sans connexion.
+const legalPages = [
+  { path: '/a11y', title: 'Accessibilité' },
+  { path: '/mentions-legales', title: 'Mentions légales' },
+  { path: '/donnees-personnelles', title: 'Données personnelles' },
+  { path: '/cookies', title: 'Gestion des cookies' },
+]
+
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', redirect: '/agents' },
-    { path: '/callback', name: 'auth-callback', component: () => import('@/pages/AuthCallbackPage.vue') },
+    ...legalPages.map(({ path, title }) => ({
+      path,
+      component: () => import('@/pages/LegalPage.vue'),
+      meta: { public: true, title },
+    })),
     { path: '/agents', name: 'agents', component: () => import('@/pages/AgentsListPage.vue') },
     {
       path: '/agents/new',
@@ -28,14 +40,13 @@ export const router = createRouter({
   ],
 })
 
-// Garde d'authentification : redirige vers Keycloak si non authentifié.
+// Garde d'authentification : redirige vers le login du server (Keycloak) si non authentifié.
 router.beforeEach(async (to) => {
-  if (to.name === 'auth-callback') return true
+  if (to.meta.public) return true
   const auth = useAuthStore()
-  if (auth.loading) return false
   if (!auth.user) await auth.init()
   if (!auth.isAuthenticated) {
-    await auth.login(to.fullPath)
+    auth.login(to.fullPath)
     return false
   }
   return true

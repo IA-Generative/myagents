@@ -14,11 +14,13 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import (
     agents,
+    auth,
     catalog,
     favorites,
     knowledge,
     models,
     openai_compat,
+    presentations,
     prompt,
     ratings,
     tools,
@@ -148,6 +150,7 @@ async def log_requests(request: Request, call_next):
 
 for router in (
     tools.router,
+    auth.router,
     agents.router,
     catalog.router,
     ratings.router,
@@ -155,6 +158,7 @@ for router in (
     models.router,
     prompt.router,
     knowledge.router,
+    presentations.router,
 ):
     app.include_router(router, prefix="/api")
 

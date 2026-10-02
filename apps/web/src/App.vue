@@ -7,17 +7,17 @@ const auth = useAuthStore()
 
 const quickLinks = computed(() => {
   if (!auth.isAuthenticated) return []
-  return [
+  const links: { label: string; to?: string; button?: boolean; onClick?: () => void }[] = [
     {
       label: auth.user?.username ?? 'Utilisateur',
       to: '/agents',
     },
-    {
-      label: 'Déconnexion',
-      button: true,
-      onClick: () => auth.logout(),
-    },
   ]
+  // Sans SSO l'identité est un substitut de dev : se déconnecter n'aurait aucun effet.
+  if (auth.ssoEnabled) {
+    links.push({ label: 'Déconnexion', button: true, onClick: () => auth.logout() })
+  }
+  return links
 })
 
 onMounted(() => {

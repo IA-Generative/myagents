@@ -141,17 +141,17 @@ vaultSecrets:
       destination:
         name: "myagents-secrets"
         type: "Opaque"
-        rolloutRestartTargets:
-          - kind: Deployment
-            name: mes-agents
+      rolloutRestartTargets:
+        - kind: Deployment
+          name: mes-agents
     
     # -- PostgreSQL secrets (password, postgres_root_password)
     - subPath: "postgres"
       destination:
         name: "postgres-secret"
         type: "Opaque"
-        rolloutRestartTargets:
-          - kind: StatefulSet
-            name: postgres
-          - kind: Deployment
-            name: mes-agents
+      rolloutRestartTargets:
+        - kind: StatefulSet
+          name: postgres
+        - kind: Deployment
+          name: mes-agents

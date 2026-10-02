@@ -35,56 +35,27 @@ app:
   ingress:
     enabled: false
   
-  # -- Preview environment variables
-  # These MUST be set in the private values file
-  env: {}
-    # ENVIRONMENT: "preview"
-    # QDRANT_URL: "http://qdrant:6333"
-    # LLM_BASE_URL: "https://api.openai.com"
-    # LLM_DEFAULT_MODEL: "gpt-4"
-    # LLM_EMBEDDING_MODEL: "text-embedding-3-large"
-    # CORS_ORIGINS: '["https://mes-agents-pr-*.example.com"]'
+  # -- Non-secret variables. Le host Keycloak, l'URL du LLM et le modele restent dans Vault.
+  # WEB_PUBLIC_URL / PUBLIC_BASE_URL / CORS_ORIGINS sont derives du 1er host d'ingress (pose par
+  # l'ApplicationSet avec le numero de PR) ; les definir ici les surchargerait.
+  env:
+    ENVIRONMENT: "preview"
+    OIDC_ENABLED: "true"
+    OIDC_CLIENT_ID: "myagents-server-preview"
   
-  # -- Preview secrets from Vault
-  envSecret: {}
-    # LLM_API_KEY:
-    #   secretKeyRef:
-    #     name: "myagents-secrets"
-    #     key: "LLM_API_KEY"
-    # OPENWEBUI_API_KEY:
-    #   secretKeyRef:
-    #     name: "myagents-secrets"
-    #     key: "OPENWEBUI_API_KEY"
+  # -- Tout le Secret synchronise depuis Vault (kv/<basePath>/app) est injecte en variables d'env.
+  # Cles attendues dans Vault : DATABASE_URL, OIDC_ISSUER, OIDC_CLIENT_SECRET, OPENAI_BASE_URL,
+  # OPENAI_API_KEY, LLM_DEFAULT_MODEL, OPENWEBUI_API_KEY, SESSION_SECRET, PRESENTATION_LINK_SECRET.
+  # Optionnelles : OIDC_INTERNAL_URL, OIDC_JWKS_URL, QDRANT_URL, LLM_EMBEDDING_MODEL.
+  envFromSecrets:
+    - myagents-secrets
 
 # =============================================================================
 # PostgreSQL - Preview settings
 # =============================================================================
 postgres:
-  # -- Preview database user
-  username: "mesagents_preview"
-  database: "mesagents_preview"
-  
-  # -- Password MUST be empty - use existingSecret instead
-  password: ""
-  
-  # -- Reference the preview PostgreSQL secret from Vault
-  existingSecret: "postgres-secret"
-  existingSecretKey: "password"
-  
-  # -- Preview storage (minimal)
-  persistence:
-    enabled: true
-    size: 1Gi
-    storageClass: ""
-  
-  # -- Preview resource allocation for PostgreSQL
-  resources:
-    requests:
-      memory: "128Mi"
-      cpu: "50m"
-    limits:
-      memory: "256Mi"
-      cpu: "200m"
+  # -- Base externe : DATABASE_URL vient de Vault, pas de sous-chart postgres
+  enabled: false
 
 # =============================================================================
 # Vault Secrets Operator - Preview configuration
@@ -107,17 +78,6 @@ vaultSecrets:
       destination:
         name: "myagents-secrets"
         type: "Opaque"
-        rolloutRestartTargets:
-          - kind: Deployment
-            name: mes-agents
-    
-    # -- PostgreSQL secrets
-    - subPath: "postgres"
-      destination:
-        name: "postgres-secret"
-        type: "Opaque"
-        rolloutRestartTargets:
-          - kind: StatefulSet
-            name: postgres
-          - kind: Deployment
-            name: mes-agents
+      rolloutRestartTargets:
+        - kind: Deployment
+          name: mes-agents

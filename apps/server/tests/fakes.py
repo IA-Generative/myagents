@@ -3,6 +3,7 @@
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
+from pydantic import Field
 
 
 class FakeToolCallingModel(BaseChatModel):
@@ -13,12 +14,14 @@ class FakeToolCallingModel(BaseChatModel):
     """
 
     responses: list[BaseMessage]
+    seen_messages: list[BaseMessage] = Field(default_factory=list)
 
     def bind_tools(self, tools, **kwargs):
         return self
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
         message = self.responses.pop(0)
+        self.seen_messages = list(messages)
         return ChatResult(generations=[ChatGeneration(message=message)])
 
     @property
