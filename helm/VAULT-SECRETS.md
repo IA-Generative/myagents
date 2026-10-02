@@ -68,30 +68,34 @@ OIDC_ENABLED: "true"
 OIDC_INTERNAL_URL: http://<keycloak-svc>:8080/realms/myagents   # optionnel
 OIDC_CLIENT_ID: myagents-server
 OIDC_AUDIENCE: myagents-api     # doit figurer dans le claim aud, ou vide pour désactiver
-WEB_PUBLIC_URL: https://myagents-pr-<n>.preview.mirai-hp.cpin.numerique-interieur.com
-PUBLIC_BASE_URL: https://myagents-pr-<n>.preview.mirai-hp.cpin.numerique-interieur.com
-CORS_ORIGINS: '["https://myagents-pr-<n>.preview.mirai-hp.cpin.numerique-interieur.com"]'
 QDRANT_URL: http://qdrant:6333
 ```
 
-## Client Keycloak `myagents-server`
+`WEB_PUBLIC_URL`, `PUBLIC_BASE_URL` et `CORS_ORIGINS` sont dérivés automatiquement du premier host de `app.ingress.hosts` (`https://` si `app.ingress.tls` est défini). Ils ne sont à définir dans `app.env` que pour surcharger.
 
-Client confidentiel (Client authentication = On), flux Standard flow uniquement, PKCE `S256`.
+## Client Keycloak
+
+Client confidentiel (Client authentication = On), flux Standard flow uniquement, PKCE `S256`, scopes `myagents-api` (audience) et `groups` en default scopes.
 Le serveur calcule `redirect_uri = WEB_PUBLIC_URL + /api/auth/callback` et `post_logout_redirect_uri = WEB_PUBLIC_URL + /`.
 
-| Champ | Valeur (preview) |
+### Preview : client dédié `myagents-server-preview`
+
+Keycloak n'accepte `*` qu'en dernier caractère (correspondance par préfixe). Pour les previews (VPN, dev), un client dédié avec un préfixe large évite d'enregistrer chaque PR. Ne jamais appliquer ce wildcard au client de prod ou de beta.
+
+| Champ | Valeur |
 |---|---|
-| Root URL | `https://myagents-pr-*.preview.mirai-hp.cpin.numerique-interieur.com` |
-| Home URL | `https://myagents-pr-*.preview.mirai-hp.cpin.numerique-interieur.com/` |
-| Valid redirect URIs | `https://myagents-pr-*.preview.mirai-hp.cpin.numerique-interieur.com/api/auth/callback` |
-| Valid post logout redirect URIs | `https://myagents-pr-*.preview.mirai-hp.cpin.numerique-interieur.com/*` |
+| Client ID | `myagents-server-preview` (`OIDC_CLIENT_ID` des values preview) |
+| Root URL | `https://myagents-pr-` (non utilisé, peut rester vide) |
+| Home URL | vide |
+| Valid redirect URIs | `https://myagents-pr-*` |
+| Valid post logout redirect URIs | `https://myagents-pr-*` |
 | Web origins | vide (le navigateur n'appelle jamais Keycloak, le serveur fait le flux code) |
 
-Remarques :
+Son secret (onglet Credentials) va dans `OIDC_CLIENT_SECRET` du Vault de la preview.
 
-- Keycloak n'accepte le wildcard qu'en fin de chemin : il faut un client dédié par host exact, ou le wildcard sur le domaine si votre version l'autorise. Sinon, ajouter une URI par PR.
-- Pour prod/beta, remplacer par le host exact de l'environnement (sans wildcard).
-- Le client doit avoir le client scope `myagents-api` (audience) et `groups` en default scopes.
+### Prod / beta : client `myagents-server`
+
+URIs exactes de l'environnement, sans wildcard : `https://<host>/api/auth/callback` en redirect URI, `https://<host>/*` en post logout redirect URI.
 
 ## Secrets PostgreSQL (`postgres`)
 
