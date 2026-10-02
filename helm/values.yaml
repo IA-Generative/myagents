@@ -63,6 +63,9 @@ app:
   # -- Environment variables from Secret
   # Configured in private values files
   envSecret: {}
+
+  # -- Names of existing Secrets injected whole via envFrom (e.g. Secrets synced by Vault)
+  envFromSecrets: []
   
   # -- Pod security context
   podSecurityContext:
