@@ -131,4 +131,8 @@ Container envFrom list (ConfigMap / Secret) shared by the app Deployment and the
 - secretRef:
     name: {{ include "mes-agents.fullname" . }}-env
 {{- end }}
+{{- range .Values.app.envFromSecrets }}
+- secretRef:
+    name: {{ . }}
+{{- end }}
 {{- end }}
