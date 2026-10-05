@@ -10,7 +10,8 @@ from app.api.deps import get_current_user_id, limit_llm_user
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.llm import agent_runtime
-from app.llm.client import LlmClient, LlmModelNotFoundError, LlmUnavailableError
+from app.llm.client import LlmClient
+from app.llm.fallback import LlmModelResolutionError, run_agent_chat_with_model_fallback
 from app.llm.guard import validate_system_prompt
 from app.models.enums import AgentStatus
 from app.schemas.agent import (
@@ -155,23 +156,12 @@ async def chat_with_agent(
     primary_model = config.model_id or agent.model_ref or default_model
     client = LlmClient()
     try:
-        reply = await agent_runtime.arun_agent_chat(
+        reply = await run_agent_chat_with_model_fallback(
             client, config, history=payload.messages,
-            model=primary_model, temperature=config.temperature,
+            temperature=config.temperature,
+            primary_model=primary_model,
+            default_model=default_model,
         )
-    except LlmModelNotFoundError as exc:
-        if primary_model == default_model:
-            raise HTTPException(status_code=502, detail="llm_unavailable") from exc
-        logger.warning(
-            "modèle '%s' introuvable, fallback sur '%s'", primary_model, default_model
-        )
-        try:
-            reply = await agent_runtime.arun_agent_chat(
-                client, config, history=payload.messages,
-                model=default_model, temperature=config.temperature,
-            )
-        except LlmUnavailableError as exc2:
-            raise HTTPException(status_code=502, detail="llm_unavailable") from exc2
-    except LlmUnavailableError as exc:
+    except LlmModelResolutionError as exc:
         raise HTTPException(status_code=502, detail="llm_unavailable") from exc
     return ChatResponse(reply=reply)
