@@ -45,13 +45,15 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:5173"]
 
     # Generic OpenAI-compatible LLM endpoint (OpenWebUI, Scaleway, OpenAI, Ollama...).
-    openai_base_url: str = "http://localhost:11434/v1"
-    openai_api_key: str = ""
-    llm_default_model: str = "gpt-oss-120b"
-    llm_embedding_model: str = "nomic-embed-text"
+    # Source de vérité : docker-compose.yml (dev local) ou Vault (K8s).
+    # ⚠️ Aucun default Python : variables obligatoires via env, sinon Pydantic échoue.
+    openai_base_url: str
+    openai_api_key: str
+    llm_default_model: str
+    llm_embedding_model: str
     # Modèles des assistants d'écriture du wizard (distincts du modèle de l'agent).
-    llm_assist_model: str = "gpt-oss-120b"
-    llm_onboarding_model: str = "mistral-small-3.2-24b-instruct-2506"
+    llm_assist_model: str
+    llm_onboarding_model: str
 
     # Requêtes LLM par minute et par utilisateur (0 = pas de limite).
     rate_limit_per_minute: int = 30
