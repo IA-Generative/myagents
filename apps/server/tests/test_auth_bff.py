@@ -68,14 +68,15 @@ def _jwt(key, audience: str, **extra) -> str:
 @pytest.fixture
 def keycloak(monkeypatch, private_key):
     """Faux endpoint token : renvoie des jetons signés (nonce repris de la requête de login)."""
-    state = {"nonce": "", "calls": [], "fail": False}
+    state = {"nonce": "", "calls": [], "fail": False, "groups": None}
 
     async def token_request(data):
         state["calls"].append(data)
         if state["fail"]:
             raise OIDCError("token request rejected (400)")
+        extra = {} if state["groups"] is None else {"groups": state["groups"]}
         return TokenSet(
-            access_token=_jwt(private_key, "myagents-api"),
+            access_token=_jwt(private_key, "myagents-api", **extra),
             refresh_token="refresh-token-secret",
             id_token=_jwt(private_key, "myagents-server", nonce=state["nonce"]),
             expires_in=300,
@@ -357,3 +358,89 @@ async def test_logout_accepts_the_browser_origin_derived_from_code_server(
     )
 
     assert res.status_code == 200
+
+
+# --- Groupe exigé (OIDC_GROUPE_EXIGE) ---------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("exige", "groupes"),
+    [
+        (
+            "mirai-beta-testeurs",
+            ["/g/mirai-beta-testeurs"],
+        ),  # nom feuille contre chemin
+        ("mirai-beta-testeurs", ["mirai-beta-testeurs"]),  # nom contre nom
+        ("/g/mirai-beta-testeurs", ["/g/mirai-beta-testeurs/"]),  # chemin contre chemin
+    ],
+)
+async def test_member_of_required_group_gets_a_session(
+    client, keycloak, monkeypatch, exige, groupes
+):
+    monkeypatch.setattr(get_settings(), "oidc_groupe_exige", exige)
+    keycloak["groups"] = groupes
+
+    await _authenticate(client, keycloak)
+
+    assert (await client.get("/api/auth/me")).status_code == 200
+
+
+@pytest.mark.parametrize(
+    ("exige", "groupes"),
+    [
+        ("mirai-beta-testeurs", None),  # aucun claim groups
+        ("mirai-beta-testeurs", ["/g/autre-equipe"]),
+        (
+            "/g/mirai-beta-testeurs",
+            ["/h/mirai-beta-testeurs"],
+        ),  # même feuille, autre chemin
+    ],
+)
+async def test_outsider_is_refused_without_session(
+    client, keycloak, monkeypatch, session_factory, exige, groupes
+):
+    monkeypatch.setattr(get_settings(), "oidc_groupe_exige", exige)
+    keycloak["groups"] = groupes
+    state = await _login(client, keycloak)
+
+    res = await client.get(f"/api/auth/callback?code=abc&state={state}")
+
+    assert res.status_code == 403
+    assert "myagents_session" not in res.headers.get("set-cookie", "")
+    async with session_factory() as db:
+        assert (await db.execute(select(AuthSession))).first() is None
+
+
+async def test_bearer_outside_required_group_is_forbidden(
+    client, private_key, monkeypatch
+):
+    monkeypatch.setattr(get_settings(), "oidc_groupe_exige", "mirai-beta-testeurs")
+    token = _jwt(private_key, "myagents-api", groups=["/g/autre-equipe"])
+
+    res = await client.get("/api/agents", headers={"Authorization": f"Bearer {token}"})
+
+    assert res.status_code == 403
+    assert res.json()["detail"] == "groupe_requis"
+
+
+async def test_session_loses_access_when_group_is_withdrawn(
+    client, keycloak, monkeypatch, session_factory
+):
+    """Les groupes sont relus au rafraîchissement : un retrait coupe l'accès."""
+    monkeypatch.setattr(get_settings(), "oidc_groupe_exige", "mirai-beta-testeurs")
+    keycloak["groups"] = ["/g/mirai-beta-testeurs"]
+    await _authenticate(client, keycloak)
+    assert (await client.get("/api/auth/me")).status_code == 200
+
+    keycloak["groups"] = []
+    await _backdate(session_factory, access_expires_at=timedelta(seconds=-5))
+
+    assert (await client.get("/api/auth/me")).status_code == 403
+
+
+async def test_no_required_group_keeps_historic_behaviour(client, keycloak):
+    keycloak["groups"] = None
+
+    await _authenticate(client, keycloak)
+
+    assert (await client.get("/api/auth/me")).status_code == 200
