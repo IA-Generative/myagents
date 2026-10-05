@@ -11,14 +11,28 @@ owns "how an agent answers a message".
 import logging
 import time
 
+import openai
 from langchain.agents import create_agent
 
 from app.llm.chains import history_messages, preview
-from app.llm.client import LlmClient, LlmParseError, LlmUnavailableError
+from app.llm.client import LlmClient, LlmModelNotFoundError, LlmParseError, LlmUnavailableError
 from app.llm.tools import resolve_tools
 from app.schemas.agent import ChatMessage, ConfigSnapshot
 
 logger = logging.getLogger(__name__)
+
+
+def _is_model_not_found(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    logger.info(
+        "[agent_runtime] _is_model_not_found: exc_type=%s exc_msg=%s",
+        type(exc).__name__, msg,
+    )
+    if isinstance(exc, openai.NotFoundError):
+        return True
+    if isinstance(exc, openai.BadRequestError):
+        return "model" in msg or "no service" in msg or "unsupported model" in msg or "not available" in msg or "unknown model" in msg
+    return False
 
 
 async def arun_agent_chat(
@@ -42,10 +56,14 @@ async def arun_agent_chat(
     start = time.perf_counter()
     try:
         result = await agent.ainvoke({"messages": history_messages(history)})
-    except (
-        Exception
-    ) as exc:  # langgraph/langchain/openai/httpx raise various error types
+    except Exception as exc:
         duration_ms = (time.perf_counter() - start) * 1000
+        if _is_model_not_found(exc):
+            logger.warning(
+                "[%s] modèle introuvable après %.0fms (model=%s): %s",
+                label, duration_ms, model, preview(exc),
+            )
+            raise LlmModelNotFoundError(str(exc)) from exc
         logger.error(
             "[%s] LLM indisponible après %.0fms (model=%s): %s",
             label,
