@@ -7,6 +7,8 @@ import '@gouvfr/dsfr/dist/utility/icons/icons.min.css'
 import '@gouvminint/vue-dsfr/styles'
 
 import App from './App.vue'
+import { chargerMenuCommun } from './menuCommun'
 import { router } from './router'
 
 createApp(App).use(createPinia()).use(router).use(VueDsfr).mount('#app')
+chargerMenuCommun()
