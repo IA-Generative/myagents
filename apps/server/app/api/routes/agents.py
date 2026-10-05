@@ -11,7 +11,7 @@ from app.core.config import get_settings
 from app.db.session import get_db
 from app.llm.client import LlmClient
 from app.llm.fallback import LlmModelResolutionError, run_agent_chat_with_model_fallback
-from app.llm.guard import validate_system_prompt
+from app.llm.guard import BLOCK_MESSAGE_AGENT_CONFIG
 from app.models.enums import AgentStatus
 from app.schemas.agent import (
     AgentCreate,
@@ -24,6 +24,7 @@ from app.schemas.agent import (
 )
 from app.services import agents as agents_service
 from app.services import knowledge as knowledge_service
+from app.services import prompt_guard
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 logger = logging.getLogger(__name__)
@@ -38,16 +39,30 @@ async def _get_owned_agent(db: AsyncSession, agent_id: uuid.UUID, user_id: str):
     return agent
 
 
+def creator_content(config: ConfigSnapshot) -> str:
+    """Tout le contenu rédigé par le créateur et servi ensuite aux utilisateurs."""
+    return "\n\n".join(
+        [config.system_prompt, config.description, config.greeting, *config.examples]
+    )
+
+
 async def _validate_config(
-    db: AsyncSession, user_id: str, config: ConfigSnapshot, status: AgentStatus
+    db: AsyncSession, user_id: str, config: ConfigSnapshot, *, route: str
 ) -> None:
     """Server-side checks the wizard's client-side validation can't be trusted for."""
     if not await knowledge_service.all_owned_by(db, config.knowledge_ids, user_id):
         raise HTTPException(status_code=422, detail="invalid_knowledge_ids")
-    if status in (AgentStatus.published, AgentStatus.submitted):
-        blocked, reason = validate_system_prompt(config.system_prompt)
-        if blocked:
-            raise HTTPException(status_code=422, detail=reason)
+    # Garde anti-chaîne d'approvisionnement, quel que soit le statut (brouillon
+    # compris) : un créateur ne doit pas pouvoir enregistrer un agent qui embarque
+    # un keylogger ou une consigne d'injection.
+    await prompt_guard.check_input(
+        db,
+        route=route,
+        text=creator_content(config),
+        role="system",
+        block_message=BLOCK_MESSAGE_AGENT_CONFIG,
+        user_id=user_id,
+    )
 
 
 def _to_detail(agent) -> AgentDetail:
@@ -71,7 +86,7 @@ async def create_agent(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_current_user_id),
 ):
-    await _validate_config(db, user_id, payload.config, payload.status)
+    await _validate_config(db, user_id, payload.config, route="agents.create")
     agent = await agents_service.create_agent(db, user_id, payload)
     return _to_detail(agent)
 
@@ -94,7 +109,7 @@ async def update_agent(
     user_id: str = Depends(get_current_user_id),
 ):
     agent = await _get_owned_agent(db, agent_id, user_id)
-    await _validate_config(db, user_id, payload.config, payload.status or agent.status)
+    await _validate_config(db, user_id, payload.config, route="agents.update")
     agent = await agents_service.update_agent(db, agent, payload)
     return _to_detail(agent)
 
@@ -130,11 +145,9 @@ async def submit_agent(
     user_id: str = Depends(get_current_user_id),
 ):
     agent = await _get_owned_agent(db, agent_id, user_id)
+    # Un agent enregistré avant la garde peut porter un prompt hostile : on recontrôle.
     await _validate_config(
-        db,
-        user_id,
-        agents_service.current_config(agent),
-        AgentStatus.submitted,
+        db, user_id, agents_service.current_config(agent), route="agents.submit"
     )
     agent = await agents_service.submit_agent(db, agent)
     return _to_detail(agent)
@@ -154,14 +167,25 @@ async def chat_with_agent(
     default_model = get_settings().llm_default_model
     primary_model = config.model_id or agent.model_ref or default_model
     client = LlmClient()
-    try:
-        reply = await run_agent_chat_with_model_fallback(
+
+    async def run(hardened: ConfigSnapshot) -> str:
+        return await run_agent_chat_with_model_fallback(
             client,
-            config,
+            hardened,
             history=payload.messages,
             temperature=config.temperature,
             primary_model=primary_model,
             default_model=default_model,
+        )
+
+    try:
+        reply = await prompt_guard.guarded_agent_chat(
+            db,
+            route="agents.chat",
+            user_id=user_id,
+            config=config,
+            history=payload.messages,
+            run=run,
         )
     except LlmModelResolutionError as exc:
         raise HTTPException(status_code=502, detail="llm_unavailable") from exc

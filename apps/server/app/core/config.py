@@ -59,6 +59,8 @@ class Settings(BaseSettings):
     # Modèles des assistants d'écriture du wizard (distincts du modèle de l'agent).
     llm_assist_model: str
     llm_onboarding_model: str
+    # Modèle du LLM-juge de la garde anti-prompt-injection ; vide = llm_assist_model.
+    llm_guard_judge_model: str = ""
 
     # Requêtes LLM par minute et par utilisateur (0 = pas de limite).
     rate_limit_per_minute: int = 30
