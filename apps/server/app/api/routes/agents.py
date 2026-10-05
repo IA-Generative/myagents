@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user_id, limit_llm_user
 from app.core.config import get_settings
 from app.db.session import get_db
-from app.llm import agent_runtime
 from app.llm.client import LlmClient
 from app.llm.fallback import LlmModelResolutionError, run_agent_chat_with_model_fallback
 from app.llm.guard import validate_system_prompt
@@ -157,7 +156,9 @@ async def chat_with_agent(
     client = LlmClient()
     try:
         reply = await run_agent_chat_with_model_fallback(
-            client, config, history=payload.messages,
+            client,
+            config,
+            history=payload.messages,
             temperature=config.temperature,
             primary_model=primary_model,
             default_model=default_model,

@@ -38,7 +38,13 @@ logger = logging.getLogger(__name__)
 def _llm_error_response() -> JSONResponse:
     return JSONResponse(
         status_code=502,
-        content={"error": {"message": "llm_unavailable", "type": "api_error", "code": "llm_unavailable"}},
+        content={
+            "error": {
+                "message": "llm_unavailable",
+                "type": "api_error",
+                "code": "llm_unavailable",
+            }
+        },
     )
 
 
@@ -124,7 +130,9 @@ async def chat_completions(
             default_model=default_model,
         )
     except LlmModelResolutionError as exc:
-        logger.error("chat/completions: echec LLM (agent=%s): %s", agent_id, exc.original)
+        logger.error(
+            "chat/completions: echec LLM (agent=%s): %s", agent_id, exc.original
+        )
         return _llm_error_response()
 
     if payload.stream:
