@@ -14,8 +14,8 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.logging import setup_logging
 from app.core.config import get_settings
+from app.core.logging import setup_logging
 from app.db.session import SessionLocal
 from app.models.agent import Agent, AgentVersion
 from app.models.enums import AgentStatus, Visibility
