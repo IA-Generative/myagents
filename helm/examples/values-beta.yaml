@@ -13,7 +13,7 @@
 app:
   # -- Reduced replicas for beta
   replicaCount: 1
-  
+
   # -- Resource allocation for beta
   resources:
     requests:
@@ -22,19 +22,19 @@ app:
     limits:
       memory: "512Mi"
       cpu: "500m"
-  
+
   # -- Autoscaling disabled in beta
   autoscaling:
     enabled: false
-  
+
   # -- Pod Disruption Budget disabled in beta
   pdb:
     enabled: false
-  
+
   # -- Optional ingress for beta
   ingress:
     enabled: false
-  
+
   # -- Beta environment variables
   # These MUST be set in the private values file
   env: {}
@@ -44,7 +44,7 @@ app:
     # LLM_DEFAULT_MODEL: "gpt-4"
     # LLM_EMBEDDING_MODEL: "text-embedding-3-large"
     # CORS_ORIGINS: '["https://beta.mes-agents.example.com"]'
-  
+
   # -- Beta secrets from Vault
   envSecret: {}
     # LLM_API_KEY:
@@ -61,22 +61,22 @@ app:
 # =============================================================================
 postgres:
   # -- Beta database user
-  username: "mesagents_beta"
-  database: "mesagents_beta"
-  
-  # -- Password MUST be empty - use existingSecret instead
-  password: ""
-  
-  # -- Reference the beta PostgreSQL secret from Vault
-  existingSecret: "postgres-secret"
-  existingSecretKey: "password"
-  
+  auth:
+    username: "mesagents_beta"
+    database: "mesagents_beta"
+    # -- Password MUST be empty - use existingSecret instead
+    password: ""
+    # -- Reference the beta PostgreSQL secret from Vault
+    existingSecret: "postgres-secret"
+    secretKeys:
+      adminPasswordKey: "password"
+
   # -- Beta storage (minimal)
   persistence:
     enabled: true
     size: 1Gi
     storageClass: ""
-  
+
   # -- Beta resource allocation for PostgreSQL
   resources:
     requests:
@@ -92,14 +92,14 @@ postgres:
 vaultSecrets:
   # -- Enable secret synchronization from Vault
   enabled: true
-  
+
   # -- Vault KV mount
   mount: "kv"
-  
+
   # -- Vault base path for beta environment
   # Set to your beta path in Vault (e.g., "myagents/beta")
   basePath: "myagents/beta"
-  
+
   # -- Secrets to synchronize from Vault
   items:
     # -- Application secrets
@@ -110,7 +110,7 @@ vaultSecrets:
       rolloutRestartTargets:
         - kind: Deployment
           name: mes-agents
-    
+
     # -- PostgreSQL secrets
     - subPath: "postgres"
       destination:
