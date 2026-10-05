@@ -6,10 +6,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import get_settings
 from app.models.agent import Agent, AgentVersion
 from app.models.enums import AgentStatus, Visibility
 from app.schemas.agent import AgentCreate, AgentListItem, AgentUpdate, ConfigSnapshot
-from app.core.config import get_settings
 
 
 def _with_versions(stmt):

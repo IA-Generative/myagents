@@ -18,12 +18,15 @@ from app.llm.agent_runtime import arun_agent_chat
 from app.llm.client import LlmModelNotFoundError, LlmParseError, LlmUnavailableError
 from app.schemas.agent import ChatMessage, ConfigSnapshot
 
+if TYPE_CHECKING:
+    from app.llm.client import LlmClient
+
 logger = logging.getLogger(__name__)
 
 
 class LlmModelResolutionError(Exception):
     """Raised when all model resolution attempts (primary + fallback) fail.
-    
+
     This exception wraps the underlying LLM error (LlmModelNotFoundError,
     LlmUnavailableError, or LlmParseError) that occurred during fallback.
     """
@@ -34,7 +37,7 @@ class LlmModelResolutionError(Exception):
 
 
 async def run_agent_chat_with_model_fallback(
-    client: "LlmClient",  # type: ignore[name-defined]
+    client: LlmClient,  # type: ignore[name-defined]
     config: ConfigSnapshot,
     history: list[ChatMessage],
     temperature: float,
@@ -100,6 +103,8 @@ async def run_agent_chat_with_model_fallback(
         except (LlmUnavailableError, LlmParseError) as exc2:
             logger.error(
                 "echec appel LLM: fallback sur '%s' echoué (model=%s): %s",
-                default_model, primary_model, exc2,
+                default_model,
+                primary_model,
+                exc2,
             )
             raise LlmModelResolutionError(exc2) from exc2
