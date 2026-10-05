@@ -262,6 +262,28 @@ async def test_logout_ends_session_and_returns_keycloak_logout_url(client, keycl
     assert (await client.get("/api/auth/me")).status_code == 401
 
 
+async def test_deconnexion_link_ends_session_and_redirects_to_keycloak(
+    client, keycloak
+):
+    """La déconnexion du menu commun est un simple lien GET /deconnexion."""
+    await _authenticate(client, keycloak)
+
+    res = await client.get("/deconnexion")
+
+    assert res.status_code == 302
+    logout = urlsplit(res.headers["location"])
+    assert logout.path.endswith("/protocol/openid-connect/logout")
+    assert "id_token_hint" in parse_qs(logout.query)
+    assert (await client.get("/api/auth/me")).status_code == 401
+
+
+async def test_deconnexion_without_session_still_reaches_keycloak(client):
+    res = await client.get("/deconnexion")
+
+    assert res.status_code == 302
+    assert "/protocol/openid-connect/logout" in res.headers["location"]
+
+
 async def _backdate(session_factory, **fields):
     async with session_factory() as db:
         row = (await db.execute(select(AuthSession))).scalar_one()
