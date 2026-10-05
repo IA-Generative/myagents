@@ -2,6 +2,8 @@ name: CI
 
 on:
   pull_request:
+    # labeled : poser `beta-preview` construit l'image pr-<n> que déploie l'Argo CD d'internal-gw.
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
 
 jobs:
   lint-commits:
@@ -34,7 +36,7 @@ jobs:
   test-server:
     runs-on: ubuntu-24.04
     needs: path-filter
-    if: ${{ needs.path-filter.outputs.server == 'true' }}
+    if: ${{ needs.path-filter.outputs.server == 'true' || contains(github.event.pull_request.labels.*.name, 'beta-preview') }}
     permissions:
       contents: read
     defaults:
@@ -60,7 +62,7 @@ jobs:
   test-web:
     runs-on: ubuntu-24.04
     needs: path-filter
-    if: ${{ needs.path-filter.outputs.web == 'true' }}
+    if: ${{ needs.path-filter.outputs.web == 'true' || contains(github.event.pull_request.labels.*.name, 'beta-preview') }}
     permissions:
       contents: read
     defaults:
@@ -80,7 +82,8 @@ jobs:
   build-docker:
     uses: dnum-mi/fabnum-cicd/.github/workflows/build-docker.yml@v0
     needs: path-filter
-    if: ${{ needs.path-filter.outputs.server == 'true' || needs.path-filter.outputs.web == 'true' }}
+    # Une PR beta-preview reconstruit toujours son image : la preview la tire à chaque commit.
+    if: ${{ needs.path-filter.outputs.server == 'true' || needs.path-filter.outputs.web == 'true' || contains(github.event.pull_request.labels.*.name, 'beta-preview') }}
     permissions:
       contents: read
       packages: write
