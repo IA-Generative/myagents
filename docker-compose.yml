@@ -54,6 +54,15 @@ services:
       # Origine du front vue par le navigateur (redirect_uri, cookie, contrôle d'Origin) ; vide =
       # https://<WEB_PORT>.<CODE_SERVER_DOMAIN> si le domaine code-server est défini, sinon localhost.
       WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:-}
+      # --- Endpoints LLM compatibles OpenAI (Scaleway, OpenWebUI, Ollama, OpenAI...) -----------
+      # Source de vérité pour le dev local. Variables obligatoires : surcharger via .env ou env vars.
+      # En K8s : Vault fournit les valeurs. Aucun default Python dans config.py.
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://localhost:11434/v1}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LLM_DEFAULT_MODEL: ${LLM_DEFAULT_MODEL:-gpt-oss-120b}
+      LLM_EMBEDDING_MODEL: ${LLM_EMBEDDING_MODEL:-nomic-embed-text}
+      LLM_ASSIST_MODEL: ${LLM_ASSIST_MODEL:-gpt-oss-120b}
+      LLM_ONBOARDING_MODEL: ${LLM_ONBOARDING_MODEL:-mistral-small-3.2-24b-instruct-2506}
     volumes:
       - ./apps/server:/app
     ports:
