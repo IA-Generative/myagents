@@ -63,6 +63,8 @@ services:
       LLM_EMBEDDING_MODEL: ${LLM_EMBEDDING_MODEL:-nomic-embed-text}
       LLM_ASSIST_MODEL: ${LLM_ASSIST_MODEL:-gpt-oss-120b}
       LLM_ONBOARDING_MODEL: ${LLM_ONBOARDING_MODEL:-mistral-small-3.2-24b-instruct-2506}
+      # LLM-juge de la garde anti-prompt-injection (fail-closed) ; vide = LLM_ASSIST_MODEL.
+      LLM_GUARD_JUDGE_MODEL: ${LLM_GUARD_JUDGE_MODEL:-}
     volumes:
       - ./apps/server:/app
     ports:

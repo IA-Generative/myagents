@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import (
@@ -28,6 +28,7 @@ from app.api.routes import (
 from app.core.config import get_settings
 from app.core.csp import CSP_EXEMPT_PATHS, build_csp
 from app.core.logging import setup_logging
+from app.services.prompt_guard import GuardBlockedError
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -131,6 +132,18 @@ async def security_headers(request: Request, call_next):
             "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
         )
     return response
+
+
+@app.exception_handler(GuardBlockedError)
+async def guard_blocked(_: Request, exc: GuardBlockedError) -> JSONResponse:
+    """Refus de la garde : code stable (`error`) + message sobre en français.
+
+    `detail` reprend le message pour le front, qui affiche ce champ.
+    """
+    return JSONResponse(
+        status_code=422,
+        content={"error": exc.code, "message": exc.message, "detail": exc.message},
+    )
 
 
 @app.middleware("http")
