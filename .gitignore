@@ -56,7 +56,7 @@ test-results/
 # --- Rapports red-team ---
 # Le harness écrit dans private/redteam-reports/ (hors git) par défaut.
 # Garde-fou si REDTEAM_OUT est repointé sur l'ancien emplacement :
-tests/redteam/reports/
+**/tests/redteam/reports/
 
 # --- IDE / outils agents ---
 .vscode/
@@ -78,7 +78,7 @@ Icon?
 __MACOSX/
 
 # --- Playwright e2e (session + rapports locaux) ---
-tests/e2e/.auth/
+**/tests/e2e/.auth/
 tests/e2e/.report/
 playwright-report/
 
