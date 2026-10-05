@@ -23,6 +23,8 @@ from app.db.session import get_db
 from app.services import auth_sessions
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+# Routes hors /api : liens de navigation (pas d'appel XHR), comme la déconnexion du menu commun.
+racine = APIRouter(tags=["auth"])
 logger = logging.getLogger(__name__)
 
 _FLOW_COOKIE = "myagents_oidc_flow"
@@ -172,5 +174,21 @@ async def logout(request: Request, db: AsyncSession = Depends(get_db)):
     id_token = await auth_sessions.end_session(db, raw) if raw else ""
     url = oidc_client.logout_url(id_token) if get_settings().oidc_enabled else "/"
     response = JSONResponse({"logout_url": url})
+    response.delete_cookie(auth_sessions.SESSION_COOKIE, path="/")
+    return response
+
+
+@racine.get("/deconnexion")
+async def deconnexion(request: Request, db: AsyncSession = Depends(get_db)):
+    """Déconnexion par simple lien : celle du menu commun de la bêta (`sortie` de sa table APPS).
+
+    Supprime la session puis renvoie vers la déconnexion Keycloak, qui revient à l'accueil.
+    Sans contrôle CSRF : un lien ne porte pas d'en-tête, et le pire qu'un tiers obtienne est
+    de déconnecter quelqu'un — même compromis que la route /deconnexion de l'ancienne app.
+    """
+    raw = request.cookies.get(auth_sessions.SESSION_COOKIE)
+    id_token = await auth_sessions.end_session(db, raw) if raw else ""
+    url = oidc_client.logout_url(id_token) if get_settings().oidc_enabled else "/"
+    response = RedirectResponse(url, status_code=302)
     response.delete_cookie(auth_sessions.SESSION_COOKIE, path="/")
     return response

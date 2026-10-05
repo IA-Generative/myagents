@@ -175,6 +175,9 @@ for router in (
 ):
     app.include_router(router, prefix="/api")
 
+# Liens de navigation hors /api (déconnexion du menu commun) : avant le catch-all de la SPA.
+app.include_router(auth.racine)
+
 # OpenAI-compatible surface for external callers (Open WebUI connection): no /api prefix,
 # Base URL in Open WebUI is the plain OpenAI convention https://<host>/v1.
 app.include_router(openai_compat.router, prefix="/v1")
