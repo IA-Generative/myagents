@@ -17,8 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import limit_llm_openwebui, require_openwebui_key
 from app.core.config import get_settings
 from app.db.session import get_db
-from app.llm import agent_runtime
-from app.llm.client import LlmClient, LlmModelNotFoundError, LlmParseError, LlmUnavailableError
+from app.llm.client import LlmClient
+from app.llm.fallback import LlmModelResolutionError, run_agent_chat_with_model_fallback
 from app.schemas.agent import ChatMessage
 from app.schemas.openai_compat import (
     OpenAIChatCompletionChoice,
@@ -115,32 +115,16 @@ async def chat_completions(
     primary_model = config.model_id or agent.model_ref or default_model
     client = LlmClient()
     try:
-        reply = await agent_runtime.arun_agent_chat(
+        reply = await run_agent_chat_with_model_fallback(
             client,
             config,
             history=payload.messages,
-            model=primary_model,
             temperature=config.temperature,
+            primary_model=primary_model,
+            default_model=default_model,
         )
-    except LlmModelNotFoundError as exc:
-        if primary_model == default_model:
-            return _llm_error_response()
-        logger.warning(
-            "modèle '%s' introuvable, fallback sur '%s'", primary_model, default_model
-        )
-        try:
-            reply = await agent_runtime.arun_agent_chat(
-                client,
-                config,
-                history=payload.messages,
-                model=default_model,
-                temperature=config.temperature,
-            )
-        except (LlmUnavailableError, LlmParseError) as exc2:
-            logger.error("chat/completions: fallback LLM échoué (agent=%s): %s", agent_id, exc2)
-            return _llm_error_response()
-    except (LlmUnavailableError, LlmParseError) as exc:
-        logger.error("chat/completions: échec LLM (agent=%s): %s", agent_id, exc)
+    except LlmModelResolutionError as exc:
+        logger.error("chat/completions: echec LLM (agent=%s): %s", agent_id, exc.original)
         return _llm_error_response()
 
     if payload.stream:
