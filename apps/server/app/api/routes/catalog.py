@@ -9,8 +9,15 @@ from app.api.deps import get_current_user_id, limit_llm_user
 from app.db.session import get_db
 from app.llm import agent_runtime
 from app.llm.client import LlmClient, LlmUnavailableError
-from app.schemas.agent import AgentDetail, AgentListItem, ChatRequest, ChatResponse
+from app.schemas.agent import (
+    AgentDetail,
+    AgentListItem,
+    ChatRequest,
+    ChatResponse,
+    ConfigSnapshot,
+)
 from app.services import agents as agents_service
+from app.services import prompt_guard
 
 router = APIRouter(
     prefix="/catalog", tags=["catalog"], dependencies=[Depends(get_current_user_id)]
@@ -46,19 +53,30 @@ async def chat_with_catalog_agent(
     agent_id: uuid.UUID,
     payload: ChatRequest,
     db: AsyncSession = Depends(get_db),
-    _user_id: str = Depends(limit_llm_user),
+    user_id: str = Depends(limit_llm_user),
 ):
     """Try out any published/community/ministry agent — no ownership required."""
     agent = await _get_public_agent(db, agent_id)
     config = agents_service.current_config(agent)
     client = LlmClient()
-    try:
-        reply = await agent_runtime.arun_agent_chat(
+
+    async def run(hardened: ConfigSnapshot) -> str:
+        return await agent_runtime.arun_agent_chat(
             client,
-            config,
+            hardened,
             history=payload.messages,
             model=config.model_id or agent.model_ref,
             temperature=config.temperature,
+        )
+
+    try:
+        reply = await prompt_guard.guarded_agent_chat(
+            db,
+            route="catalog.chat",
+            user_id=user_id,
+            config=config,
+            history=payload.messages,
+            run=run,
         )
     except LlmUnavailableError as exc:
         raise HTTPException(status_code=502, detail="llm_unavailable") from exc

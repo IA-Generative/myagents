@@ -6,11 +6,12 @@ Open WebUI is the plain OpenAI convention: https://<host>/v1.
 
 import json
 import logging
+import re
 import time
 import uuid
 from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,7 +20,7 @@ from app.core.config import get_settings
 from app.db.session import get_db
 from app.llm.client import LlmClient
 from app.llm.fallback import LlmModelResolutionError, run_agent_chat_with_model_fallback
-from app.schemas.agent import ChatMessage
+from app.schemas.agent import ChatMessage, ConfigSnapshot
 from app.schemas.openai_compat import (
     OpenAIChatCompletionChoice,
     OpenAIChatCompletionRequest,
@@ -28,6 +29,7 @@ from app.schemas.openai_compat import (
     OpenAIModelList,
 )
 from app.services import agents as agents_service
+from app.services import prompt_guard
 
 router = APIRouter(
     tags=["openai-compat"], dependencies=[Depends(require_openwebui_key)]
@@ -46,6 +48,34 @@ def _llm_error_response() -> JSONResponse:
             }
         },
     )
+
+
+def _guard_error_response(exc: prompt_guard.GuardBlockedError) -> JSONResponse:
+    # Format d'erreur OpenAI : Open WebUI affiche `error.message` à l'utilisateur.
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": {
+                "message": exc.message,
+                "type": "invalid_request_error",
+                "code": exc.code,
+            }
+        },
+    )
+
+
+_OWUI_USER_ID_RE = re.compile(r"^[A-Za-z0-9._:@-]{1,200}$")
+
+
+def _audit_user_id(owui_user_id: str | None) -> str:
+    """Identité pour le journal de la garde : l'utilisateur relayé par Open WebUI s'il est connu.
+
+    L'en-tête n'est envoyé que si Open WebUI transmet l'identité
+    (ENABLE_FORWARD_USER_INFO_HEADERS) ; l'appel est déjà authentifié par la clé partagée.
+    """
+    if owui_user_id and _OWUI_USER_ID_RE.match(owui_user_id):
+        return f"openwebui:{owui_user_id}"
+    return "openwebui"
 
 
 def _model_not_found(model: str) -> JSONResponse:
@@ -105,7 +135,9 @@ async def _sse_full_reply(model: str, reply: str) -> AsyncIterator[str]:
 
 @router.post("/chat/completions", dependencies=[Depends(limit_llm_openwebui)])
 async def chat_completions(
-    payload: OpenAIChatCompletionRequest, db: AsyncSession = Depends(get_db)
+    payload: OpenAIChatCompletionRequest,
+    db: AsyncSession = Depends(get_db),
+    x_openwebui_user_id: str | None = Header(default=None),
 ):
     try:
         agent_id = uuid.UUID(payload.model)
@@ -120,15 +152,30 @@ async def chat_completions(
     default_model = get_settings().llm_default_model
     primary_model = config.model_id or agent.model_ref or default_model
     client = LlmClient()
-    try:
-        reply = await run_agent_chat_with_model_fallback(
+
+    async def run(hardened: ConfigSnapshot) -> str:
+        return await run_agent_chat_with_model_fallback(
             client,
-            config,
+            hardened,
             history=payload.messages,
             temperature=config.temperature,
             primary_model=primary_model,
             default_model=default_model,
         )
+
+    # La réponse complète est contrôlée (sortie + juge) avant toute émission, y compris
+    # en stream : un contenu bloqué n'est jamais envoyé, même partiellement.
+    try:
+        reply = await prompt_guard.guarded_agent_chat(
+            db,
+            route="openai.chat_completions",
+            user_id=_audit_user_id(x_openwebui_user_id),
+            config=config,
+            history=payload.messages,
+            run=run,
+        )
+    except prompt_guard.GuardBlockedError as exc:
+        return _guard_error_response(exc)
     except LlmModelResolutionError as exc:
         logger.error(
             "chat/completions: echec LLM (agent=%s): %s", agent_id, exc.original
