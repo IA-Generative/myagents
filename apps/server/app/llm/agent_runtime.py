@@ -15,7 +15,12 @@ import openai
 from langchain.agents import create_agent
 
 from app.llm.chains import history_messages, preview
-from app.llm.client import LlmClient, LlmModelNotFoundError, LlmParseError, LlmUnavailableError
+from app.llm.client import (
+    LlmClient,
+    LlmModelNotFoundError,
+    LlmParseError,
+    LlmUnavailableError,
+)
 from app.llm.tools import resolve_tools
 from app.schemas.agent import ChatMessage, ConfigSnapshot
 
@@ -27,7 +32,13 @@ def _is_model_not_found(exc: Exception) -> bool:
     if isinstance(exc, openai.NotFoundError):
         return True
     if isinstance(exc, openai.BadRequestError):
-        return "model" in msg or "no service" in msg or "unsupported model" in msg or "not available" in msg or "unknown model" in msg
+        return (
+            "model" in msg
+            or "no service" in msg
+            or "unsupported model" in msg
+            or "not available" in msg
+            or "unknown model" in msg
+        )
     return False
 
 
@@ -57,7 +68,10 @@ async def arun_agent_chat(
         if _is_model_not_found(exc):
             logger.warning(
                 "[%s] modèle introuvable après %.0fms (model=%s): %s",
-                label, duration_ms, model, preview(exc),
+                label,
+                duration_ms,
+                model,
+                preview(exc),
             )
             raise LlmModelNotFoundError(str(exc)) from exc
         logger.error(
