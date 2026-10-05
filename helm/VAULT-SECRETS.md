@@ -28,50 +28,88 @@ kv/
 
 Ces secrets sont lus par le serveur FastAPI (`apps/server/app/core/config.py`). Le Secret `myagents-secrets` est injecté en entier dans le pod via `app.envFromSecrets` : toute clé Vault devient une variable d'environnement du même nom.
 
-### Clés requises
+### Mapping variables d'env ↔ config.py
 
-- **`DATABASE_URL`** : URL PostgreSQL (`postgresql://...`, convertie en `postgresql+asyncpg://` par le serveur)
-- **`OIDC_ISSUER`** : `https://<keycloak>/realms/myagents` (claim `iss` exact des tokens)
-- **`OIDC_CLIENT_SECRET`** : secret du client Keycloak `myagents-server` (onglet Credentials)
-- **`OPENAI_API_KEY`** : clé de l'endpoint LLM compatible OpenAI (Scaleway, OpenWebUI, etc.)
-- **`OPENAI_BASE_URL`** et **`LLM_DEFAULT_MODEL`** : endpoint et modèle LLM (non secrets, gardés dans Vault)
-- **`OPENWEBUI_API_KEY`** : secret partagé vérifié sur `/v1/*` ; à reporter dans la connexion OpenWebUI vers le serveur
-- **`SESSION_SECRET`** : clé de chiffrement des jetons en base (repli sur `OIDC_CLIENT_SECRET` si absente)
-- **`PRESENTATION_LINK_SECRET`** : signature des liens de téléchargement (repli sur `OPENWEBUI_API_KEY` si absente)
+Les variables d'env Kubernetes (synced depuis Vault) correspondent exactement aux champs Pydantic de `apps/server/app/core/config.py`. **Aucun default** dans `config.py` : Vault DOIT fournir une valeur.
 
-### Exemple de création (Vault CLI)
+| Variable d'env | Champ Pydantic | Type | Obligatoire | Exemple | Notes |
+|---|---|---|---|---|---|
+| `OPENAI_BASE_URL` | `openai_base_url` | str | ✓ | `https://api.scaleway.com/llm/v1` ou `http://localhost:11434/v1` | Endpoint LLM compatible OpenAI |
+| `OPENAI_API_KEY` | `openai_api_key` | str | ✓ | `sk-xxx` ou `""` (vide si auth non requise) | Clé API du provider LLM |
+| `LLM_DEFAULT_MODEL` | `llm_default_model` | str | ✓ | `gpt-4`, `gpt-oss-120b`, `mistral-7b` | Modèle de fallback (aucun default) |
+| `LLM_EMBEDDING_MODEL` | `llm_embedding_model` | str | ✓ | `text-embedding-3-large`, `nomic-embed-text` | Modèle d'embedding pour RAG |
+| `LLM_ASSIST_MODEL` | `llm_assist_model` | str | ✓ | `gpt-4-turbo` | Modèle du wizard de rédaction |
+| `LLM_ONBOARDING_MODEL` | `llm_onboarding_model` | str | ✓ | `mistral-small-3.2-24b-instruct-2506` | Modèle de l'onboarding |
+| `DATABASE_URL` | `database_url` | str | ✓ | `postgresql://...` | URL PostgreSQL, convertie en `postgresql+asyncpg://` par le serveur |
+| `OIDC_ISSUER` | `oidc_issuer` | str | ✓ | `https://keycloak.example.com/realms/myagents` | Claim `iss` exact des tokens |
+| `OIDC_CLIENT_SECRET` | `oidc_client_secret` | str | ✓ | `xxx` | Secret du client Keycloak `myagents-server` |
+| `OPENWEBUI_API_KEY` | `openwebui_api_key` | str | ✓ | `xxx` | Secret partagé pour `/v1/*` |
+| `SESSION_SECRET` | `session_secret` | str | (optionnel*) | `xxx` | Chiffrement des tokens en base ; fallback = `oidc_client_secret` |
+| `PRESENTATION_LINK_SECRET` | `presentation_link_secret` | str | (optionnel*) | `xxx` | Signature des liens ; fallback = `openwebui_api_key` |
+
+**Remarques** :
+- **Aucun default Python** : Pydantic rejette si une variable obligatoire est absente → le pod échoue au démarrage
+- **En dev local Docker** : Les defaults sont dans `docker-compose.yml` (bloc `environment:`) avec syntaxe `${VAR:-default}`
+- **En K8s** : Vault DOIT fournir toutes les variables obligatoires
+- `SESSION_SECRET` et `PRESENTATION_LINK_SECRET` ont des fallbacks Pydantic mais DOIVENT être fournies en production pour plus de sécurité
+
+### Clés requises en Vault
+
+### Exemple complet de création (Vault CLI)
 
 `vault kv put` écrase le secret entier ; utiliser `vault kv patch` pour ajouter des clés.
 
 ```bash
-vault kv put kv/preview/myagents/app \
-  DATABASE_URL='postgresql://user:pass@host:5432/db' \
+# Production : tous les modèles LLM obligatoires
+vault kv put kv/prod/myagents/app \
+  OPENAI_BASE_URL='https://api.scaleway.com/llm/v1' \
+  OPENAI_API_KEY='sk-xxx' \
+  LLM_DEFAULT_MODEL='gpt-4' \
+  LLM_EMBEDDING_MODEL='text-embedding-3-large' \
+  LLM_ASSIST_MODEL='gpt-4-turbo' \
+  LLM_ONBOARDING_MODEL='mistral-small-3.2-24b-instruct-2506' \
+  DATABASE_URL='postgresql://user:pass@postgres-prod:5432/myagents' \
+  OIDC_ISSUER='https://keycloak.prod.example.com/realms/myagents' \
   OIDC_CLIENT_SECRET='xxx' \
-  OIDC_ISSUER='https://<keycloak>/realms/myagents' \
-  OPENAI_BASE_URL='https://<endpoint-llm>/v1' \
-  LLM_DEFAULT_MODEL='gpt-oss-120b' \
-  OPENAI_API_KEY='xxx' \
+  OPENWEBUI_API_KEY="$(openssl rand -hex 32)" \
+  SESSION_SECRET="$(openssl rand -base64 32)" \
+  PRESENTATION_LINK_SECRET="$(openssl rand -hex 32)"
+
+# Beta/Preview : mêmes variables, valeurs distinctes
+vault kv put kv/beta/myagents/app \
+  OPENAI_BASE_URL='https://api.scaleway.com/llm/v1' \
+  OPENAI_API_KEY='sk-xxx' \
+  LLM_DEFAULT_MODEL='gpt-3.5-turbo' \
+  LLM_EMBEDDING_MODEL='text-embedding-3-large' \
+  LLM_ASSIST_MODEL='gpt-3.5-turbo' \
+  LLM_ONBOARDING_MODEL='mistral-small-3.2-24b-instruct-2506' \
+  DATABASE_URL='postgresql://user:pass@postgres-beta:5432/myagents' \
+  OIDC_ISSUER='https://keycloak.beta.example.com/realms/myagents' \
+  OIDC_CLIENT_SECRET='xxx' \
   OPENWEBUI_API_KEY="$(openssl rand -hex 32)" \
   SESSION_SECRET="$(openssl rand -base64 32)" \
   PRESENTATION_LINK_SECRET="$(openssl rand -hex 32)"
 ```
 
-Même chose pour `kv/prod/myagents/app` et `kv/beta/myagents/app`, avec des valeurs distinctes.
+### Variables non secrètes dans `app.env` (Helm values privées)
 
-### Variables non secrètes (`app.env`, values privées)
+Les variables ci-dessous ne sont **pas stockées dans Vault** et doivent être définies dans les Helm values privées (`common.yaml` ou `values-<env>.yaml`). Elles sont injectées via `app.env` et **priment sur les secrets synced** (`app.env` > `envFromSecrets`).
 
-À ne pas dupliquer dans Vault (`app.env` prime sur `envFrom`). `OIDC_ISSUER`, `OPENAI_BASE_URL` et `LLM_DEFAULT_MODEL` sont déjà dans Vault ci-dessus.
+⚠️ **IMPORTANT** : `OPENAI_BASE_URL`, `OPENAI_API_KEY` et les 4 modèles LLM (`LLM_DEFAULT_MODEL`, `LLM_EMBEDDING_MODEL`, `LLM_ASSIST_MODEL`, `LLM_ONBOARDING_MODEL`) **DOIVENT être dans Vault** (voir tableau de mapping ci-dessus). Ne les redéfinissez dans `app.env` que pour surcharger une valeur Vault en dev/test, jamais pour fournir une valeur par défaut.
 
 ```yaml
-ENVIRONMENT: preview            # "production" impose OIDC_ENABLED=true
+# Obligatoires
+ENVIRONMENT: production         # "production" impose OIDC_ENABLED=true
 OIDC_ENABLED: "true"
-OIDC_INTERNAL_URL: http://<keycloak-svc>:8080/realms/myagents   # optionnel
 OIDC_CLIENT_ID: myagents-server
 OIDC_AUDIENCE: myagents-api     # doit figurer dans le claim aud, ou vide pour désactiver
 QDRANT_URL: http://qdrant:6333
+
+# Optionnels (dérivés automatiquement si non définis)
+OIDC_INTERNAL_URL: http://<keycloak-svc>:8080/realms/myagents   # optionnel, par défaut = OIDC_ISSUER
 ```
 
-`WEB_PUBLIC_URL`, `PUBLIC_BASE_URL` et `CORS_ORIGINS` sont dérivés automatiquement du premier host de `app.ingress.hosts` (`https://` si `app.ingress.tls` est défini). Ils ne sont à définir dans `app.env` que pour surcharger.
+**Derivation automatique** : `WEB_PUBLIC_URL`, `PUBLIC_BASE_URL` et `CORS_ORIGINS` sont dérivés du premier host de `app.ingress.hosts` (`https://` si `app.ingress.tls` est défini). Redéfinir dans `app.env` seulement pour surcharger.
 
 ## Client Keycloak
 
