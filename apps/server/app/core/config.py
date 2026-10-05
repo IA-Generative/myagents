@@ -98,6 +98,10 @@ class Settings(BaseSettings):
     # Clé de chiffrement des jetons en base ; vide = repli sur oidc_client_secret.
     session_secret: str = ""
     session_ttl_hours: int = 12
+    # Groupe Keycloak exigé pour entrer (même variable que l'ancienne app). Vide = aucune
+    # restriction. Un nom (« mirai-beta-testeurs ») se compare au nom feuille des groupes du
+    # jeton ; un chemin (« /g/mirai-beta-testeurs ») au chemin complet.
+    oidc_groupe_exige: str = ""
 
     # Vector store used for agent knowledge bases (RAG).
     qdrant_url: str = "http://localhost:6333"

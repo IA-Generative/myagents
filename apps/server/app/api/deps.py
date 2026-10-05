@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import ratelimit
 from app.core.config import get_settings
-from app.core.security import AuthUser, OIDCError
+from app.core.security import AuthUser, OIDCError, has_required_group
 from app.core.security import get_current_user as _get_current_user
 from app.core.session_crypto import SessionCryptoUnavailableError
 from app.db.session import get_db
@@ -43,20 +43,24 @@ async def _authenticate(
     """OIDC activé : Bearer JWT Keycloak (clients non navigateur), sinon cookie de session."""
     if authorization:
         try:
-            return await _get_current_user(authorization)
+            user = await _get_current_user(authorization)
         except OIDCError as exc:
             raise HTTPException(status_code=401, detail=str(exc)) from exc
-
-    raw = request.cookies.get(auth_sessions.SESSION_COOKIE)
-    if not raw:
-        raise HTTPException(status_code=401, detail="missing credentials")
-    check_csrf(request)
-    try:
-        user = await auth_sessions.resolve_session(db, raw)
-    except SessionCryptoUnavailableError as exc:
-        raise HTTPException(status_code=503, detail="session_unavailable") from exc
-    if user is None:
-        raise HTTPException(status_code=401, detail="invalid session")
+    else:
+        raw = request.cookies.get(auth_sessions.SESSION_COOKIE)
+        if not raw:
+            raise HTTPException(status_code=401, detail="missing credentials")
+        check_csrf(request)
+        try:
+            user = await auth_sessions.resolve_session(db, raw)
+        except SessionCryptoUnavailableError as exc:
+            raise HTTPException(status_code=503, detail="session_unavailable") from exc
+        if user is None:
+            raise HTTPException(status_code=401, detail="invalid session")
+    # Contrôlé à chaque requête : les groupes sont relus à chaque rafraîchissement de session,
+    # un retrait du groupe coupe donc l'accès sans attendre la fin de la session.
+    if not has_required_group(user):
+        raise HTTPException(status_code=403, detail="groupe_requis")
     return user
 
 

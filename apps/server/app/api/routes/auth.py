@@ -10,14 +10,14 @@ import logging
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import check_csrf, get_current_user
 from app.core import oidc_client
 from app.core.config import get_settings
-from app.core.security import AuthUser, OIDCError
+from app.core.security import AuthUser, OIDCError, has_required_group
 from app.core.session_crypto import SessionCryptoUnavailableError, seal, unseal
 from app.db.session import get_db
 from app.services import auth_sessions
@@ -85,6 +85,18 @@ async def login(return_to: str | None = None):
     return response
 
 
+def _acces_refuse() -> HTMLResponse:
+    response = HTMLResponse(
+        '<!doctype html><html lang="fr"><meta charset="utf-8">'
+        "<title>Accès réservé</title>"
+        "<p>Mes agents est réservé, pendant la bêta, aux membres d'un groupe d'utilisateurs."
+        " Votre compte n'en fait pas partie.</p></html>",
+        status_code=403,
+    )
+    response.delete_cookie(_FLOW_COOKIE, path=_FLOW_COOKIE_PATH)
+    return response
+
+
 @router.get("/callback")
 async def callback(
     request: Request,
@@ -109,6 +121,13 @@ async def callback(
         user = await asyncio.to_thread(
             oidc_client.user_from_tokens, tokens, flow["nonce"]
         )
+        if not has_required_group(user):
+            # Aucune session créée. On trace le motif sans nommer la personne.
+            logger.warning(
+                "accès refusé : groupe exigé absent du jeton (%d groupe(s) présenté(s))",
+                len(user.groups),
+            )
+            return _acces_refuse()
         raw = await auth_sessions.create_session(db, user, tokens)
     except OIDCError as exc:
         logger.warning("callback OIDC refusé: %s", exc)
