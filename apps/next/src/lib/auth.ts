@@ -10,6 +10,11 @@ import { env } from '@/lib/env';
 // UUID fixe utilisé comme creator_id / user_id côté Prisma (colonnes @db.Uuid).
 export const DEV_USER_ID = '00000000-0000-0000-0000-000000000001';
 
+// Connexion locale sans SSO (tests E2E, poste de dev) : n'importe qui entre sous une identité
+// unique partagée. Jamais en production, et seulement si on la demande explicitement.
+export const AUTH_LOCALE =
+  process.env.AUTH_LOCALE === 'true' && process.env.NODE_ENV !== 'production';
+
 export const authOptions: NextAuthOptions = {
   providers: [
     KeycloakProvider({
@@ -20,13 +25,17 @@ export const authOptions: NextAuthOptions = {
         params: { scope: 'openid profile email roles' },
       },
     }),
-    CredentialsProvider({
-      name: 'dev',
-      credentials: {},
-      async authorize() {
-        return { id: DEV_USER_ID, name: 'Utilisateur local', email: 'dev@localhost' };
-      },
-    }),
+    ...(AUTH_LOCALE
+      ? [
+          CredentialsProvider({
+            name: 'dev',
+            credentials: {},
+            async authorize() {
+              return { id: DEV_USER_ID, name: 'Utilisateur local', email: 'dev@localhost' };
+            },
+          }),
+        ]
+      : []),
   ],
   session: {
     strategy: 'jwt',

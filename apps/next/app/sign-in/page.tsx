@@ -1,8 +1,11 @@
-// Page de connexion — mode standalone (pas de SSO externe).
+// Page de connexion — SSO Keycloak ; connexion locale seulement si AUTH_LOCALE=true hors
+// production (voir src/lib/auth.ts).
 
 'use client';
 
 import { signIn } from 'next-auth/react';
+
+const AUTH_LOCALE = process.env.NEXT_PUBLIC_AUTH_LOCALE === 'true';
 
 export default function SignInPage() {
   return (
@@ -22,10 +25,18 @@ export default function SignInPage() {
           </p>
           <button
             className="fr-btn fr-btn--lg fr-btn--icon-left fr-icon-account-circle-line"
-            onClick={() => signIn('credentials', { callbackUrl: '/agents' })}
+            onClick={() => signIn('keycloak', { callbackUrl: '/agents' })}
           >
-            Continuer
+            Se connecter avec Keycloak
           </button>
+          {AUTH_LOCALE && (
+            <button
+              className="fr-btn fr-btn--secondary fr-btn--lg fr-ml-2w"
+              onClick={() => signIn('credentials', { callbackUrl: '/agents' })}
+            >
+              Continuer sans SSO (local)
+            </button>
+          )}
         </div>
 
         <h2 className="fr-h5">À quoi sert Mes Agents MirAI&nbsp;?</h2>
