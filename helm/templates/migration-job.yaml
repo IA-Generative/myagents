@@ -1,5 +1,8 @@
 {{- if and .Values.enabled .Values.app.migrations.enabled }}
-{{- /* post-* : la base et son secret (sous-chart postgres) doivent exister avant le job. */}}
+{{- /* Helm : post-* (la base et son secret doivent exister avant le job).
+     Argo CD ignore les annotations helm.sh/hook dès qu'il trouve les siennes : hook Sync de
+     vague 1, donc après la base (vague 0) et avant le Deployment (vague 2) — la migration
+     passe avant tout nouveau pod, comme le faisait scripts/deploy-myagents.sh. */}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -9,6 +12,9 @@ metadata:
   annotations:
     helm.sh/hook: post-install,post-upgrade
     helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 spec:
   backoffLimit: {{ .Values.app.migrations.backoffLimit }}
   ttlSecondsAfterFinished: 3600
