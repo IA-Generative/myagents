@@ -1,6 +1,6 @@
 // BFF — "Aide-moi à écrire" (§3.1).
 // Appelle Scaleway Generative APIs directement (via src/lib/scw-llm-client).
-// Modèle : gpt-oss-120b (default, alignement avec DEFAULT_MODELS du socle).
+// Modèle : LLM_DEFAULT_MODEL (variabilisé, voir src/lib/env.ts defaultLlmModel).
 
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';

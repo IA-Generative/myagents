@@ -313,7 +313,11 @@ export function mergeLiveModels(
   return [...curated, ...extras];
 }
 
-export const DEFAULT_MODEL_ID = 'mistral-small-3.2-24b-instruct-2506';
+// Modèle sélectionné par défaut dans le wizard de création d'agent.
+// Variabilisé via NEXT_PUBLIC_LLM_DEFAULT_MODEL (exposé au client car non secret) ;
+// repli sur la valeur historique pour ne pas casser les env sans cette variable.
+export const DEFAULT_MODEL_ID =
+  process.env.NEXT_PUBLIC_LLM_DEFAULT_MODEL ?? 'mistral-small-3.2-24b-instruct-2506';
 
 export const TIER_LABELS: Record<ModelTier, string> = {
   light: 'Léger',

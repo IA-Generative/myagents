@@ -1,5 +1,6 @@
 // BFF — génère une amorce (message d'accueil) + N exemples de prompts
-// à partir du system prompt. Utilise Scaleway Generative APIs avec gpt-oss-120b.
+// à partir du system prompt. Utilise Scaleway Generative APIs.
+// Modèle : LLM_DEFAULT_MODEL (variabilisé, voir src/lib/env.ts defaultLlmModel).
 // La réponse LLM est demandée en JSON strict pour être parseable côté client.
 
 import { NextResponse } from 'next/server';

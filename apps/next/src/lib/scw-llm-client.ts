@@ -7,7 +7,7 @@
 // Pattern  : identique à celui utilisé par OpenWebUI dans owuicore-main
 //            (RAG_OPENAI_API_BASE_URL + RAG_OPENAI_API_KEY).
 
-import { env } from './env';
+import { env, defaultLlmModel } from './env';
 
 export type ChatMessage = {
   role: 'system' | 'user' | 'assistant';
@@ -72,7 +72,7 @@ export async function scwChatCompletions(params: {
       Authorization: `Bearer ${e.SCW_SECRET_KEY_LLM}`,
     },
     body: JSON.stringify({
-      model: params.model ?? e.SCW_LLM_MODEL,
+      model: params.model ?? defaultLlmModel(),
       messages: params.messages,
       temperature: params.temperature ?? 0.7,
       // gpt-oss-120b est un modèle "reasoning" : il génère des tokens de

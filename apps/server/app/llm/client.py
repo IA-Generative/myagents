@@ -40,6 +40,7 @@ class LlmClient:
 
     def chat_model(self, model: str, temperature: float = 0.7) -> ChatOpenAI:
         """LangChain chat model bound to this client's endpoint, ready to compose in a chain."""
+        settings = get_settings()
         logger.debug(
             "création d'un ChatOpenAI (base_url=%s model=%s temperature=%s)",
             self.base_url,
@@ -51,7 +52,7 @@ class LlmClient:
             api_key=self.api_key,
             model=model,
             temperature=temperature,
-            timeout=60,
+            timeout=settings.llm_request_timeout,
             max_retries=0,
         )
 
@@ -62,7 +63,7 @@ class LlmClient:
             base_url=self.base_url,
             api_key=self.api_key,
             model=model or settings.llm_embedding_model,
-            timeout=60,
+            timeout=settings.llm_request_timeout,
             check_embedding_ctx_length=False,
         )
 

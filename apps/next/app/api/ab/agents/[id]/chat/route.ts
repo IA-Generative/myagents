@@ -7,7 +7,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { scwChatCompletions, ScwLlmUnavailableError } from '@/lib/scw-llm-client';
 import { rateLimit, LLM_RATE_LIMIT } from '@/lib/rate-limit';
-import { env } from '@/lib/env';
+import { defaultLlmModel } from '@/lib/env';
 import {
   inspectInput,
   inspectOutput,
@@ -53,7 +53,7 @@ export async function POST(
 
   const snapshot = (agent.versions[0]?.configSnapshot ?? {}) as Record<string, unknown>;
   const systemPrompt = (snapshot.systemPrompt as string) || 'Tu es un assistant.';
-  const modelId = (snapshot.modelId as string) || 'gpt-oss-120b';
+  const modelId = (snapshot.modelId as string) || defaultLlmModel();
   const temperature = (snapshot.temperature as number) || 0.7;
 
   const body = (await req.json().catch(() => ({}))) as {
