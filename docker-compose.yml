@@ -93,8 +93,12 @@ services:
       # Les variables d'env restent la source de vérité (sinon la connexion est figée en base au 1er boot).
       ENABLE_PERSISTENT_CONFIG: "false"
       ENABLE_OPENAI_API: "true"
-      OPENAI_API_BASE_URLS: http://server:8000/v1
-      OPENAI_API_KEYS: ${OPENWEBUI_API_KEY:-}
+      # Deux connexions (séparées par `;`) : les agents du server, puis un LLM direct avec
+      # tool calling natif, requis pour piloter Open Terminal.
+      OPENAI_API_BASE_URLS: http://server:8000/v1;${OPENWEBUI_LLM_BASE_URL:-${OPENAI_BASE_URL:-http://host.docker.internal:11434/v1}}
+      OPENAI_API_KEYS: ${OPENWEBUI_API_KEY:-};${OPENWEBUI_LLM_API_KEY:-${OPENAI_API_KEY:-}}
+      # Terminal global visible par tous les utilisateurs (voir service `open-terminal`).
+      TERMINAL_SERVER_CONNECTIONS: '[{"id":"local","name":"Open Terminal","enabled":true,"url":"http://open-terminal:8000","key":"${OPEN_TERMINAL_API_KEY:-}","auth_type":"bearer","config":{"access_grants":[{"principal_type":"user","principal_id":"*","permission":"read"}]}}]'
       ENABLE_OLLAMA_API: "false"
       # Le transfert HF "Xet" reste bloque derriere un proxy corporate : fallback HTTP classique.
       HF_HUB_DISABLE_XET: "1"
@@ -116,8 +120,8 @@ services:
       # Le proxy corporate Orion intercepte les appels HTTP internes (keycloak, server).
       # On bypass le proxy pour les hôtes du réseau Docker afin que OWUI joigne
       # directement Keycloak et le server sans transiter par Orion.
-      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,host.docker.internal,keycloak,server,openwebui,postgres,qdrant}
-      no_proxy: ${NO_PROXY:-localhost,127.0.0.1,host.docker.internal,keycloak,server,openwebui,postgres,qdrant}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,host.docker.internal,keycloak,server,openwebui,postgres,qdrant,open-terminal}
+      no_proxy: ${NO_PROXY:-localhost,127.0.0.1,host.docker.internal,keycloak,server,openwebui,postgres,qdrant,open-terminal}
       # authlib (utilisé par OWUI) n'ajoute PAS automatiquement le suffixe
       # /.well-known/openid-configuration à OPENID_PROVIDER_URL. Il faut pointer
       # directement sur l'endpoint de découverte OIDC.
@@ -145,6 +149,30 @@ services:
         condition: service_healthy
       keycloak:
         condition: service_healthy
+      open-terminal:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Open Terminal (profil `owui`) : shell, fichiers et preview pilotés par le LLM depuis OpenWebUI.
+  # Exécute du code arbitraire généré par un LLM : dev local uniquement, aucun port hôte par défaut.
+  open-terminal:
+    profiles: [owui]
+    # Image officielle + assets DSFR et CLI `dsfr-doc` (docker/open-terminal).
+    build:
+      context: docker/open-terminal
+      args:
+        OPEN_TERMINAL_IMAGE_TAG: ${OPEN_TERMINAL_IMAGE_TAG:-latest}
+    image: myagents/open-terminal-dsfr:dev
+    environment:
+      OPEN_TERMINAL_API_KEY: ${OPEN_TERMINAL_API_KEY:-}
+    volumes:
+      - open-terminal-data:/home/user
+    healthcheck:
+      test: ["CMD-SHELL", "curl --silent --fail --noproxy '*' http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
     restart: unless-stopped
 
   # Keycloak local (profils `sso` et `owui`). Realm `myagents` importé au démarrage
@@ -195,4 +223,5 @@ volumes:
   postgres-data:
   qdrant-data:
   openwebui-data:
+  open-terminal-data:
   keycloak-data:
