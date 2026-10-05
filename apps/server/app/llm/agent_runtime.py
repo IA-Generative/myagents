@@ -24,10 +24,6 @@ logger = logging.getLogger(__name__)
 
 def _is_model_not_found(exc: Exception) -> bool:
     msg = str(exc).lower()
-    logger.info(
-        "[agent_runtime] _is_model_not_found: exc_type=%s exc_msg=%s",
-        type(exc).__name__, msg,
-    )
     if isinstance(exc, openai.NotFoundError):
         return True
     if isinstance(exc, openai.BadRequestError):
