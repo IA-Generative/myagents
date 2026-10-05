@@ -106,7 +106,7 @@ htmlcov/
 
 # --- Env : ignorer tout sauf les exemples ---
 .env.*
-!.env.example
+!.env.*.example
 
 # --- Éditeurs / outils ---
 *.swo
