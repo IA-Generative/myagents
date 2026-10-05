@@ -24,6 +24,10 @@ class LlmParseError(RuntimeError):
     """The LLM replied but its output didn't match the expected structured schema."""
 
 
+class LlmModelNotFoundError(LlmUnavailableError):
+    """The LLM endpoint rejected the request because the model name is unknown."""
+
+
 class LlmClient:
     def __init__(self, base_url: str | None = None, api_key: str | None = None) -> None:
         settings = get_settings()
