@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.models.agent import Agent, AgentVersion
 from app.models.enums import AgentStatus, Visibility
 from app.schemas.agent import AgentCreate, AgentListItem, AgentUpdate, ConfigSnapshot
+from app.core.config import get_settings
 
 
 def _with_versions(stmt):
@@ -20,7 +21,7 @@ async def create_agent(
 ) -> Agent:
     agent = Agent(
         creator_id=creator_id,
-        model_ref=payload.config.model_id or "gpt-oss-120b",
+        model_ref=payload.config.model_id or get_settings().llm_default_model,
         visibility=payload.visibility,
         status=payload.status,
         category=payload.category,
