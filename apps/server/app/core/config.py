@@ -22,6 +22,14 @@ def _repo_root_env_file() -> str | None:
 _ENV_FILES = tuple(p for p in (_repo_root_env_file(), ".env") if p)
 
 
+def async_database_url(url: str) -> str:
+    """Réécrit une URL "postgresql://" en "postgresql+asyncpg://" (seul driver installé)."""
+    for scheme in ("postgresql://", "postgres://"):
+        if url.startswith(scheme):
+            return "postgresql+asyncpg://" + url.removeprefix(scheme)
+    return url
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=_ENV_FILES or ".env", extra="ignore", hide_input_in_errors=True
@@ -37,10 +45,7 @@ class Settings(BaseSettings):
     @classmethod
     def _force_async_driver(cls, url: str) -> str:
         # Le secret du sous-chart helm postgres fournit "postgresql://" (driver sync non installé).
-        for scheme in ("postgresql://", "postgres://"):
-            if url.startswith(scheme):
-                return "postgresql+asyncpg://" + url.removeprefix(scheme)
-        return url
+        return async_database_url(url)
 
     cors_origins: list[str] = ["http://localhost:5173"]
 
