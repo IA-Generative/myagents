@@ -136,6 +136,20 @@ def _extract_user(claims: dict[str, Any]) -> AuthUser:
     )
 
 
+def has_required_group(user: AuthUser) -> bool:
+    """Vrai si l'utilisateur porte le groupe exigé (OIDC_GROUPE_EXIGE), ou si rien n'est exigé.
+
+    Selon le realm, le claim `groups` porte des chemins (« /g/equipe ») ou des noms feuilles
+    (« equipe ») : un groupe exigé sans « / » se compare au nom feuille, sinon au chemin.
+    """
+    exige = get_settings().oidc_groupe_exige.strip()
+    if not exige:
+        return True
+    if exige.startswith("/"):
+        return exige.rstrip("/") in {g.rstrip("/") for g in user.groups}
+    return exige in {g.rstrip("/").rsplit("/", 1)[-1] for g in user.groups}
+
+
 async def get_current_user(authorization: str | None = None) -> AuthUser:
     """Validate the Bearer token and return the AuthUser.
 
