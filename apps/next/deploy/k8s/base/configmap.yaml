@@ -12,5 +12,9 @@ data:
   NEXTAUTH_URL: "https://${AGENTS_HOST}"
   # --- Scaleway Generative APIs ---
   SCW_LLM_BASE_URL: "${SCW_LLM_BASE_URL}"
+  LLM_DEFAULT_MODEL: "${LLM_DEFAULT_MODEL}"
   SCW_LLM_MODEL: "${SCW_LLM_MODEL}"
+  # Variante publique (client Next.js) — nom de modèle non secret, nécessaire
+  # pour pré-sélectionner le bon modèle dans le wizard de création d'agent.
+  NEXT_PUBLIC_LLM_DEFAULT_MODEL: "${LLM_DEFAULT_MODEL}"
   OWUI_PUBLIC_URL: "https://${OPENWEBUI_HOST}"

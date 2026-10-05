@@ -11,6 +11,7 @@ import { prisma } from '@/lib/db';
 import { inspectInput, DEFAULT_GUARD_CONFIG, BLOCK_MESSAGE_AGENT_CONFIG } from '@/lib/prompt-guard';
 import { recordGuardEvent } from '@/lib/guard-audit';
 import { updateOwuiModel, OwuiAdminUnavailableError } from '@/lib/owui-admin-client';
+import { defaultLlmModel } from '@/lib/env';
 
 // Statuts pour lesquels la creation a pousse le modele dans OpenWebUI
 // (POST /api/ab/agents : tout sauf « draft »). Un agent archive n'est pas
@@ -146,7 +147,7 @@ export async function PUT(
         name: configSnapshot.name,
         description: configSnapshot.description,
         systemPrompt: configSnapshot.systemPrompt,
-        baseModelId: configSnapshot.modelId ?? 'gpt-oss-120b',
+        baseModelId: configSnapshot.modelId ?? defaultLlmModel(),
         temperature: configSnapshot.temperature,
         greeting: configSnapshot.greeting,
         examples: configSnapshot.examples,

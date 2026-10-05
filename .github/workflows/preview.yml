@@ -9,15 +9,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # L'image pr-<n> est déjà construite et poussée par le job build-docker de
-  # ci.yml, qui tourne sur toute PR (pas seulement labellisée "preview") —
-  # pas besoin de la reconstruire ici, seulement de commenter une fois la PR
-  # labellisée.
+  # Build autonome de l'image pr-<n> : déclenché dès qu'une PR est
+  # labellisée "preview", indépendamment du path-filter de ci.yml. Cela
+  # garantit que l'image existe sur GHCR avant qu'ArgoCD ne tente de la
+  # puller, même si la PR ne touche pas apps/server ou apps/web.
+  build-docker:
+    if: >-
+      contains(github.event.pull_request.labels.*.name, 'preview') &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    uses: dnum-mi/fabnum-cicd/.github/workflows/build-docker.yml@v0
+    permissions:
+      contents: read
+      packages: write
+    with:
+      IMAGE_NAME: ghcr.io/${{ github.repository }}/mes-agents
+      IMAGE_TAG: pr-${{ github.event.pull_request.number }}
+      IMAGE_CONTEXT: ./
+      IMAGE_DOCKERFILE: ./Dockerfile
+      PUSH: true
+      BUILD_ARM64: false
+
+  # Commente l'URL de preview une fois l'image poussée. Dépend de build-docker
+  # pour ne pas annoncer une preview tant que l'image n'est pas disponible.
   comment:
     # Seulement les PR labellisées "preview", jamais une PR de fork (pas d'accès aux secrets/packages).
     if: >-
       contains(github.event.pull_request.labels.*.name, 'preview') &&
       github.event.pull_request.head.repo.full_name == github.repository
+    needs: build-docker
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write

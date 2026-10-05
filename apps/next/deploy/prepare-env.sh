@@ -73,10 +73,12 @@ export KEYCLOAK_CLIENT_ID
 : "${AGENTS_TLS_SECRET_NAME:=agent-builder-tls}"
 export AGENTS_HOST AGENTS_TLS_SECRET_NAME
 
-# Scaleway Generative APIs (LLM). Le modèle par défaut est aligné sur celui
-# du socle (DEFAULT_MODELS=gpt-oss-120b dans deployment-openwebui.yaml).
-: "${SCW_LLM_MODEL:=gpt-oss-120b}"
-export SCW_LLM_BASE_URL SCW_LLM_MODEL
+# Scaleway Generative APIs (LLM). Le modèle par défaut est LLM_DEFAULT_MODEL
+# (source de vérité unique, partagée avec apps/server). SCW_LLM_MODEL est
+# conservé pour rétro-compat mais LLM_DEFAULT_MODEL prime côté apps/next.
+: "${LLM_DEFAULT_MODEL:=gpt-oss-120b}"
+: "${SCW_LLM_MODEL:=$LLM_DEFAULT_MODEL}"
+export SCW_LLM_BASE_URL LLM_DEFAULT_MODEL SCW_LLM_MODEL
 
 # --- Validation ---
 required_vars=(

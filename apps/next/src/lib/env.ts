@@ -19,7 +19,10 @@ const serverSchema = z.object({
   // renvoient 501 Not Implemented.
   SCW_LLM_BASE_URL: z.string().url().optional(),
   SCW_SECRET_KEY_LLM: z.string().optional(),
-  SCW_LLM_MODEL: z.string().default('gpt-oss-120b'),
+  // Modèle LLM par défaut. LLM_DEFAULT_MODEL est la source de vérité unique
+  // (partagée avec apps/server). SCW_LLM_MODEL est conservé pour rétro-compat.
+  LLM_DEFAULT_MODEL: z.string().optional(),
+  SCW_LLM_MODEL: z.string().optional(),
 
   // URL publique d'une instance OpenWebUI externe optionnelle, pour le bouton
   // "Poursuivre dans MirAI Chat". Laisser vide en standalone.
@@ -59,7 +62,8 @@ function parseEnv(): ServerEnv {
       DATABASE_URL: 'postgresql://build:build@build/build',
       SCW_LLM_BASE_URL: undefined,
       SCW_SECRET_KEY_LLM: undefined,
-      SCW_LLM_MODEL: 'gpt-oss-120b',
+      LLM_DEFAULT_MODEL: undefined,
+      SCW_LLM_MODEL: undefined,
       OWUI_PUBLIC_URL: undefined,
       OWUI_BASE_URL: undefined,
       OWUI_ADMIN_API_KEY: undefined,
@@ -93,4 +97,18 @@ export function env(): ServerEnv {
     cached = parseEnv();
   }
   return cached;
+}
+
+/**
+ * Modèle LLM par défaut, résolu dans cet ordre :
+ *   1. `LLM_DEFAULT_MODEL` (source de vérité unique, partagée avec apps/server)
+ *   2. `SCW_LLM_MODEL` (rétro-compat)
+ *   3. `'gpt-oss-120b'` (dernier recours, uniquement si aucune variable n'est posée).
+ *
+ * Toute valeur en dur de modèle dans le code DOIT passer par cette fonction
+ * plutôt que d'écrire un nom de modèle littéral.
+ */
+export function defaultLlmModel(): string {
+  const e = env();
+  return e.LLM_DEFAULT_MODEL ?? e.SCW_LLM_MODEL ?? 'gpt-oss-120b';
 }

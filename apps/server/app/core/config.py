@@ -49,9 +49,16 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     llm_default_model: str = "gpt-oss-120b"
     llm_embedding_model: str = "nomic-embed-text"
+    # Délai max (secondes) d'un appel LLM (chat + embeddings) vers OpenWebUI.
+    # Les modèles lourds (gpt-oss-120b) peuvent mettre >60s à répondre sous charge ;
+    # 120s laisse de la marge avant de renvoyer une erreur 503 au client.
+    llm_request_timeout: float = 120.0
     # Modèles des assistants d'écriture du wizard (distincts du modèle de l'agent).
-    llm_assist_model: str = "gpt-oss-120b"
-    llm_onboarding_model: str = "mistral-small-3.2-24b-instruct-2506"
+    # Par défaut alignés sur llm_default_model (LLM_DEFAULT_MODEL) : surchargeables
+    # via LLM_ASSIST_MODEL / LLM_ONBOARDING_MODEL si un modèle différent est voulu
+    # pour le wizard. Aucune valeur en dur ailleurs dans le code.
+    llm_assist_model: str | None = None
+    llm_onboarding_model: str | None = None
 
     # Requêtes LLM par minute et par utilisateur (0 = pas de limite).
     rate_limit_per_minute: int = 30
@@ -114,6 +121,16 @@ class Settings(BaseSettings):
                 if self.code_server_domain
                 else f"http://localhost:{self.web_port}"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _resolve_assist_models(self) -> Settings:
+        # Les modèles assist/onboarding par défaut pointent sur llm_default_model
+        # (LLM_DEFAULT_MODEL) tant qu'ils ne sont pas surchargés explicitement.
+        if self.llm_assist_model is None:
+            self.llm_assist_model = self.llm_default_model
+        if self.llm_onboarding_model is None:
+            self.llm_onboarding_model = self.llm_default_model
         return self
 
     @model_validator(mode="after")

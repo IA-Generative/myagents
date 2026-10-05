@@ -14,6 +14,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.logging import setup_logging
 from app.db.session import SessionLocal
 from app.models.agent import Agent, AgentVersion
@@ -302,7 +303,7 @@ async def seed_default_agents(db: AsyncSession) -> int:
         agent = Agent(
             id=agent_id,
             creator_id=SEED_CREATOR_ID,
-            model_ref=config.model_id or "gpt-oss-120b",
+            model_ref=config.model_id or get_settings().llm_default_model,
             visibility=Visibility.ministry,
             status=AgentStatus.published,
             category=[item["category"]],

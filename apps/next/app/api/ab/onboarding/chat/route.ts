@@ -1,7 +1,7 @@
 // BFF — Assistant conversationnel d'onboarding.
 // Guide l'utilisateur par des questions pour construire les parametres
 // de son agent (role, public, ton, contraintes, nom, categorie).
-// Utilise mistral-small (rapide, adapte au dialogue court).
+// Modèle : LLM_DEFAULT_MODEL (variabilisé, voir src/lib/env.ts defaultLlmModel).
 // A la fin du dialogue, renvoie un JSON structure avec les champs du wizard.
 
 import { NextResponse } from 'next/server';
@@ -116,10 +116,10 @@ export async function POST(req: Request) {
         { role: 'system', content: SYSTEM_PROMPT },
         ...clientMessages,
       ],
-      // PAS de modèle en dur : le nom codé ici (`mistral-small-3.2-24b-instruct-2506`)
+      // PAS de modèle en dur : le nom codé ici historiquement (`mistral-small-3.2-24b-instruct-2506`)
       // a été RETIRÉ du catalogue Scaleway le 2026-08-25 — l'API répondait 400
       // « Invalid model name » et la route rendait 502 sur chaque message du chat.
-      // Le client retombe sur SCW_LLM_MODEL (alias `chat` du catalogue), qui suit les
+      // Le client retombe sur LLM_DEFAULT_MODEL (alias `chat` du catalogue), qui suit les
       // renommages de l'opérateur sans reconstruire l'image.
       temperature: 0.6,
       maxTokens: 1024,

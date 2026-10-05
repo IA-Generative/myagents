@@ -19,7 +19,12 @@ const HAS_CREDS =
 
 const SAMPLES = Number(process.env.REDTEAM_SAMPLES ?? '3');
 // Modèles à tester (défaut : modèle configuré côté serveur). Plusieurs séparés par virgule.
-const MODELS = (process.env.REDTEAM_MODELS ?? process.env.SCW_LLM_MODEL ?? 'gpt-oss-120b')
+const MODELS = (
+  process.env.REDTEAM_MODELS ??
+  process.env.LLM_DEFAULT_MODEL ??
+  process.env.SCW_LLM_MODEL ??
+  'gpt-oss-120b'
+)
   .split(',')
   .map((m) => m.trim())
   .filter(Boolean);
