@@ -91,7 +91,8 @@ PostgreSQL secret name (uses existingSecret if defined, otherwise generates defa
 {{- if .Values.postgres.auth.existingSecret }}
 {{- .Values.postgres.auth.existingSecret }}
 {{- else }}
-{{- printf "%s-postgres" .Values.postgres.fullname | default (include "mes-agents.fullname" .) -}}
+{{- /* Nom du Secret généré par le sous-chart : <release>-postgres. */ -}}
+{{- printf "%s-postgres" .Release.Name -}}
 {{- end }}
 {{- end }}
 

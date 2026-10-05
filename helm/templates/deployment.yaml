@@ -5,6 +5,9 @@ metadata:
   name: {{ include "mes-agents.fullname" . }}
   labels:
     {{- include "mes-agents.labels" . | nindent 4 }}
+  annotations:
+    # Argo CD : après le Job de migration (vague 1). Sans effet sous Helm seul.
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   {{- if not .Values.app.autoscaling.enabled }}
   replicas: {{ .Values.app.replicaCount }}

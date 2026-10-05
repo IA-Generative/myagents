@@ -11,6 +11,12 @@
 #
 # See ./HELM-ARCHITECTURE.md for the complete multi-repo strategy.
 
+# -- Interrupteur général du chart (le Job de migration en dépend aussi)
+enabled: true
+
+# -- Étiquettes ajoutées à toutes les ressources du chart (ex. mirai-preview: beta)
+commonLabels: {}
+
 # =============================================================================
 # Global configuration (scaffold)
 # =============================================================================
@@ -25,10 +31,10 @@ global:
 app:
   # -- Enable/disable the application deployment
   enabled: true
-  
+
   # -- Number of replicas
   replicaCount: 1
-  
+
   # -- Workload kind
   deploymentType: "Deployment"
 
@@ -43,37 +49,38 @@ app:
     registry: ""
     # -- Image repository
     repository: ""
-    # -- Image pull policy
-    pullPolicy: "IfNotPresent"
+    # -- Image pull policy. Always : une même étiquette est parfois republiée avec un autre
+    # contenu ; IfNotPresent laisserait le nœud relancer une image périmée.
+    pullPolicy: "Always"
     # -- Image tag (defaults to Chart.appVersion)
     tag: ""
-  
+
   imagePullSecrets: []
-  
+
   # -- Container port
   containerPort: 8000
   containerPortName: "http"
-  
+
   # -- Environment variables (non-secret)
   env: {}
-  
+
   # -- Environment variables from ConfigMap
   envCm: {}
-  
+
   # -- Environment variables from Secret
   # Configured in private values files
   envSecret: {}
 
   # -- Names of existing Secrets injected whole via envFrom (e.g. Secrets synced by Vault)
   envFromSecrets: []
-  
+
   # -- Pod security context
   podSecurityContext:
     runAsNonRoot: true
     fsGroup: 10001
     seccompProfile:
       type: "RuntimeDefault"
-  
+
   # -- Container security context
   securityContext:
     runAsUser: 10001
@@ -84,21 +91,21 @@ app:
     readOnlyRootFilesystem: true
     seccompProfile:
       type: "RuntimeDefault"
-  
+
   # -- Volumes
   volumes:
     - name: tmp
       emptyDir: {}
     - name: cache
       emptyDir: {}
-  
+
   # -- Volume mounts
   volumeMounts:
     - mountPath: /tmp
       name: tmp
     - mountPath: /app/.cache
       name: cache
-  
+
   # -- Probes
   probes:
     startupProbe:
@@ -120,7 +127,7 @@ app:
         port: 8000
       initialDelaySeconds: 15
       periodSeconds: 20
-  
+
   # -- Resources (defaults, override in environment files)
   resources:
     requests:
@@ -129,7 +136,7 @@ app:
     limits:
       memory: "512Mi"
       cpu: "500m"
-  
+
   # -- Autoscaling (disabled by default)
   autoscaling:
     enabled: false
@@ -137,14 +144,14 @@ app:
     maxReplicas: 3
     targetCPUUtilizationPercentage: 80
     targetMemoryUtilizationPercentage: 80
-  
+
   # -- Service
   service:
     enabled: true
     type: "ClusterIP"
     port: 80
     portName: "http"
-  
+
   # -- Ingress
   ingress:
     enabled: false
@@ -152,13 +159,26 @@ app:
     annotations: {}
     hosts: []
     tls: []
-  
+
+  # -- Job de migration `alembic upgrade head` (+ agents par défaut si seed). Sous Argo CD,
+  # c'est un hook Sync de vague 1 : après la base (vague 0), avant le Deployment (vague 2).
+  migrations:
+    enabled: true
+    seed: false
+    backoffLimit: 3
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "50m"
+      limits:
+        memory: "512Mi"
+
   # -- Pod Disruption Budget
   pdb:
     enabled: false
     minAvailable: ""
     maxUnavailable: ""
-  
+
   # -- Service Account
   serviceAccount:
     enabled: false
@@ -166,20 +186,20 @@ app:
     name: ""
     annotations: {}
     automountServiceAccountToken: false
-  
+
   # -- Strategy
   strategy:
     type: "RollingUpdate"
     rollingUpdate:
       maxSurge: 1
       maxUnavailable: 0
-  
+
   # -- Node selector
   nodeSelector: {}
-  
+
   # -- Tolerations
   tolerations: []
-  
+
   # -- Affinity
   affinity: {}
 
@@ -189,30 +209,27 @@ app:
 postgres:
   # -- Enable PostgreSQL (should be configured in private values)
   enabled: false
-  
-  # -- PostgreSQL username
-  username: ""
-  
-  # -- PostgreSQL database
-  database: ""
-  
-  # -- PostgreSQL password (MUST use existingSecret in production)
-  password: ""
-  
-  # -- Existing secret containing the password
-  existingSecret: ""
-  
-  # -- Key in the existing secret
-  existingSecretKey: "password"
-  
+
+  # -- Identifiants du sous-chart cloudpirates (clés auth.*). Avec existingSecret, le
+  # sous-chart ne crée pas son Secret : DATABASE_URL doit alors venir de app.envFromSecrets.
+  # Sans existingSecret, DATABASE_URL est lue dans le Secret généré (clé `uri`) — mais son
+  # mot de passe est tiré par `lookup`, que Argo CD ne sait pas évaluer : à éviter sous Argo CD.
+  auth:
+    username: ""
+    database: ""
+    password: ""
+    existingSecret: ""
+    secretKeys:
+      adminPasswordKey: "postgres-password"
+
   image:
     tag: "18.6-alpine"
-  
+
   persistence:
     enabled: false
     size: "1Gi"
     storageClass: ""
-  
+
   resources:
     requests:
       memory: "256Mi"
@@ -227,12 +244,12 @@ postgres:
 vaultSecrets:
   # -- Enable VaultStaticSecret resources
   enabled: false
-  
+
   # -- Vault KV mount name
   mount: "kv"
-  
+
   # -- Base path in Vault (MUST be set in private values)
   basePath: ""
-  
+
   # -- Secrets to sync from Vault (MUST be configured in private values)
   items: []
