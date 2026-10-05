@@ -15,9 +15,10 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import limit_llm_openwebui, require_openwebui_key
+from app.core.config import get_settings
 from app.db.session import get_db
 from app.llm import agent_runtime
-from app.llm.client import LlmClient, LlmParseError, LlmUnavailableError
+from app.llm.client import LlmClient, LlmModelNotFoundError, LlmParseError, LlmUnavailableError
 from app.schemas.agent import ChatMessage
 from app.schemas.openai_compat import (
     OpenAIChatCompletionChoice,
@@ -32,6 +33,13 @@ router = APIRouter(
     tags=["openai-compat"], dependencies=[Depends(require_openwebui_key)]
 )
 logger = logging.getLogger(__name__)
+
+
+def _llm_error_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=502,
+        content={"error": {"message": "llm_unavailable", "type": "api_error", "code": "llm_unavailable"}},
+    )
 
 
 def _model_not_found(model: str) -> JSONResponse:
@@ -103,27 +111,37 @@ async def chat_completions(
         return _model_not_found(payload.model)
 
     config = agents_service.current_config(agent)
+    default_model = get_settings().llm_default_model
+    primary_model = config.model_id or agent.model_ref or default_model
     client = LlmClient()
     try:
         reply = await agent_runtime.arun_agent_chat(
             client,
             config,
             history=payload.messages,
-            model=config.model_id or agent.model_ref,
+            model=primary_model,
             temperature=config.temperature,
         )
+    except LlmModelNotFoundError as exc:
+        if primary_model == default_model:
+            return _llm_error_response()
+        logger.warning(
+            "modèle '%s' introuvable, fallback sur '%s'", primary_model, default_model
+        )
+        try:
+            reply = await agent_runtime.arun_agent_chat(
+                client,
+                config,
+                history=payload.messages,
+                model=default_model,
+                temperature=config.temperature,
+            )
+        except (LlmUnavailableError, LlmParseError) as exc2:
+            logger.error("chat/completions: fallback LLM échoué (agent=%s): %s", agent_id, exc2)
+            return _llm_error_response()
     except (LlmUnavailableError, LlmParseError) as exc:
         logger.error("chat/completions: échec LLM (agent=%s): %s", agent_id, exc)
-        return JSONResponse(
-            status_code=502,
-            content={
-                "error": {
-                    "message": "llm_unavailable",
-                    "type": "api_error",
-                    "code": "llm_unavailable",
-                }
-            },
-        )
+        return _llm_error_response()
 
     if payload.stream:
         return StreamingResponse(
