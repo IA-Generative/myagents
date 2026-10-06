@@ -34,7 +34,12 @@ onMounted(async () => {
       visibility: agent.visibility,
       category: agent.category,
       tags: agent.tags,
-      config: agent.config,
+      // Un agent enregistré avant le contrat d'agents n'a ni entrées ni sorties : « text ».
+      config: {
+        ...agent.config,
+        inputs: agent.config.inputs?.length ? agent.config.inputs : ['text'],
+        outputs: agent.config.outputs?.length ? agent.config.outputs : ['text'],
+      },
     })
   } else {
     const raw = route.query.onboarding

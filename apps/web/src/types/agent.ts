@@ -13,7 +13,25 @@ export interface ConfigSnapshot {
   temperature: number
   knowledge_ids: string[]
   tool_ids: string[]
+  // Contrat d'agents MirAI : sur quoi l'agent sait travailler, et ce qu'il rend.
+  inputs: AgentInput[]
+  outputs: AgentOutput[]
 }
+
+export const AGENT_INPUTS = [
+  'text',
+  'selection',
+  'document',
+  'email',
+  'thread',
+  'meeting',
+  'collection',
+  'page',
+] as const
+export type AgentInput = (typeof AGENT_INPUTS)[number]
+
+export const AGENT_OUTPUTS = ['text', 'replacement', 'insertion'] as const
+export type AgentOutput = (typeof AGENT_OUTPUTS)[number]
 
 export interface AgentListItem {
   id: string

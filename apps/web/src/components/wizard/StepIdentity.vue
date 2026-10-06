@@ -1,9 +1,37 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useWizardStore } from '@/stores/wizard'
-import type { Visibility } from '@/types/agent'
+import type { AgentInput, AgentOutput, Visibility } from '@/types/agent'
 
 const wizard = useWizardStore()
+
+// Contrat d'agents MirAI (docs/contrats/contrat-agents-mirai.md) : ce que les autres
+// applications et plug-ins lisent pour proposer l'agent au bon endroit.
+const INPUT_OPTIONS: { value: AgentInput; label: string }[] = [
+  { value: 'text', label: 'Un texte libre, dans une conversation' },
+  { value: 'selection', label: 'Une sélection dans un document (LibreOffice)' },
+  { value: 'document', label: 'Un document entier' },
+  { value: 'email', label: 'Un courriel (Thunderbird)' },
+  { value: 'thread', label: 'Un fil de discussion' },
+  { value: 'meeting', label: 'Une réunion : transcription, compte rendu (Mes réunions)' },
+  { value: 'collection', label: 'Une collection documentaire (Mes collections)' },
+  { value: 'page', label: 'Une page web (navigateur)' },
+]
+const OUTPUT_OPTIONS: { value: AgentOutput; label: string }[] = [
+  { value: 'text', label: 'Une réponse à lire' },
+  { value: 'replacement', label: 'Un texte qui remplace la sélection' },
+  { value: 'insertion', label: 'Un texte à insérer à la suite' },
+]
+
+function toggleInput(value: AgentInput, checked: boolean) {
+  const current = wizard.draft.config.inputs.filter((v) => v !== value)
+  wizard.updateConfig({ inputs: checked ? [...current, value] : current })
+}
+
+function toggleOutput(value: AgentOutput, checked: boolean) {
+  const current = wizard.draft.config.outputs.filter((v) => v !== value)
+  wizard.updateConfig({ outputs: checked ? [...current, value] : current })
+}
 
 const CATEGORIES = [
   { value: 'redaction', label: 'Rédaction', icon: 'fr-icon-edit-line' },
@@ -148,16 +176,63 @@ function setCategory(value: string) {
       <div class="fr-input-group">
         <label class="fr-label" for="agent-community">
           Communauté
-          <span class="fr-hint-text">Nom du groupe ou du service avec lequel partager l'agent.</span>
+          <span class="fr-hint-text">
+            Groupe du SSO avec lequel partager l'agent, tel qu'il figure dans votre compte
+            (ex : /g/mirai-beta-testeurs). Seuls ses membres verront et lanceront l'agent.
+          </span>
         </label>
         <input
           id="agent-community"
           v-model="wizard.draft.config.community_path"
           class="fr-input"
           type="text"
-          placeholder="Ex : DLPAJ"
+          placeholder="Ex : /g/dlpaj"
         >
       </div>
+    </div>
+
+    <div class="fr-col-12 fr-col-md-6">
+      <fieldset class="fr-fieldset" aria-describedby="inputs-hint">
+        <legend class="fr-fieldset__legend">
+          Sur quoi l'agent sait travailler
+          <span id="inputs-hint" class="fr-hint-text">
+            Les autres applications ne proposent l'agent que dans ces situations.
+          </span>
+        </legend>
+        <div class="fr-fieldset__content">
+          <div v-for="o in INPUT_OPTIONS" :key="o.value" class="fr-checkbox-group fr-checkbox-group--sm">
+            <input
+              :id="`input-${o.value}`"
+              type="checkbox"
+              :checked="wizard.draft.config.inputs.includes(o.value)"
+              @change="toggleInput(o.value, ($event.target as HTMLInputElement).checked)"
+            >
+            <label class="fr-label" :for="`input-${o.value}`">{{ o.label }}</label>
+          </div>
+        </div>
+      </fieldset>
+    </div>
+
+    <div class="fr-col-12 fr-col-md-6">
+      <fieldset class="fr-fieldset" aria-describedby="outputs-hint">
+        <legend class="fr-fieldset__legend">
+          Ce que l'agent rend
+          <span id="outputs-hint" class="fr-hint-text">
+            Un plug-in bureautique peut remplacer ou insérer directement le résultat.
+          </span>
+        </legend>
+        <div class="fr-fieldset__content">
+          <div v-for="o in OUTPUT_OPTIONS" :key="o.value" class="fr-checkbox-group fr-checkbox-group--sm">
+            <input
+              :id="`output-${o.value}`"
+              type="checkbox"
+              :checked="wizard.draft.config.outputs.includes(o.value)"
+              @change="toggleOutput(o.value, ($event.target as HTMLInputElement).checked)"
+            >
+            <label class="fr-label" :for="`output-${o.value}`">{{ o.label }}</label>
+          </div>
+        </div>
+      </fieldset>
     </div>
   </div>
 </template>
