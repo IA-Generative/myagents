@@ -110,8 +110,13 @@ partagés (sans distinction de personne) : c'est le socle qui applique ses propr
 ## `POST /v1/chat/completions`
 
 Corps au format OpenAI : `model` (identifiant d'agent), `messages` (rôles `user` et `assistant`
-seulement, 500 messages et 20 000 caractères par message au plus), `stream` (facultatif).
-Les autres paramètres OpenAI sont ignorés : la configuration de l'agent fait foi.
+seulement, 500 messages au plus, **120 000 caractères par message** au plus), `stream`
+(facultatif). Les autres paramètres OpenAI sont ignorés : la configuration de l'agent fait foi.
+
+Contenus longs (transcription d'une réunion, document) : le consommateur les met dans le dernier
+message, en un seul morceau, et tronque au-delà de 100 000 caractères en le disant à la personne.
+Un contenu qui dépasse la fenêtre du modèle est refusé par celui-ci : la route répond alors
+`502 llm_unavailable`. Au-delà de 120 000 caractères, `422` avant tout appel.
 
 Convention de contexte : le consommateur met le contenu sur lequel l'agent doit travailler dans
 le dernier message `user`, avec une consigne courte avant. Exemple pour une sélection :

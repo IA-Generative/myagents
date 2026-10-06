@@ -395,6 +395,32 @@ async def test_v1_chat_avec_jeton_lance_un_agent_accessible(client, sso, jeu):
     assert res.json()["choices"][0]["message"]["content"] == "Voici la relecture."
 
 
+async def test_v1_chat_accepte_un_contenu_long(client, sso, jeu):
+    """Une transcription de réunion dépasse 20 000 caractères : /v1 en accepte 120 000."""
+    fake = FakeToolCallingModel(responses=[AIMessage(content="Résumé.")])
+    contenu = "Décisions prises.\n\n<<<\n" + ("Intervenant : blabla. " * 4000) + "\n>>>"
+    assert 80_000 < len(contenu) < 120_000
+    with patch.object(LlmClient, "chat_model", return_value=fake):
+        res = await client.post(
+            "/v1/chat/completions",
+            headers=_bearer(_jeton(sso)),
+            json={
+                "model": jeu["communaute"],
+                "messages": [{"role": "user", "content": contenu}],
+            },
+        )
+    assert res.status_code == 200, res.text[:300]
+    trop = await client.post(
+        "/v1/chat/completions",
+        headers=_bearer(_jeton(sso)),
+        json={
+            "model": jeu["communaute"],
+            "messages": [{"role": "user", "content": "x" * 120_001}],
+        },
+    )
+    assert trop.status_code == 422
+
+
 @pytest.mark.parametrize("cle", ["autre_communaute", "prive", "brouillon", "archive"])
 async def test_v1_chat_avec_jeton_cache_un_agent_hors_de_portee(client, sso, jeu, cle):
     res = await client.post(
