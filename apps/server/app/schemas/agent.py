@@ -86,6 +86,9 @@ class AgentListItem(BaseModel):
 
 class AgentDetail(AgentListItem):
     config: ConfigSnapshot
+    # État de la fiche dans le socle après une écriture (posee, retiree, indisponible,
+    # groupe_inconnu:<nom>, erreur:<type>) ; absent en simple lecture.
+    socle: str | None = None
 
 
 class ChatMessage(BaseModel):

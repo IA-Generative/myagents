@@ -65,6 +65,8 @@ La règle d'accès vit dans UNE fonction, `app/services/agents.py::is_accessible
 le catalogue, la liste du contrat, `/v1/models` et `/v1/chat/completions`. Une route qui refait
 sa propre règle finit par montrer un agent privé. Le vocabulaire `inputs`/`outputs` est fermé
 (`app/core/contrat.py`) : l'étendre, c'est modifier le contrat d'abord, puis les consommateurs.
+La fiche du socle suit l'agent (`app/services/socle.py::synchroniser`) à chaque écriture : une
+route qui publie sans la poser laisse l'agent invisible de Mon assistant, sans erreur.
 L'audience `mesagents` est exigée par défaut (`CONTRAT_AUDIENCE`) ; la vider n'est acceptable
 que sur un environnement sans portée Keycloak. Les origines CORS du contrat sont des motifs
 (`CONTRAT_ORIGINES`), jamais `*`.
