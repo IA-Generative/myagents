@@ -37,6 +37,22 @@ COPY --from=backend-builder /app/.venv /app/.venv
 COPY apps/server/ ./
 COPY --from=frontend-builder /build/dist ./static/
 
+# Convention ADR-0004 MirAI next, alignée sur Dockerflow : l'image porte son journal en
+# /app/version.json, servi sur /__version__. Les valeurs viennent de la CI (build-args :
+# ci.yml pr-<n>, branches.yml beta-<sha8>, cd.yml X.Y.Z) ; un build de poste donne « dev ».
+# Posé avant USER : lisible par l'utilisateur non-root, racine en lecture seule compatible.
+ARG VERSION=dev
+ARG COMMIT=
+ARG BUILD=
+ARG CODE_DATE=
+ARG SOURCE=
+COPY scripts/version_json.py CHANGELOG.md* /tmp/version/
+RUN python /tmp/version/version_json.py --version "$VERSION" --commit "$COMMIT" --build "$BUILD" \
+      --code-date "$CODE_DATE" --source "$SOURCE" --changelog /tmp/version/CHANGELOG.md \
+      --out /app/version.json \
+ && chmod 0644 /app/version.json \
+ && rm -rf /tmp/version
+
 USER 10001
 EXPOSE 8000
 

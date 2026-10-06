@@ -33,6 +33,14 @@ jobs:
       IMAGE_CONTEXT: ./
       IMAGE_DOCKERFILE: ./Dockerfile
       LATEST_TAG: true
+      # /app/version.json, servi sur /__version__ (ADR-0004) : la version publiée et son
+      # CHANGELOG. head_commit.timestamp existe : ce job ne tourne que sur push.
+      BUILD_ARGS: |
+        VERSION=${{ needs.release.outputs.version }}
+        COMMIT=${{ github.sha }}
+        BUILD=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        CODE_DATE=${{ github.event.head_commit.timestamp }}
+        SOURCE=${{ github.server_url }}/${{ github.repository }}
 
   scan-trivy:
     needs:
