@@ -20,10 +20,14 @@ onMounted(() => {
 </script>
 
 <template>
+  <!-- Icône de Mes agents en logo d'opérateur, reprise de l'application Next.js (public/favicon.svg). -->
   <DsfrHeader
     service-title="Mes Agents"
     service-tagline="Créez et partagez vos agents IA"
     :logo-text="['République', 'Française']"
+    operator-img-src="/mes-agents.svg"
+    operator-img-alt="Mes agents"
+    :operator-img-style="{ maxHeight: '40px', width: 'auto' }"
   />
   <main class="fr-container fr-py-6w">
     <RouterView />
