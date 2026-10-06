@@ -73,6 +73,20 @@ async def _find(db: AsyncSession, raw: str) -> AuthSession | None:
     return result.scalar_one_or_none()
 
 
+async def _find_for_update(db: AsyncSession, raw: str) -> AuthSession | None:
+    """Trouve la session avec verrou FOR UPDATE SKIP LOCKED (PostgreSQL ; SQLite ignore)."""
+    try:
+        result = await db.execute(
+            select(AuthSession)
+            .where(AuthSession.token_hash == _hash(raw))
+            .with_for_update(skip_locked=True, read=False)
+        )
+        return result.scalar_one_or_none()
+    except Exception:
+        # SQLite ne supporte pas FOR UPDATE SKIP LOCKED ; on retombe sur une lecture simple.
+        return await _find(db, raw)
+
+
 async def _drop(db: AsyncSession, session: AuthSession) -> None:
     await db.delete(session)
     await db.commit()
@@ -88,29 +102,44 @@ async def resolve_session(db: AsyncSession, raw: str) -> AuthUser | None:
         await _drop(db, session)
         return None
 
-    if _aware(session.access_expires_at) - _REFRESH_SKEW <= now:
-        refresh_token = (
-            decrypt(session.refresh_token_enc) if session.refresh_token_enc else None
-        )
-        if not refresh_token:
+    if _aware(session.access_expires_at) - _REFRESH_SKEW > now:
+        return AuthUser(**session.user)
+
+    # Access token expiré ou expirant : tenter de verrouiller pour le refresh
+    session = await _find_for_update(db, raw)
+    if session is None:
+        # Un concurrent a verrouillé (SKIP LOCKED) ou supprimé la session.
+        # Relire sans verrou : peut-être que le concurrent a déjà rafraîchi.
+        session = await _find(db, raw)
+        if session is None:
+            return None
+        # Si le concurrent a rafraîchi entre-temps, l'access token est valide.
+        if _aware(session.access_expires_at) - _REFRESH_SKEW > now:
+            return AuthUser(**session.user)
+        return None  # Toujours expiré, on refuse proprement
+
+    refresh_token = (
+        decrypt(session.refresh_token_enc) if session.refresh_token_enc else None
+    )
+    if not refresh_token:
+        await _drop(db, session)
+        return None
+    try:
+        tokens = await oidc_client.refresh(refresh_token)
+        user = await asyncio.to_thread(oidc_client.user_from_tokens, tokens)
+    except OIDCError as exc:
+        logger.warning("renouvellement de session refusé: %s", exc)
+        # Keycloak injoignable : on garde la session, seul un refus l'invalide.
+        if "unavailable" not in str(exc):
             await _drop(db, session)
-            return None
-        try:
-            tokens = await oidc_client.refresh(refresh_token)
-            user = await asyncio.to_thread(oidc_client.user_from_tokens, tokens)
-        except OIDCError as exc:
-            logger.warning("renouvellement de session refusé: %s", exc)
-            # Keycloak injoignable : on garde la session, seul un refus l'invalide.
-            if "unavailable" not in str(exc):
-                await _drop(db, session)
-            return None
-        session.user = asdict(user)
-        session.refresh_token_enc = (
-            _enc(tokens.refresh_token) or session.refresh_token_enc
-        )
-        session.id_token_enc = _enc(tokens.id_token) or session.id_token_enc
-        session.access_expires_at = now + timedelta(seconds=tokens.expires_in)
-        await db.commit()
+        return None
+    session.user = asdict(user)
+    session.refresh_token_enc = (
+        _enc(tokens.refresh_token) or session.refresh_token_enc
+    )
+    session.id_token_enc = _enc(tokens.id_token) or session.id_token_enc
+    session.access_expires_at = now + timedelta(seconds=tokens.expires_in)
+    await db.commit()
 
     return AuthUser(**session.user)
 
