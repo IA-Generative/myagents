@@ -5,7 +5,7 @@ from unittest.mock import patch
 from langchain_core.messages import AIMessage
 
 from app.llm.client import LlmClient
-from tests.fakes import FakeToolCallingModel
+from tests.fakes import FakeToolCallingModel, HubDown
 
 DRAFT_PAYLOAD = {
     "visibility": "private",
@@ -141,3 +141,16 @@ async def test_chat_with_agent_returns_llm_reply(client):
 
     assert res.status_code == 200, res.text
     assert res.json() == {"reply": "Bonjour !"}
+
+
+async def test_chat_with_hub_down_is_llm_unavailable(client):
+    created = await _create_agent(client)
+
+    with patch.object(LlmClient, "chat_model", return_value=HubDown(responses=[])):
+        res = await client.post(
+            f"/api/agents/{created['id']}/chat",
+            json={"messages": [{"role": "user", "content": "Salut"}]},
+        )
+
+    assert res.status_code == 502
+    assert res.json()["detail"] == "llm_unavailable"

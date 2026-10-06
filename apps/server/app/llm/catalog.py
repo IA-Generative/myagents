@@ -1,18 +1,22 @@
-"""Small static fallback catalog, used when the live LLM endpoint is unreachable."""
+"""Small static fallback catalog, used when the live LLM endpoint is unreachable.
+
+Only the hub's stable aliases belong here: a dated model name gets retired or renamed by
+the operator, and an agent created from this list would then be broken from birth.
+"""
 
 from app.schemas.agent import ModelProfile
 
 FALLBACK_MODELS: list[ModelProfile] = [
     ModelProfile(
-        id="gpt-oss-120b",
-        label="GPT-OSS 120B (raisonnement)",
-        tier="reasoning",
-        short_pitch="Modele de raisonnement avance, plan interne avant de repondre.",
+        id="chat",
+        label="Chat",
+        tier="balanced",
+        short_pitch="Modele generaliste du hub, adapte a la redaction courante.",
     ),
     ModelProfile(
-        id="mistral-small-3.2-24b-instruct-2506",
-        label="Mistral Small 3.2 (24B)",
-        tier="light",
-        short_pitch="Rapide et economique, ideal pour la redaction courante.",
+        id="chat-pro",
+        label="Chat Pro (raisonnement)",
+        tier="reasoning",
+        short_pitch="Modele plus puissant, pour les demandes complexes.",
     ),
 ]
