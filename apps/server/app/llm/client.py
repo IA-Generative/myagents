@@ -35,6 +35,7 @@ class LlmClient:
         # Most self-hosted OpenAI-compatible servers (Ollama, OpenWebUI...) ignore the
         # key but the OpenAI SDK requires a non-empty value.
         self.api_key = api_key or settings.openai_api_key or "not-needed"
+        self.timeout = settings.llm_request_timeout
 
     def _headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
@@ -55,7 +56,7 @@ class LlmClient:
             api_key=self.api_key,
             model=model,
             temperature=temperature,
-            timeout=60,
+            timeout=self.timeout,
             max_retries=0,
         )
 
@@ -66,7 +67,7 @@ class LlmClient:
             base_url=self.base_url,
             api_key=self.api_key,
             model=model or settings.llm_embedding_model,
-            timeout=60,
+            timeout=self.timeout,
             check_embedding_ctx_length=False,
         )
 

@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     llm_onboarding_model: str
     # Modèle du LLM-juge de la garde anti-prompt-injection ; vide = llm_assist_model.
     llm_guard_judge_model: str = ""
+    # Délai max (secondes) d'un appel au modèle (chat et plongements). Les gros modèles peuvent
+    # dépasser 60 s sous charge ; 120 s laisse de la marge avant de répondre 503 au client.
+    # Repris de #37 (Kevin De Benedetti).
+    llm_request_timeout: float = 120.0
 
     # Requêtes LLM par minute et par utilisateur (0 = pas de limite).
     rate_limit_per_minute: int = 30
