@@ -3,6 +3,8 @@
 import json
 import re
 
+import httpx
+import openai
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
@@ -64,3 +66,28 @@ class FakeToolCallingModel(BaseChatModel):
     @property
     def _llm_type(self) -> str:
         return "fake-tool-calling"
+
+
+_HUB_REQUEST = httpx.Request("POST", "http://hub/v1/chat/completions")
+
+
+class RetiredModel(FakeToolCallingModel):
+    """Le hub refuse ce nom de modèle : retiré ou renommé par l'opérateur."""
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
+        if is_judge_call(messages):
+            return super()._generate(messages, stop, run_manager, **kwargs)
+        raise openai.BadRequestError(
+            'no service for path "/v1/chat/completions" with model "gpt-oss-120b"',
+            response=httpx.Response(400, request=_HUB_REQUEST),
+            body=None,
+        )
+
+
+class HubDown(FakeToolCallingModel):
+    """Le hub ne répond pas (connexion refusée, délai dépassé)."""
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
+        if is_judge_call(messages):
+            return super()._generate(messages, stop, run_manager, **kwargs)
+        raise openai.APIConnectionError(request=_HUB_REQUEST)
