@@ -99,9 +99,20 @@ export interface OnboardingAgentConfig {
   system_prompt: string
   greeting: string
   examples: string[]
+  progress: string[]
 }
 
 export interface OnboardingMessage {
   role: 'user' | 'assistant'
   content: string
+}
+
+export interface RefineConfigRequest {
+  config: ConfigSnapshot
+  feedback: string
+}
+
+export interface RefineConfigResponse {
+  config: ConfigSnapshot
+  message: string
 }

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { modelsApi } from '@/api/models'
+import { agentsApi } from '@/api/agents'
 import { promptApi } from '@/api/prompt'
+import AgentChatWidget from '@/components/AgentChatWidget.vue'
 import { ApiError } from '@/api/client'
 import { useWizardStore } from '@/stores/wizard'
 import type { ModelProfile } from '@/types/agent'
@@ -11,6 +13,12 @@ const models = ref<ModelProfile[]>([])
 const modelsLoading = ref(false)
 const busy = ref<null | 'assist' | 'optimize' | 'starters' | 'validate'>(null)
 const error = ref<string | null>(null)
+const testOpen = ref(false)
+const testKey = ref(0)
+
+function sendPreview(msgs: { role: string; content: string }[]) {
+  return agentsApi.previewChat(wizard.draft.config, msgs)
+}
 
 const selectedModel = () => models.value.find((m) => m.id === wizard.draft.config.model_id)
 
@@ -303,6 +311,33 @@ function removeExample(index: number) {
         max="1"
         step="0.1"
       >
+    </div>
+
+    <div class="fr-col-12">
+      <button
+        type="button"
+        class="fr-btn fr-btn--secondary fr-btn--sm"
+        :disabled="!wizard.draft.config.system_prompt.trim()"
+        @click="testOpen = !testOpen"
+      >
+        {{ testOpen ? 'Masquer le test' : 'Tester cet agent' }}
+      </button>
+      <button
+        v-if="testOpen"
+        type="button"
+        class="fr-btn fr-btn--tertiary fr-btn--sm fr-ml-1w"
+        @click="testKey++"
+      >
+        Nouvelle conversation
+      </button>
+      <div v-if="testOpen" class="fr-mt-2w">
+        <AgentChatWidget
+          :key="testKey"
+          :agent-name="wizard.draft.config.name || 'Agent'"
+          :greeting="wizard.draft.config.greeting"
+          :send="sendPreview"
+        />
+      </div>
     </div>
   </div>
 </template>

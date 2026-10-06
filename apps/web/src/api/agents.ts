@@ -4,6 +4,7 @@ import type {
   AgentDetail,
   AgentListItem,
   AgentUpdatePayload,
+  ConfigSnapshot,
 } from '@/types/agent'
 
 export const agentsApi = {
@@ -17,4 +18,6 @@ export const agentsApi = {
   submit: (id: string) => api.post<AgentDetail>(`/agents/${id}/submit`),
   chat: (id: string, messages: { role: string; content: string }[]) =>
     api.post<{ reply: string }>(`/agents/${id}/chat`, { messages }),
+  previewChat: (config: ConfigSnapshot, messages: { role: string; content: string }[]) =>
+    api.post<{ reply: string }>('/agents/preview-chat', { config, messages }),
 }

@@ -21,6 +21,7 @@ from app.schemas.agent import (
     ChatRequest,
     ChatResponse,
     ConfigSnapshot,
+    PreviewChatRequest,
 )
 from app.services import agents as agents_service
 from app.services import knowledge as knowledge_service
@@ -182,6 +183,44 @@ async def chat_with_agent(
         reply = await prompt_guard.guarded_agent_chat(
             db,
             route="agents.chat",
+            user_id=user_id,
+            config=config,
+            history=payload.messages,
+            run=run,
+        )
+    except LlmModelResolutionError as exc:
+        raise HTTPException(status_code=502, detail="llm_unavailable") from exc
+    return ChatResponse(reply=reply)
+
+
+@router.post("/preview-chat", response_model=ChatResponse)
+async def preview_chat(
+    payload: PreviewChatRequest,
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(limit_llm_user),
+):
+    """Teste un agent non encore enregistré : la config vient du client (wizard/onboarding)."""
+    config = payload.config
+    if not config.system_prompt.strip():
+        raise HTTPException(status_code=400, detail="prompt_required")
+    default_model = get_settings().llm_default_model
+    primary_model = config.model_id or default_model
+    client = LlmClient()
+
+    async def run(hardened: ConfigSnapshot) -> str:
+        return await run_agent_chat_with_model_fallback(
+            client,
+            hardened,
+            history=payload.messages,
+            temperature=config.temperature,
+            primary_model=primary_model,
+            default_model=default_model,
+        )
+
+    try:
+        reply = await prompt_guard.guarded_agent_chat(
+            db,
+            route="agents.preview-chat",
             user_id=user_id,
             config=config,
             history=payload.messages,
