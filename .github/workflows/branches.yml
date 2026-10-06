@@ -20,12 +20,19 @@ concurrency:
 jobs:
   infos:
     runs-on: ubuntu-24.04
-    permissions: {}
+    permissions:
+      contents: read
     outputs:
       sha8: ${{ steps.v.outputs.sha8 }}
+      code-date: ${{ steps.v.outputs.code_date }}
     steps:
+      - uses: actions/checkout@v5
+      # La date du commit construit, pour /app/version.json (ADR-0004) : lue dans git, elle vaut
+      # aussi pour un lancement manuel (head_commit.timestamp n'existe que sur push).
       - id: v
-        run: echo "sha8=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "sha8=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+          echo "code_date=$(git log -1 --format=%cI)" >> "$GITHUB_OUTPUT"
 
   # fabnum ajoute d'office l'étiquette au nom de la branche (hors main/develop) : IMAGE_TAG ne
   # porte donc que l'étiquette fixe. Le job verify prouve que les deux existent.
@@ -42,6 +49,13 @@ jobs:
       IMAGE_DOCKERFILE: ./Dockerfile
       PUSH: true
       BUILD_ARM64: false
+      # /app/version.json, servi sur /__version__ (ADR-0004) : version = l'étiquette fixe.
+      BUILD_ARGS: |
+        VERSION=beta-${{ needs.infos.outputs.sha8 }}
+        COMMIT=${{ github.sha }}
+        BUILD=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        CODE_DATE=${{ needs.infos.outputs.code-date }}
+        SOURCE=${{ github.server_url }}/${{ github.repository }}
 
   verify:
     needs: [infos, build]
@@ -69,3 +83,8 @@ jobs:
             --format '{{index .Image.Config.Labels "org.opencontainers.image.revision"}}')
           [ "$revision" = "$GITHUB_SHA" ] \
             || { echo "::error::l'image annonce le commit « $revision », pas $GITHUB_SHA"; exit 1; }
+          # ADR-0004 : ce que /__version__ servira dit la même chose que l'étiquette.
+          docker run --rm --entrypoint cat "$IMAGE:beta-$SHA8" /app/version.json > version.json
+          jq '{version, commit, build, code_date, source}' version.json
+          jq -e --arg v "beta-$SHA8" --arg c "$GITHUB_SHA" '.version == $v and .commit == $c' version.json >/dev/null \
+            || { echo "::error::version.json ne dit pas beta-$SHA8 / $GITHUB_SHA"; exit 1; }

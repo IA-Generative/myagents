@@ -22,6 +22,7 @@ jobs:
     outputs:
       server: ${{ steps.filter.outputs.server }}
       web: ${{ steps.filter.outputs.web }}
+      code-date: ${{ steps.v.outputs.code_date }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
@@ -32,6 +33,14 @@ jobs:
               - 'apps/server/**'
             web:
               - 'apps/web/**'
+      # Date du commit de tête de la PR, pour /app/version.json (ADR-0004) : le checkout d'une
+      # PR est un commit de fusion fabriqué à la volée, sa date ne dit rien du code.
+      - id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: echo "code_date=$(gh api "repos/$REPO/commits/$HEAD_SHA" --jq .commit.committer.date)" >> "$GITHUB_OUTPUT"
 
   test-server:
     runs-on: ubuntu-24.04
@@ -95,6 +104,13 @@ jobs:
       IMAGE_DOCKERFILE: ./Dockerfile
       PUSH: true
       BUILD_ARM64: false
+      # /app/version.json, servi sur /__version__ (ADR-0004) : l'image dit quelle PR et quel commit.
+      BUILD_ARGS: |
+        VERSION=pr-${{ github.event.pull_request.number }}
+        COMMIT=${{ github.event.pull_request.head.sha }}
+        BUILD=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        CODE_DATE=${{ needs.path-filter.outputs.code-date }}
+        SOURCE=${{ github.server_url }}/${{ github.repository }}
 
   scan-trivy-conf:
     uses: dnum-mi/fabnum-cicd/.github/workflows/scan-trivy.yml@v0
