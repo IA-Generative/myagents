@@ -63,6 +63,16 @@ Toute route qui envoie du texte utilisateur au modèle passe par `app/llm/guard.
 system prompt durci, sortie + juge), y compris `/v1/chat/completions`. Une nouvelle route LLM
 sans garde est une régression de sécurité.
 
+## Version de l'image (`/__version__`, ADR-0004)
+
+L'image écrit `/app/version.json` à sa construction (`scripts/version_json.py`, copié tel quel
+depuis la skill `repo-version-json` — ne pas l'adapter) et le sert sur `GET /__version__` :
+public, hors OpenAPI, hors journaux. Les cinq build-args (`VERSION`, `COMMIT`, `BUILD`,
+`CODE_DATE`, `SOURCE`) sont passés par `ci.yml` (`pr-<n>`), `branches.yml` (`beta-<sha8>`, qui
+vérifie que l'image dit le commit fusionné) et `cd.yml` (`X.Y.Z`). Un build de poste donne
+`version: "dev"`. La route doit rester déclarée **avant** le catch-all de la SPA, sinon
+`/__version__` rend `index.html` en 200.
+
 ## Previews
 
 Une PR étiquetée `beta-preview` est construite (`mes-agents:pr-<n>`) et déployée par l'Argo CD

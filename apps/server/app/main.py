@@ -29,6 +29,8 @@ from app.core.config import get_settings
 from app.core.csp import CSP_EXEMPT_PATHS, build_csp
 from app.core.logging import setup_logging
 from app.services.prompt_guard import GuardBlockedError
+from app.version import VERSION_PATH
+from app.version import router as version_router
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -148,6 +150,9 @@ async def guard_blocked(_: Request, exc: GuardBlockedError) -> JSONResponse:
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
+    # /__version__ est lu en boucle par le noteur de version : hors journal (ADR-0004).
+    if request.url.path == VERSION_PATH:
+        return await call_next(request)
     start = time.perf_counter()
     response = await call_next(request)
     duration_ms = (time.perf_counter() - start) * 1000
@@ -181,6 +186,11 @@ app.include_router(auth.racine)
 # OpenAI-compatible surface for external callers (Open WebUI connection): no /api prefix,
 # Base URL in Open WebUI is the plain OpenAI convention https://<host>/v1.
 app.include_router(openai_compat.router, prefix="/v1")
+
+
+# Version de l'image (ADR-0004) : publique, avant le catch-all de la SPA qui rendrait sinon
+# index.html en 200 sur /__version__.
+app.include_router(version_router)
 
 
 @app.get("/api/health")
