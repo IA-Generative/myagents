@@ -25,7 +25,7 @@ from app.schemas.agent import (
 )
 from app.services import agents as agents_service
 from app.services import knowledge as knowledge_service
-from app.services import prompt_guard
+from app.services import prompt_guard, socle
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 logger = logging.getLogger(__name__)
@@ -66,10 +66,11 @@ async def _validate_config(
     )
 
 
-def _to_detail(agent) -> AgentDetail:
+def _to_detail(agent, socle_etat: str | None = None) -> AgentDetail:
     return AgentDetail(
         **agents_service.to_list_item(agent).model_dump(),
         config=agents_service.current_config(agent),
+        socle=socle_etat,
     )
 
 
@@ -89,7 +90,12 @@ async def create_agent(
 ):
     await _validate_config(db, user_id, payload.config, route="agents.create")
     agent = await agents_service.create_agent(db, user_id, payload)
-    return _to_detail(agent)
+    # La fiche du socle suit la publication (contrat d'agents, §Le socle) ; un brouillon
+    # n'en a pas et n'appelle pas le socle.
+    etat = (
+        await socle.synchroniser(agent) if socle.doit_avoir_une_fiche(agent) else None
+    )
+    return _to_detail(agent, etat)
 
 
 @router.get("/{agent_id}", response_model=AgentDetail)
@@ -112,7 +118,7 @@ async def update_agent(
     agent = await _get_owned_agent(db, agent_id, user_id)
     await _validate_config(db, user_id, payload.config, route="agents.update")
     agent = await agents_service.update_agent(db, agent, payload)
-    return _to_detail(agent)
+    return _to_detail(agent, await socle.synchroniser(agent))
 
 
 @router.delete("/{agent_id}")
@@ -123,7 +129,8 @@ async def delete_agent(
 ):
     agent = await _get_owned_agent(db, agent_id, user_id)
     await agents_service.archive_agent(db, agent)
-    return {"id": str(agent_id), "status": AgentStatus.archived}
+    etat = await socle.synchroniser(agent)
+    return {"id": str(agent_id), "status": AgentStatus.archived, "socle": etat}
 
 
 @router.post("/{agent_id}/fork", response_model=AgentDetail)
@@ -153,7 +160,7 @@ async def submit_agent(
         db, user_id, agents_service.current_config(agent), route="agents.submit"
     )
     agent = await agents_service.submit_agent(db, agent)
-    return _to_detail(agent)
+    return _to_detail(agent, await socle.synchroniser(agent))
 
 
 @router.post("/{agent_id}/chat", response_model=ChatResponse)

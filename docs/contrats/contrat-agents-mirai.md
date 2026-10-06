@@ -181,6 +181,17 @@ pour `GET /api/v1/agents`, pour `GET /v1/models` et pour `POST /v1/chat/completi
   s'affiche telle quelle (`error.message`), une `502` dit « l'agent ne répond pas ».
 - Un service injoignable ou un `403` masque la section « Agents » sans bloquer l'écran.
 
+## Le socle (Mon assistant)
+
+Le socle découvre les agents partagés par sa connexion OpenAI vers `/v1` (clé partagée). Avec
+le contrôle d'accès par modèle, un modèle sans fiche y est invisible : **Mes agents pose la fiche
+à la publication** et la retire quand l'agent redevient privé, brouillon ou archivé. Ministère :
+`user/*` (tout compte connecté) ; communauté : le groupe du socle qui porte le nom feuille de la
+communauté, sinon la fiche n'est pas posée (`groupe_inconnu`). La fiche ne porte ni prompt ni
+outils : c'est `/v1` qui les applique. Les routes d'écriture renvoient l'état dans `socle`
+(`posee`, `retiree`, `indisponible`, `groupe_inconnu:<nom>`, `erreur:<type>`) ; rien ne bloque
+une publication. Reprise en masse : `python -m app.scripts.resynchroniser_socle`.
+
 ## Keycloak
 
 Portée optionnelle `mesagents-agents` : mapper d'audience `mesagents` (jeton d'accès) et mapper

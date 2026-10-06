@@ -29,7 +29,9 @@ Les autres applications et plug-ins listent et lancent les agents par deux route
 le server, avec le jeton Keycloak de la personne :
 [docs/contrats/contrat-agents-mirai.md](docs/contrats/contrat-agents-mirai.md). Portée Keycloak à
 importer chez les consommateurs : [keycloak/mesagents-agents.client-scope.json](keycloak/mesagents-agents.client-scope.json).
-Jeu d'essai : `uv run python -m app.scripts.seed_contrat` (dans `apps/server`).
+Jeu d'essai : `uv run python -m app.scripts.seed_contrat` (dans `apps/server`). Fiches dans le
+socle : `OWUI_BASE_URL` et `OWUI_ADMIN_API_KEY` (vides = fiches non posées) ; reprise en masse par
+`uv run python -m app.scripts.resynchroniser_socle`.
 
 ## Pré-requis
 

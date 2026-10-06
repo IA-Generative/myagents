@@ -136,6 +136,13 @@ class Settings(BaseSettings):
     # Appels à GET /api/v1/agents par minute et par personne (0 = sans limite).
     contrat_rate_limit_per_minute: int = 60
 
+    # --- Fiches dans le socle (Open WebUI) ---
+    # Adresse INTERNE du socle (jamais son hôte public depuis un pod) et clé d'API d'un
+    # compte d'administration. Vides = fiches non posées (état `indisponible`).
+    owui_base_url: str = ""
+    owui_admin_api_key: str = ""
+    owui_timeout: float = 15.0
+
     @model_validator(mode="after")
     def _default_web_public_url(self) -> Settings:
         if not self.web_public_url:
