@@ -1,0 +1,35 @@
+{
+  "name": "mesagents-agents",
+  "description": "Contrat d'agents MirAI : ajoute l'audience « mesagents » et les groupes en chemins complets au jeton d'un consommateur (Mon portail, Mes réunions, Mes collections, plug-ins).",
+  "protocol": "openid-connect",
+  "attributes": {
+    "include.in.token.scope": "true",
+    "display.on.consent.screen": "false"
+  },
+  "protocolMappers": [
+    {
+      "name": "audience-mesagents",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-audience-mapper",
+      "config": {
+        "included.custom.audience": "mesagents",
+        "access.token.claim": "true",
+        "id.token.claim": "false",
+        "introspection.token.claim": "true"
+      }
+    },
+    {
+      "name": "groups-chemins-complets",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-group-membership-mapper",
+      "config": {
+        "claim.name": "groups",
+        "full.path": "true",
+        "access.token.claim": "true",
+        "id.token.claim": "false",
+        "userinfo.token.claim": "true",
+        "introspection.token.claim": "true"
+      }
+    }
+  ]
+}
