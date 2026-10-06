@@ -196,8 +196,33 @@ class OnboardingTurn(BaseModel):
     examples: list[str] = Field(
         default_factory=list, description="3 exemples de prompts utilisateur"
     )
+    progress: list[str] = Field(
+        default_factory=list,
+        description="Étapes déjà recueillies parmi : role, audience, tone, constraints",
+    )
 
 
 class OnboardingChatResponse(BaseModel):
     message: str
     agent_config: OnboardingAgentConfig | None = None
+
+
+class PreviewChatRequest(BaseModel):
+    """Test d'un agent non encore enregistré : la config vient du client."""
+
+    config: ConfigSnapshot
+    messages: list[ChatMessage] = Field(max_length=MAX_MESSAGES)
+
+
+class RefineConfigRequest(BaseModel):
+    """Ajustement d'une config d'agent à partir d'un feedback utilisateur."""
+
+    config: ConfigSnapshot
+    feedback: str = Field(max_length=MAX_PROMPT_CHARS)
+
+
+class RefineConfigResponse(BaseModel):
+    """Config ajustée par le LLM + message de synthèse des changements."""
+
+    config: ConfigSnapshot
+    message: str
