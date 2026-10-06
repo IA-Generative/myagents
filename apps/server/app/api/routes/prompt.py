@@ -29,6 +29,8 @@ from app.schemas.agent import (
     PromptResponse,
     PromptValidateRequest,
     PromptValidateResponse,
+    RefineConfigRequest,
+    RefineConfigResponse,
     SuggestStartersRequest,
     SuggestStartersResponse,
 )
@@ -205,8 +207,46 @@ async def onboarding_chat(
             system_prompt=turn.system_prompt,
             greeting=turn.greeting,
             examples=turn.examples,
+            progress=turn.progress,
         )
         if turn.ready
         else None
     )
     return OnboardingChatResponse(message=turn.message, agent_config=agent_config)
+
+
+@router.post("/prompt/refine", response_model=RefineConfigResponse)
+async def refine_config(
+    payload: RefineConfigRequest,
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(limit_llm_user),
+):
+    """Ajuste une config d'agent à partir d'un feedback utilisateur (ex. « ton moins formel »)."""
+    if not payload.config.system_prompt.strip():
+        raise HTTPException(status_code=400, detail="prompt_required")
+    if not payload.feedback.strip():
+        raise HTTPException(status_code=400, detail="feedback_required")
+    # Le feedback et la config sont fournis par l'utilisateur.
+    await prompt_guard.check_input(
+        db,
+        route="prompt.refine",
+        text=f"{payload.feedback}\n{payload.config.system_prompt}",
+        role="user",
+        block_message=BLOCK_MESSAGE_USER_INPUT,
+        user_id=user_id,
+    )
+    client = LlmClient()
+    try:
+        result = await chains.refine_config(client, payload.config, payload.feedback)
+    except LlmUnavailableError as exc:
+        raise HTTPException(status_code=502, detail="llm_unavailable") from exc
+    except LlmParseError as exc:
+        raise HTTPException(status_code=502, detail="parse_failed") from exc
+    # La config ajustée sera publiée : on contrôle la sortie.
+    await prompt_guard.check_output(
+        db,
+        route="prompt.refine",
+        text=f"{result.message}\n{result.config.system_prompt}",
+        user_id=user_id,
+    )
+    return result

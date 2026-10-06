@@ -1,8 +1,72 @@
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { agentsApi } from '@/api/agents'
 import { promptApi } from '@/api/prompt'
-import type { OnboardingAgentConfig, OnboardingMessage } from '@/types/agent'
+import AgentChatWidget from '@/components/AgentChatWidget.vue'
+import type { ConfigSnapshot, OnboardingAgentConfig, OnboardingMessage } from '@/types/agent'
+
+const STEPS = [
+  { key: 'role', label: 'Rôle' },
+  { key: 'audience', label: 'Public' },
+  { key: 'tone', label: 'Ton' },
+  { key: 'constraints', label: 'Contraintes' },
+]
+const progress = ref<string[]>([])
+const testing = ref(false)
+const testKey = ref(0)
+const feedback = ref('')
+const refineMsg = ref<string | null>(null)
+
+const previewConfig = computed<ConfigSnapshot | null>(() => {
+  const c = agentConfig.value
+  if (!c) return null
+  return {
+    name: c.name,
+    description: c.description,
+    category: c.category,
+    community_path: null,
+    system_prompt: c.system_prompt,
+    greeting: c.greeting,
+    examples: c.examples,
+    model_id: '',
+    temperature: 0.7,
+    knowledge_ids: [],
+    tool_ids: [],
+  }
+})
+
+function sendPreview(msgs: { role: string; content: string }[]) {
+  return agentsApi.previewChat(previewConfig.value as ConfigSnapshot, msgs)
+}
+
+async function refine() {
+  const cfg = previewConfig.value
+  const text = feedback.value.trim()
+  if (!cfg || !text || busy.value) return
+  busy.value = true
+  refineMsg.value = null
+  try {
+    const res = await promptApi.refineConfig(cfg, text)
+    const c = res.config
+    agentConfig.value = {
+      ...(agentConfig.value as OnboardingAgentConfig),
+      name: c.name,
+      description: c.description,
+      category: c.category,
+      system_prompt: c.system_prompt,
+      greeting: c.greeting,
+      examples: c.examples,
+    }
+    refineMsg.value = res.message
+    feedback.value = ''
+    testKey.value++
+  } catch {
+    refineMsg.value = "L'ajustement a échoué. Réessayez."
+  } finally {
+    busy.value = false
+  }
+}
 
 const router = useRouter()
 const open = ref(false)
@@ -34,6 +98,7 @@ async function startChat() {
     }
     const res = await promptApi.onboardingChat([greeting])
     messages.value = [greeting, { role: 'assistant', content: res.message }]
+    progress.value = res.agent_config?.progress ?? progress.value
     if (res.agent_config?.ready) agentConfig.value = res.agent_config
     await scrollToBottom()
   } catch {
@@ -54,6 +119,7 @@ async function send() {
   try {
     const res = await promptApi.onboardingChat(messages.value)
     messages.value.push({ role: 'assistant', content: res.message })
+    progress.value = res.agent_config?.progress ?? progress.value
     if (res.agent_config?.ready) agentConfig.value = res.agent_config
     await scrollToBottom()
   } catch {
@@ -166,11 +232,44 @@ function createAgent() {
       </p>
     </div>
 
-    <div v-if="agentConfig" style="padding: 0.75rem 1rem; border-top: 1px solid var(--border-default-grey)">
+    <ul
+      v-if="!agentConfig && progress.length"
+      class="fr-text--xs fr-mb-0"
+      style="display: flex; gap: 0.75rem; list-style: none; padding: 0.5rem 1rem; border-top: 1px solid var(--border-default-grey)"
+    >
+      <li v-for="s in STEPS" :key="s.key">
+        {{ progress.includes(s.key) ? '✓' : '○' }} {{ s.label }}
+      </li>
+    </ul>
+
+    <div v-if="agentConfig" style="padding: 0.75rem 1rem; border-top: 1px solid var(--border-default-grey); overflow-y: auto">
       <p class="fr-text--sm fr-mb-1w">
         <strong>{{ agentConfig.name }}</strong> est prêt à être créé !
       </p>
-      <button type="button" class="fr-btn fr-btn--sm" @click="createAgent">Créer cet agent</button>
+      <button type="button" class="fr-btn fr-btn--sm fr-mr-1w" @click="createAgent">Créer cet agent</button>
+      <button type="button" class="fr-btn fr-btn--sm fr-btn--secondary" @click="testing = !testing">
+        {{ testing ? 'Masquer le test' : 'Tester' }}
+      </button>
+      <div v-if="testing" class="fr-mt-2w">
+        <AgentChatWidget
+          :key="testKey"
+          :agent-name="agentConfig.name"
+          :greeting="agentConfig.greeting"
+          :send="sendPreview"
+        />
+        <div class="fr-mt-1w" style="display: flex; gap: 0.5rem">
+          <input
+            v-model="feedback"
+            class="fr-input"
+            type="text"
+            placeholder="Ajuster : ex. ton moins formel"
+            :disabled="busy"
+            @keyup.enter="refine"
+          >
+          <button type="button" class="fr-btn fr-btn--sm" :disabled="busy" @click="refine">Ajuster</button>
+        </div>
+        <p v-if="refineMsg" class="fr-text--sm fr-mt-1w fr-mb-0">{{ refineMsg }}</p>
+      </div>
     </div>
 
     <div style="padding: 0.75rem; border-top: 1px solid var(--border-default-grey); display: flex; gap: 0.5rem">

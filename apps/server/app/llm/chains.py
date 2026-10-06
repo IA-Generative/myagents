@@ -22,8 +22,10 @@ from app.core.config import get_settings
 from app.llm.client import LlmClient, LlmParseError, LlmUnavailableError
 from app.schemas.agent import (
     ChatMessage,
+    ConfigSnapshot,
     OnboardingMessage,
     OnboardingTurn,
+    RefineConfigResponse,
     SuggestStartersResponse,
 )
 
@@ -177,8 +179,9 @@ successives, pour construire la configuration de son agent IA. Tu mènes un entr
 4. Les contraintes ou garde-fous (ne pas inventer de sources, renvoyer vers un service, etc.)
 
 Pose **une seule question à la fois** dans le champ "message", de manière naturelle et \
-concise. Tant que tu n'as pas recueilli assez d'informations, laisse "ready" à false et les \
-autres champs vides. Dès que tu as assez d'informations, mets "ready" à true et remplis \
+concise. Dans le champ "progress", liste les étapes déjà recueillies parmi : role, audience, \
+tone, constraints. Tant que tu n'as pas recueilli assez d'informations, laisse "ready" à false \
+et les autres champs vides. Dès que tu as assez d'informations, mets "ready" à true et remplis \
 tous les champs en t'appuyant sur les réponses de l'utilisateur.
 
 Quand "ready" est true :
@@ -223,3 +226,52 @@ async def onboarding_turn(
             fallback_chain, payload, label="onboarding_turn (fallback)", model=model
         )
         return OnboardingTurn(message=raw.strip(), ready=False)
+
+
+# ---------------------------------------------------------------------------
+# 5. Refine config: adjust an agent config from user feedback.
+# ---------------------------------------------------------------------------
+
+_refine_parser = PydanticOutputParser(pydantic_object=RefineConfigResponse)
+
+_REFINE_SYSTEM_PROMPT = """Tu es un assistant qui ajuste la configuration d'un agent IA à \
+partir d'un feedback utilisateur. Tu reçois la config actuelle et un feedback (ex. « rends le \
+ton moins formel », « ajoute une contrainte sur les sources »). Tu retourne la config complète \
+ajustée en tenant compte du feedback, sans dégrader ce qui fonctionnait déjà.
+
+Conserve la structure du system_prompt (Rôle, Public, Ton, Contraintes). Si le feedback \
+concerne le nom, la description, le greeting ou les exemples, ajuste-les aussi. Le champ \
+"message" contient un résumé court des changements effectués.
+
+IMPORTANT : ta réponse DOIT être un objet JSON valide conforme au schéma ci-dessous. Ne \
+renvoie JAMAIS de texte brut ou de prose en dehors du JSON.
+
+{format_instructions}"""
+
+_REFINE_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        ("system", _REFINE_SYSTEM_PROMPT),
+        ("human", "{config_json}\n\nFeedback : {feedback}"),
+    ]
+).partial(format_instructions=_refine_parser.get_format_instructions())
+
+
+async def refine_config(
+    client: LlmClient, config: ConfigSnapshot, feedback: str
+) -> RefineConfigResponse:
+    model = get_settings().llm_assist_model
+    chain = _REFINE_PROMPT | client.chat_model(model, 0.4) | _refine_parser
+    payload = {
+        "config_json": config.model_dump_json(indent=2),
+        "feedback": feedback,
+    }
+    try:
+        return await _ainvoke(chain, payload, label="refine_config", model=model)
+    except LlmParseError:
+        # Même repli que pour onboarding_turn : si le modèle ne produit pas de JSON,
+        # on retourne la config inchangée avec un message d'erreur user-friendly.
+        logger.warning("[refine_config] parsing JSON échoué, config inchangée")
+        return RefineConfigResponse(
+            config=config,
+            message="Je n'ai pas pu ajuster la configuration. Vous pouvez la modifier manuellement dans le wizard.",
+        )
