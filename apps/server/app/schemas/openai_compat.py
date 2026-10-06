@@ -13,6 +13,8 @@ class OpenAIModel(BaseModel):
     created: int
     owned_by: str = "myagents"
     name: str
+    # Même forme qu'Open WebUI (`info.meta.description`) : les plug-ins bureautiques la lisent.
+    info: dict | None = None
 
 
 class OpenAIModelList(BaseModel):

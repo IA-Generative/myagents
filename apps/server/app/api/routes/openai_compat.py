@@ -1,4 +1,10 @@
-"""OpenAI-compatible /v1 endpoints exposing agents as "models" for Open WebUI.
+"""OpenAI-compatible /v1 endpoints exposing agents as "models".
+
+Deux appelants (contrat d'agents MirAI, docs/contrats/contrat-agents-mirai.md) :
+- le socle Open WebUI, avec la clé partagée : liste des agents partagés, droits appliqués par
+  ses propres fiches ;
+- une personne, par son jeton Keycloak (Mon portail, Mes réunions, plug-ins) : liste et
+  lancement limités à ce qu'elle a le droit de voir, usage imputé à son `sub`.
 
 Mounted without the /api prefix (see main.py) so the connection's Base URL in
 Open WebUI is the plain OpenAI convention: https://<host>/v1.
@@ -15,7 +21,7 @@ from fastapi import APIRouter, Depends, Header
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import limit_llm_openwebui, require_openwebui_key
+from app.api.deps import V1Caller, limit_v1, v1_caller
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.llm.client import LlmClient
@@ -31,9 +37,7 @@ from app.schemas.openai_compat import (
 from app.services import agents as agents_service
 from app.services import prompt_guard
 
-router = APIRouter(
-    tags=["openai-compat"], dependencies=[Depends(require_openwebui_key)]
-)
+router = APIRouter(tags=["openai-compat"])
 logger = logging.getLogger(__name__)
 
 
@@ -92,16 +96,26 @@ def _model_not_found(model: str) -> JSONResponse:
 
 
 @router.get("/models", response_model=OpenAIModelList)
-async def list_models(db: AsyncSession = Depends(get_db)):
-    agents = await agents_service.list_exposed_agents(db)
-    data = [
-        OpenAIModel(
-            id=str(agent.id),
-            created=int(agent.created_at.timestamp()),
-            name=agents_service.current_config(agent).name,
+async def list_models(
+    db: AsyncSession = Depends(get_db), caller: V1Caller = Depends(v1_caller)
+):
+    if caller.user is not None:
+        agents = await agents_service.list_accessible(
+            db, caller.user.user_id, caller.user.groups
         )
-        for agent in agents
-    ]
+    else:
+        agents = await agents_service.list_exposed_agents(db)
+    data = []
+    for agent in agents:
+        config = agents_service.current_config(agent)
+        data.append(
+            OpenAIModel(
+                id=str(agent.id),
+                created=int(agent.created_at.timestamp()),
+                name=config.name,
+                info={"meta": {"description": config.description}},
+            )
+        )
     return OpenAIModelList(data=data)
 
 
@@ -133,10 +147,11 @@ async def _sse_full_reply(model: str, reply: str) -> AsyncIterator[str]:
     yield "data: [DONE]\n\n"
 
 
-@router.post("/chat/completions", dependencies=[Depends(limit_llm_openwebui)])
+@router.post("/chat/completions")
 async def chat_completions(
     payload: OpenAIChatCompletionRequest,
     db: AsyncSession = Depends(get_db),
+    caller: V1Caller = Depends(limit_v1),
     x_openwebui_user_id: str | None = Header(default=None),
 ):
     try:
@@ -145,8 +160,23 @@ async def chat_completions(
         return _model_not_found(payload.model)
 
     agent = await agents_service.get_agent(db, agent_id)
-    if agent is None or not agents_service.is_catalog_visible(agent):
+    if agent is None:
         return _model_not_found(payload.model)
+    # Un agent hors de portée répond comme un agent inexistant (contrat) : ne pas
+    # confirmer l'existence d'un agent privé à un tiers.
+    if caller.user is not None:
+        accessible = agents_service.is_accessible(
+            agent, caller.user.user_id, caller.user.groups
+        )
+    else:
+        accessible = agents_service.is_catalog_visible(agent)
+    if not accessible:
+        return _model_not_found(payload.model)
+    audit_user_id = (
+        caller.user.user_id
+        if caller.user is not None
+        else _audit_user_id(x_openwebui_user_id)
+    )
 
     config = agents_service.current_config(agent)
     default_model = get_settings().llm_default_model
@@ -169,7 +199,7 @@ async def chat_completions(
         reply = await prompt_guard.guarded_agent_chat(
             db,
             route="openai.chat_completions",
-            user_id=_audit_user_id(x_openwebui_user_id),
+            user_id=audit_user_id,
             config=config,
             history=payload.messages,
             run=run,

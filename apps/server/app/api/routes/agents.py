@@ -6,8 +6,9 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user_id, limit_llm_user
+from app.api.deps import get_current_user, get_current_user_id, limit_llm_user
 from app.core.config import get_settings
+from app.core.security import AuthUser
 from app.db.session import get_db
 from app.llm.client import LlmClient
 from app.llm.fallback import LlmModelResolutionError, run_agent_chat_with_model_fallback
@@ -129,12 +130,14 @@ async def delete_agent(
 async def fork_agent(
     agent_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    user_id: str = Depends(get_current_user_id),
+    user: AuthUser = Depends(get_current_user),
 ):
-    agent = await agents_service.get_accessible_agent(db, agent_id, user_id)
+    agent = await agents_service.get_accessible_agent(
+        db, agent_id, user.user_id, user.groups
+    )
     if agent is None:
         raise HTTPException(status_code=404, detail="not_found")
-    forked = await agents_service.fork_agent(db, agent, user_id)
+    forked = await agents_service.fork_agent(db, agent, user.user_id)
     return _to_detail(forked)
 
 
