@@ -82,7 +82,7 @@ async def _find_for_update(db: AsyncSession, raw: str) -> AuthSession | None:
             .with_for_update(skip_locked=True, read=False)
         )
         return result.scalar_one_or_none()
-    except Exception:
+    except (NotImplementedError, AttributeError):
         # SQLite ne supporte pas FOR UPDATE SKIP LOCKED ; on retombe sur une lecture simple.
         return await _find(db, raw)
 
