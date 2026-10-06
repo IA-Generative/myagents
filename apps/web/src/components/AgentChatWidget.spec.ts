@@ -95,4 +95,20 @@ describe('AgentChatWidget', () => {
 
     expect(wrapper.find('button').attributes('disabled')).toBeDefined() // empty input again
   })
+
+  it('rend le Markdown des réponses de l’agent, pas celui de l’utilisateur', async () => {
+    const send = vi.fn(async () => ({ reply: '1. **Simplifier** une procédure\n2. *Orienter* l’usager' }))
+    const wrapper = mount(AgentChatWidget, { props: { agentName: 'Mon agent', send } })
+
+    await wrapper.find('input').setValue('Mon **message**')
+    await wrapper.find('button').trigger('click')
+    await flushPromises()
+
+    const html = wrapper.html()
+    expect(html).toContain('<strong>Simplifier</strong>')
+    expect(html).toContain('<em>Orienter</em>')
+    expect(wrapper.find('ol').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Vous : Mon **message**')
+    expect(wrapper.text()).not.toContain('**Simplifier**')
+  })
 })
