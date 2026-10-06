@@ -35,6 +35,7 @@ def _oidc_settings(monkeypatch):
         "web_public_url": WEB,
         "session_secret": "",
         "cors_origins": [WEB],
+        "oidc_groupe_exige": "",  # Désactiver le contrôle de groupe pour les tests
     }.items():
         monkeypatch.setattr(settings, name, value)
 
@@ -341,15 +342,8 @@ async def test_resolve_session_concurrent_refresh_is_serialized(
     """Deux appels simultanés à resolve_session avec access token expiré :
     seul le premier effectue le refresh (le second attend ou recourt à la relecture).
     """
-    import asyncio
-
     await _authenticate(client, keycloak)
     await _backdate(session_factory, access_expires_at=timedelta(seconds=-5))
-
-    # Récupérer la session brute
-    async with session_factory() as db:
-        row = (await db.execute(select(AuthSession))).scalar_one()
-        raw = auth_sessions._hash(client.cookies.get("myagents_session"))
 
     call_count = len(keycloak["calls"])
 
@@ -358,7 +352,7 @@ async def test_resolve_session_concurrent_refresh_is_serialized(
         result1 = await auth_sessions.resolve_session(
             db, client.cookies.get("myagents_session")
         )
-        result2 = await auth_sessions.resolve_session(
+        await auth_sessions.resolve_session(
             db, client.cookies.get("myagents_session")
         )
 
