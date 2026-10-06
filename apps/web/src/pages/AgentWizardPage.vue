@@ -39,19 +39,26 @@ onMounted(async () => {
   } else {
     const raw = route.query.onboarding
     if (typeof raw === 'string') {
-      try {
-        const cfg = JSON.parse(decodeURIComponent(raw))
-        wizard.updateConfig({
-          name: cfg.name ?? '',
-          description: cfg.description ?? '',
-          category: cfg.category ?? '',
-          system_prompt: cfg.system_prompt ?? '',
-          greeting: cfg.greeting ?? '',
-          examples: Array.isArray(cfg.examples) ? cfg.examples : [],
-        })
-        fromOnboarding.value = true
-      } catch {
-        // ignore malformed onboarding payload
+      // La config (potentiellement > 20 Ko) est passée via sessionStorage,
+      // non via la query string, pour éviter de dépasser la limite d'URL.
+      const stored = sessionStorage.getItem('onboarding_agent_config')
+      if (stored) {
+        try {
+          const cfg = JSON.parse(stored)
+          wizard.updateConfig({
+            name: cfg.name ?? '',
+            description: cfg.description ?? '',
+            category: cfg.category ?? '',
+            system_prompt: cfg.system_prompt ?? '',
+            greeting: cfg.greeting ?? '',
+            examples: Array.isArray(cfg.examples) ? cfg.examples : [],
+          })
+          fromOnboarding.value = true
+        } catch {
+          // ignore malformed onboarding payload
+        } finally {
+          sessionStorage.removeItem('onboarding_agent_config')
+        }
       }
     }
   }
