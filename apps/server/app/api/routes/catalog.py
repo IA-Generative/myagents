@@ -6,9 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user_id, limit_llm_user
+from app.core.config import get_settings
 from app.db.session import get_db
-from app.llm import agent_runtime
-from app.llm.client import LlmClient, LlmUnavailableError
+from app.llm.client import LlmClient
+from app.llm.fallback import LlmModelResolutionError, run_agent_chat_with_model_fallback
 from app.schemas.agent import (
     AgentDetail,
     AgentListItem,
@@ -58,15 +59,20 @@ async def chat_with_catalog_agent(
     """Try out any published/community/ministry agent — no ownership required."""
     agent = await _get_public_agent(db, agent_id)
     config = agents_service.current_config(agent)
+    # Le modèle gardé en base vieillit (retiré ou renommé par l'opérateur) : même repli
+    # sur le modèle par défaut que pour ses propres agents.
+    default_model = get_settings().llm_default_model
+    primary_model = config.model_id or agent.model_ref or default_model
     client = LlmClient()
 
     async def run(hardened: ConfigSnapshot) -> str:
-        return await agent_runtime.arun_agent_chat(
+        return await run_agent_chat_with_model_fallback(
             client,
             hardened,
             history=payload.messages,
-            model=config.model_id or agent.model_ref,
             temperature=config.temperature,
+            primary_model=primary_model,
+            default_model=default_model,
         )
 
     try:
@@ -78,6 +84,6 @@ async def chat_with_catalog_agent(
             history=payload.messages,
             run=run,
         )
-    except LlmUnavailableError as exc:
+    except LlmModelResolutionError as exc:
         raise HTTPException(status_code=502, detail="llm_unavailable") from exc
     return ChatResponse(reply=reply)

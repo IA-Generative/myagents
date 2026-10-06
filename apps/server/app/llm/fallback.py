@@ -108,3 +108,7 @@ async def run_agent_chat_with_model_fallback(
                 exc2,
             )
             raise LlmModelResolutionError(exc2) from exc2
+    except (LlmUnavailableError, LlmParseError) as exc:
+        # Hub injoignable, délai dépassé, réponse illisible : pas de repli (le défaut
+        # passe par le même hub), mais une erreur que les routes savent traduire.
+        raise LlmModelResolutionError(exc) from exc
