@@ -189,6 +189,13 @@ async def onboarding_chat(
         db, route="onboarding.chat", text=_turn_text(turn), user_id=user_id, role="user"
     )
 
+    # Le LLM peut renvoyer un message vide (rare mais déjà observé) : on évite
+    # d'afficher une bulle vide côté client en renvoyant un message de repli.
+    if not turn.message.strip():
+        turn.message = (
+            "Pouvez-vous préciser votre besoin pour que je puisse vous aider ?"
+        )
+
     agent_config = (
         OnboardingAgentConfig(
             ready=True,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { promptApi } from '@/api/prompt'
 import type { OnboardingAgentConfig, OnboardingMessage } from '@/types/agent'
@@ -12,6 +12,15 @@ const input = ref('')
 const busy = ref(false)
 const error = ref<string | null>(null)
 const agentConfig = ref<OnboardingAgentConfig | null>(null)
+const messagesContainer = ref<HTMLElement | null>(null)
+
+const ONBOARDING_STORAGE_KEY = 'onboarding_agent_config'
+
+async function scrollToBottom() {
+  await nextTick()
+  const el = messagesContainer.value
+  if (el) el.scrollTop = el.scrollHeight
+}
 
 async function startChat() {
   open.value = true
@@ -26,6 +35,7 @@ async function startChat() {
     const res = await promptApi.onboardingChat([greeting])
     messages.value = [greeting, { role: 'assistant', content: res.message }]
     if (res.agent_config?.ready) agentConfig.value = res.agent_config
+    await scrollToBottom()
   } catch {
     error.value = "Impossible de démarrer l'assistant pour le moment."
   } finally {
@@ -40,10 +50,12 @@ async function send() {
   input.value = ''
   busy.value = true
   error.value = null
+  await scrollToBottom()
   try {
     const res = await promptApi.onboardingChat(messages.value)
     messages.value.push({ role: 'assistant', content: res.message })
     if (res.agent_config?.ready) agentConfig.value = res.agent_config
+    await scrollToBottom()
   } catch {
     error.value = 'Une erreur est survenue. Réessayez.'
   } finally {
@@ -51,10 +63,25 @@ async function send() {
   }
 }
 
+async function retry() {
+  // Retire le dernier message utilisateur (celui qui a échoué) et le renvoie.
+  const last = messages.value[messages.value.length - 1]
+  if (last?.role !== 'user') return
+  const text = last.content
+  messages.value.pop()
+  input.value = text
+  await send()
+}
+
 function createAgent() {
   if (!agentConfig.value) return
-  const encoded = encodeURIComponent(JSON.stringify(agentConfig.value))
-  router.push({ name: 'agent-new', query: { onboarding: encoded } })
+  // La config peut contenir un system_prompt jusqu'à 20 Ko : trop long pour une
+  // query string d'URL. On passe par sessionStorage, lu puis effacé par le wizard.
+  sessionStorage.setItem(
+    ONBOARDING_STORAGE_KEY,
+    JSON.stringify(agentConfig.value),
+  )
+  router.push({ name: 'agent-new', query: { onboarding: '1' } })
 }
 </script>
 
@@ -101,7 +128,12 @@ function createAgent() {
       </button>
     </div>
 
-    <div style="flex: 1; overflow-y: auto; padding: 0.75rem">
+    <div
+      ref="messagesContainer"
+      style="flex: 1; overflow-y: auto; padding: 0.75rem"
+      aria-live="polite"
+      aria-atomic="false"
+    >
       <div
         v-for="(m, i) in messages"
         :key="i"
@@ -114,7 +146,24 @@ function createAgent() {
           {{ m.content }}
         </span>
       </div>
-      <p v-if="error" class="fr-text--sm" style="color: var(--text-default-error)">{{ error }}</p>
+      <div v-if="busy" class="fr-mb-2w" style="text-align: left">
+        <span
+          class="fr-text--sm"
+          style="display: inline-block; padding: 0.5rem 0.75rem; border-radius: 12px; background: var(--background-contrast-grey); color: var(--text-mention-grey)"
+        >
+          L'assistant rédige sa réponse…
+        </span>
+      </div>
+      <p v-if="error" class="fr-text--sm" style="color: var(--text-default-error)">
+        {{ error }}
+        <button
+          type="button"
+          class="fr-btn fr-btn--tertiary-no-outline fr-btn--sm fr-mt-1v"
+          @click="retry"
+        >
+          Réessayer
+        </button>
+      </p>
     </div>
 
     <div v-if="agentConfig" style="padding: 0.75rem 1rem; border-top: 1px solid var(--border-default-grey)">
