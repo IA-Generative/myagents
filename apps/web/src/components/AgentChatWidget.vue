@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, useId } from 'vue'
 import { ApiError } from '@/api/client'
+import { renderMarkdown } from '@/markdown'
 
 const props = defineProps<{
   agentName: string
@@ -66,14 +67,17 @@ function reset() {
       class="fr-mb-2w"
       style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 320px; overflow-y: auto"
     >
-      <p
-        v-for="(m, i) in history"
-        :key="i"
-        class="fr-mb-0"
-        :style="m.role === 'user' ? 'font-weight: 600' : ''"
-      >
-        {{ m.role === 'user' ? 'Vous' : agentName }} : {{ m.content }}
-      </p>
+      <template v-for="(m, i) in history" :key="i">
+        <p v-if="m.role === 'user'" class="fr-mb-0" style="font-weight: 600">
+          Vous : {{ m.content }}
+        </p>
+        <!-- Réponse de l'agent : Markdown rendu puis assaini (src/markdown.ts). -->
+        <div v-else class="reponse-agent">
+          <p class="fr-mb-0 fr-text--bold">{{ agentName }} :</p>
+          <!-- eslint-disable-next-line vue/no-v-html -->
+          <div v-html="renderMarkdown(m.content)" />
+        </div>
+      </template>
       <p v-if="busy" class="fr-mb-0 fr-text--sm" style="color: var(--text-mention-grey)">
         {{ agentName }} écrit...
       </p>
@@ -109,3 +113,18 @@ function reset() {
     </button>
   </div>
 </template>
+
+<style scoped>
+/* Marges du DSFR trop généreuses dans une bulle de discussion. */
+.reponse-agent :deep(p),
+.reponse-agent :deep(ul),
+.reponse-agent :deep(ol),
+.reponse-agent :deep(pre),
+.reponse-agent :deep(blockquote) {
+  margin: 0 0 0.5rem;
+}
+.reponse-agent :deep(ul),
+.reponse-agent :deep(ol) {
+  padding-left: 1.5rem;
+}
+</style>
