@@ -41,6 +41,13 @@ fichier.
   et `Vary: Origin`, sans `Allow-Credentials`.
 - Toutes les réponses du contrat portent `Cache-Control: no-store`. Rien du contenu n'est
   journalisé en clair.
+- **Extensions de navigateur** (Firefox, Chrome) : une extension qui déclare l'hôte de Mes agents
+  dans ses permissions d'hôte n'est pas soumise au CORS ; son origine (`moz-extension://…`,
+  `chrome-extension://…`) n'a pas à figurer dans `CONTRAT_ORIGINES`. Un plug-in bureautique
+  (Thunderbird, LibreOffice) appelle hors navigateur : pas de CORS non plus. Seuls les sites web
+  déclarent leur origine.
+- **Pagination** : `limit` vaut 200 au plus et il n'y a pas de pagination en V1 ; `total` dit
+  combien d'agents la personne peut voir, un consommateur affiche « 200+ » au-delà.
 
 ## `GET /api/v1/agents`
 
