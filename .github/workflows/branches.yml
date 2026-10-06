@@ -69,15 +69,16 @@ jobs:
       ACTOR: ${{ github.actor }}
       TOKEN: ${{ github.token }}
     steps:
-      - name: Les deux étiquettes désignent la même image, qui porte le commit construit
+      # On ne contrôle que l'étiquette FIXE, celle que tire Argo CD. L'étiquette mobile `beta` est
+      # aussi publiée par cd.yml quand une release (PR release-please) est fusionnée : les deux
+      # workflows tournent alors en même temps, et comparer `beta` à `beta-<sha8>` donnait un
+      # faux rouge sans aucun effet sur le déploiement.
+      - name: L'étiquette déployée porte le commit construit
         run: |
           set -euo pipefail
           IMAGE="${IMAGE,,}"
           echo "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin >/dev/null
-          mobile=$(docker buildx imagetools inspect "$IMAGE:beta" --format '{{.Manifest.Digest}}')
-          fixe=$(docker buildx imagetools inspect "$IMAGE:beta-$SHA8" --format '{{.Manifest.Digest}}')
-          echo "beta → $mobile ; beta-$SHA8 → $fixe"
-          [ "$mobile" = "$fixe" ] || { echo "::error::beta et beta-$SHA8 divergent"; exit 1; }
+          echo "beta-$SHA8 → $(docker buildx imagetools inspect "$IMAGE:beta-$SHA8" --format '{{.Manifest.Digest}}')"
           # Étiquette OCI posée par fabnum : ce que le cluster tire doit dire le commit fusionné.
           revision=$(docker buildx imagetools inspect "$IMAGE:beta-$SHA8" \
             --format '{{index .Image.Config.Labels "org.opencontainers.image.revision"}}')
