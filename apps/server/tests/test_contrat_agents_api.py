@@ -360,6 +360,17 @@ async def test_v1_models_avec_cle_partagee_liste_les_agents_partages(
     assert ids == {jeu["ministere"], jeu["communaute"], jeu["autre_communaute"]}
 
 
+async def test_v1_sans_jeton_401_au_format_openai(client, sso):
+    res = await client.post("/v1/chat/completions", json={"model": "x", "messages": []})
+    assert res.status_code == 401
+    assert res.json()["error"]["code"] == "invalid_token"
+    assert res.json()["error"]["type"] == "authentication_error"
+    assert res.headers["cache-control"] == "no-store"
+    res = await client.get("/v1/models", headers=_bearer("pas-une-cle"))
+    assert res.status_code == 401
+    assert res.json()["error"]["code"] == "invalid_api_key"
+
+
 async def test_v1_models_jeton_sans_audience_403_openai(client, sso):
     res = await client.get("/v1/models", headers=_bearer(_jeton(sso, aud="account")))
     assert res.status_code == 403

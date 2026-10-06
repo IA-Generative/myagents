@@ -202,16 +202,18 @@ async def require_openwebui_key(
 
     The key is always enforced when OPENWEBUI_API_KEY is set. Without a key, calls are
     only allowed in local dev (OIDC_ENABLED=false) so the Swagger UI can test /v1/*.
+    Refus au format OpenAI (contrat d'agents) : `invalid_token` sans Bearer du tout,
+    `invalid_api_key` quand la clé présentée n'est pas la bonne.
     """
     settings = get_settings()
     expected = settings.openwebui_api_key
-    if not expected:
-        if not settings.oidc_enabled:
-            return
-        raise HTTPException(status_code=401, detail="invalid_api_key")
+    if not expected and not settings.oidc_enabled:
+        return  # dev sans clé : Swagger et tests appellent /v1 librement
     provided = (authorization or "").removeprefix("Bearer ").strip()
-    if not hmac.compare_digest(provided.encode(), expected.encode()):
-        raise HTTPException(status_code=401, detail="invalid_api_key")
+    if not provided:
+        raise OpenAIApiError(401, "invalid_token", "jeton ou clé absent")
+    if not expected or not hmac.compare_digest(provided.encode(), expected.encode()):
+        raise OpenAIApiError(401, "invalid_api_key", "clé invalide")
 
 
 async def limit_llm_user(user_id: str = Depends(get_current_user_id)) -> str:
