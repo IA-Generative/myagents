@@ -27,20 +27,21 @@ describe('App.vue', () => {
        ],
      })
 
-     const wrapper = mount(App, {
-       global: {
-         plugins: [router, VueDsfr],
-       },
-     })
+      const wrapper = mount(App, {
+        global: {
+          plugins: [router, VueDsfr],
+        },
+      })
 
-    await router.isReady()
-    await flushPromises()
+     await router.isReady()
+     await wrapper.vm.$nextTick()
+     await flushPromises()
 
-    const alert = wrapper.findComponent({ name: 'DsfrAlert' })
-    expect(alert.exists()).toBe(true)
-    expect(alert.props('type')).toBe('error')
-    expect(alert.props('title')).toBe('Erreur de connexion')
-    expect(alert.props('description')).toContain('Votre session a expiré')
+     const alert = wrapper.findComponent({ name: 'DsfrAlert' })
+     expect(alert.exists()).toBe(true)
+     expect(alert.props('type')).toBe('error')
+     expect(alert.props('title')).toBe('Erreur de connexion')
+     expect(alert.props('description')).toContain('Votre session a expiré')
   })
 
   it('affiche un message différent si ?auth_error=auth_unavailable', async () => {
@@ -54,18 +55,19 @@ describe('App.vue', () => {
        ],
      })
 
-     const wrapper = mount(App, {
-       global: {
-         plugins: [router, VueDsfr],
-       },
-     })
+      const wrapper = mount(App, {
+        global: {
+          plugins: [router, VueDsfr],
+        },
+      })
 
-    await router.isReady()
-    await flushPromises()
+     await router.isReady()
+     await wrapper.vm.$nextTick()
+     await flushPromises()
 
-    const alert = wrapper.findComponent({ name: 'DsfrAlert' })
-    expect(alert.exists()).toBe(true)
-    expect(alert.props('description')).toContain('temporairement indisponible')
+     const alert = wrapper.findComponent({ name: 'DsfrAlert' })
+     expect(alert.exists()).toBe(true)
+     expect(alert.props('description')).toContain('temporairement indisponible')
   })
 
   it('nettoie le paramètre ?auth_error de l\'URL après le montage', async () => {
@@ -103,19 +105,20 @@ describe('App.vue', () => {
        ],
      })
 
-     const wrapper = mount(App, {
-       global: {
-         plugins: [router, VueDsfr],
-       },
-     })
+      const wrapper = mount(App, {
+        global: {
+          plugins: [router, VueDsfr],
+        },
+      })
 
-    await router.isReady()
-    await flushPromises()
+     await router.isReady()
+     await wrapper.vm.$nextTick()
+     await flushPromises()
 
-    const alert = wrapper.findComponent({ name: 'DsfrAlert' })
-    expect(alert.exists()).toBe(true)
+     const alert = wrapper.findComponent({ name: 'DsfrAlert' })
+     expect(alert.exists()).toBe(true)
 
-    // Simuler la fermeture de l'alerte
+     // Simuler la fermeture de l'alerte
     await alert.vm.$emit('close')
     await wrapper.vm.$nextTick()
 
