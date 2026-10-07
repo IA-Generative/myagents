@@ -187,6 +187,18 @@ services:
       # Mots de passe des comptes de dev du realm (substitués dans realm-myagents.json) ; `make ensure-env` les génère.
       KEYCLOAK_DEV_ADMIN_PASSWORD: ${KEYCLOAK_DEV_ADMIN_PASSWORD:-}
       KEYCLOAK_DEV_USER_PASSWORD: ${KEYCLOAK_DEV_USER_PASSWORD:-}
+      # Redirect URIs code-server (substituées dans realm-myagents.json) ; example.invalid = inert
+      KC_WEB_REDIRECT_5173: https://5173.${CODE_SERVER_DOMAIN:-example.invalid}/api/auth/callback
+      KC_WEB_REDIRECT_5174: https://5174.${CODE_SERVER_DOMAIN:-example.invalid}/api/auth/callback
+      KC_WEB_LOGOUT_5173: https://5173.${CODE_SERVER_DOMAIN:-example.invalid}/*
+      KC_WEB_LOGOUT_5174: https://5174.${CODE_SERVER_DOMAIN:-example.invalid}/*
+      KC_NEXT_REDIRECT_3001: https://3001.${CODE_SERVER_DOMAIN:-example.invalid}/api/auth/callback/keycloak
+      KC_NEXT_REDIRECT_3001_WC: https://3001.${CODE_SERVER_DOMAIN:-example.invalid}/*
+      KC_NEXT_ORIGIN_3001: https://3001.${CODE_SERVER_DOMAIN:-example.invalid}
+      KC_NEXT_LOGOUT_3001: https://3001.${CODE_SERVER_DOMAIN:-example.invalid}/*
+      KC_OWUI_REDIRECT_3000: https://3000.${CODE_SERVER_DOMAIN:-example.invalid}/*
+      KC_OWUI_ORIGIN_3000: https://3000.${CODE_SERVER_DOMAIN:-example.invalid}
+      KC_OWUI_LOGOUT_3000: https://3000.${CODE_SERVER_DOMAIN:-example.invalid}/*
       KC_HEALTH_ENABLED: "true"
     volumes:
       - ./keycloak/realm-myagents.json:/opt/keycloak/data/import/realm-myagents.json:ro
