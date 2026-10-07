@@ -16,33 +16,35 @@ describe('App.vue', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401 }))
   })
 
-  it('affiche un bandeau d\'erreur si ?auth_error=authentication_failed', async () => {
-     const router = createRouter({
-       history: createMemoryHistory('/?auth_error=authentication_failed'),
-       routes: [
-         {
-           path: '/',
-           component: { template: '<div>Home</div>' },
-         },
-       ],
-     })
-
-      const wrapper = mount(App, {
-        global: {
-          plugins: [router, VueDsfr],
-        },
+   it('affiche un bandeau d\'erreur si ?auth_error=authentication_failed', async () => {
+      const router = createRouter({
+        history: createMemoryHistory(),
+        routes: [
+          {
+            path: '/',
+            component: { template: '<div>Home</div>' },
+          },
+        ],
       })
 
-     await router.isReady()
-     await wrapper.vm.$nextTick()
-     await flushPromises()
+       await router.push('/?auth_error=authentication_failed')
+       await router.isReady()
 
-     const alert = wrapper.findComponent({ name: 'DsfrAlert' })
-     expect(alert.exists()).toBe(true)
-     expect(alert.props('type')).toBe('error')
-     expect(alert.props('title')).toBe('Erreur de connexion')
-     expect(alert.props('description')).toContain('Votre session a expiré')
-  })
+       const wrapper = mount(App, {
+         global: {
+           plugins: [router, VueDsfr],
+         },
+       })
+
+      await wrapper.vm.$nextTick()
+      await flushPromises()
+
+      const alert = wrapper.findComponent({ name: 'DsfrAlert' })
+      expect(alert.exists()).toBe(true)
+      expect(alert.props('type')).toBe('error')
+      expect(alert.props('title')).toBe('Erreur de connexion')
+      expect(alert.props('description')).toContain('Votre session a expiré')
+   })
 
    it('affiche un message différent si ?auth_error=auth_unavailable', async () => {
       const router = createRouter({
