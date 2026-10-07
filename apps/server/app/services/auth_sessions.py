@@ -82,7 +82,7 @@ async def _find_for_update(db: AsyncSession, raw: str) -> AuthSession | None:
             .with_for_update(skip_locked=True, read=False)
         )
         return result.scalar_one_or_none()
-    except (NotImplementedError, AttributeError):
+    except NotImplementedError, AttributeError:
         # SQLite ne supporte pas FOR UPDATE SKIP LOCKED ; on retombe sur une lecture simple.
         return await _find(db, raw)
 
@@ -134,9 +134,7 @@ async def resolve_session(db: AsyncSession, raw: str) -> AuthUser | None:
             await _drop(db, session)
         return None
     session.user = asdict(user)
-    session.refresh_token_enc = (
-        _enc(tokens.refresh_token) or session.refresh_token_enc
-    )
+    session.refresh_token_enc = _enc(tokens.refresh_token) or session.refresh_token_enc
     session.id_token_enc = _enc(tokens.id_token) or session.id_token_enc
     session.access_expires_at = now + timedelta(seconds=tokens.expires_in)
     await db.commit()
