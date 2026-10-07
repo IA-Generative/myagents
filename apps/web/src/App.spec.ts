@@ -3,7 +3,6 @@ import { createRouter, createMemoryHistory } from 'vue-router'
 import { setActivePinia, createPinia } from 'pinia'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import App from './App.vue'
-import { useAuthStore } from '@/stores/auth'
 
 describe('App.vue', () => {
   beforeEach(() => {
@@ -13,7 +12,7 @@ describe('App.vue', () => {
 
   it('affiche un bandeau d\'erreur si ?auth_error=authentication_failed', async () => {
     const router = createRouter({
-      history: createMemoryHistory({ base: '/', initialEntries: ['/?auth_error=authentication_failed'] }),
+      history: createMemoryHistory('/?auth_error=authentication_failed'),
       routes: [
         {
           path: '/',
@@ -40,7 +39,7 @@ describe('App.vue', () => {
 
   it('affiche un message différent si ?auth_error=auth_unavailable', async () => {
     const router = createRouter({
-      history: createMemoryHistory({ base: '/', initialEntries: ['/?auth_error=auth_unavailable'] }),
+      history: createMemoryHistory('/?auth_error=auth_unavailable'),
       routes: [
         {
           path: '/',
@@ -65,7 +64,7 @@ describe('App.vue', () => {
 
   it('nettoie le paramètre ?auth_error de l\'URL après le montage', async () => {
     const router = createRouter({
-      history: createMemoryHistory({ base: '/', initialEntries: ['/?auth_error=authentication_failed'] }),
+      history: createMemoryHistory('/?auth_error=authentication_failed'),
       routes: [
         {
           path: '/',
@@ -74,7 +73,7 @@ describe('App.vue', () => {
       ],
     })
 
-    const wrapper = mount(App, {
+    mount(App, {
       global: {
         plugins: [router],
       },
@@ -89,7 +88,7 @@ describe('App.vue', () => {
 
   it('affiche le lien "Se reconnecter" et ferme l\'alerte quand cliqué', async () => {
     const router = createRouter({
-      history: createMemoryHistory({ base: '/', initialEntries: ['/?auth_error=authentication_failed'] }),
+      history: createMemoryHistory('/?auth_error=authentication_failed'),
       routes: [
         {
           path: '/',
@@ -120,7 +119,7 @@ describe('App.vue', () => {
 
   it('n\'affiche pas l\'alerte si pas de paramètre ?auth_error', async () => {
     const router = createRouter({
-      history: createMemoryHistory({ base: '/', initialEntries: ['/'] }),
+      history: createMemoryHistory('/'),
       routes: [
         {
           path: '/',
