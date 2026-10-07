@@ -11,6 +11,7 @@ from app.db.base import Base
 from app.models import (  # noqa: F401 (registers models on Base.metadata)
     agent,
     auth_session,
+    conversation,
     guard_event,
     knowledge,
     presentation,

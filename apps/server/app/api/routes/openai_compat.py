@@ -19,7 +19,11 @@ from app.api.deps import limit_llm_openwebui, require_openwebui_key
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.llm.client import LlmClient
-from app.llm.fallback import LlmModelResolutionError, run_agent_chat_with_model_fallback
+from app.llm.fallback import (
+    LlmModelResolutionError,
+    run_agent_chat_stream_with_model_fallback,
+    run_agent_chat_with_model_fallback,
+)
 from app.schemas.agent import ChatMessage, ConfigSnapshot
 from app.schemas.openai_compat import (
     OpenAIChatCompletionChoice,
@@ -105,32 +109,76 @@ async def list_models(db: AsyncSession = Depends(get_db)):
     return OpenAIModelList(data=data)
 
 
-async def _sse_full_reply(model: str, reply: str) -> AsyncIterator[str]:
+async def _sse_stream_guarded(
+    model: str, client: LlmClient, config: ConfigSnapshot, messages, db, route, user_id
+) -> AsyncIterator[str]:
+    """Real token-by-token SSE with streaming guard inspection."""
+    from app.llm.sse import stream_openai_sse
+
+    default_model = get_settings().llm_default_model
+    primary_model = config.model_id or default_model
+
+    async def run_stream(hardened: ConfigSnapshot):
+        async for event in run_agent_chat_stream_with_model_fallback(
+            client,
+            hardened,
+            history=messages,
+            temperature=config.temperature,
+            primary_model=primary_model,
+            default_model=default_model,
+        ):
+            yield event
+
+    try:
+        async for sse_str in stream_openai_sse(
+            prompt_guard.guarded_agent_chat_stream(
+                db,
+                route=route,
+                user_id=user_id,
+                config=config,
+                history=messages,
+                run=run_stream,
+                skip_input_check=True,
+            ),
+            model,
+        ):
+            yield sse_str
+    except prompt_guard.GuardBlockedError:
+        yield _guard_error_sse(model)
+    except LlmModelResolutionError:
+        yield _error_sse(model, "llm_unavailable")
+
+
+def _guard_error_sse(model: str) -> str:
     completion_id = f"chatcmpl-{uuid.uuid4().hex}"
-    created = int(time.time())
-    content_chunk = {
-        "id": completion_id,
-        "object": "chat.completion.chunk",
-        "created": created,
-        "model": model,
-        "choices": [
+    return f"data: {
+        json.dumps(
             {
-                "index": 0,
-                "delta": {"role": "assistant", "content": reply},
-                "finish_reason": None,
+                'id': completion_id,
+                'object': 'chat.completion.chunk',
+                'created': int(time.time()),
+                'model': model,
+                'choices': [
+                    {'index': 0, 'delta': {}, 'finish_reason': 'content_filter'}
+                ],
             }
-        ],
-    }
-    final_chunk = {
-        "id": completion_id,
-        "object": "chat.completion.chunk",
-        "created": created,
-        "model": model,
-        "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
-    }
-    yield f"data: {json.dumps(content_chunk)}\n\n"
-    yield f"data: {json.dumps(final_chunk)}\n\n"
-    yield "data: [DONE]\n\n"
+        )
+    }\n\n"
+
+
+def _error_sse(model: str, message: str) -> str:
+    completion_id = f"chatcmpl-{uuid.uuid4().hex}"
+    return f"data: {
+        json.dumps(
+            {
+                'id': completion_id,
+                'object': 'chat.completion.chunk',
+                'created': int(time.time()),
+                'model': model,
+                'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'error'}],
+            }
+        )
+    }\n\n"
 
 
 @router.post("/chat/completions", dependencies=[Depends(limit_llm_openwebui)])
@@ -152,6 +200,35 @@ async def chat_completions(
     default_model = get_settings().llm_default_model
     primary_model = config.model_id or agent.model_ref or default_model
     client = LlmClient()
+    user_id = _audit_user_id(x_openwebui_user_id)
+
+    if payload.stream:
+        # Input guard must run before the stream starts: a blocked input returns
+        # 422 JSON, not a 200 SSE stream.
+        try:
+            await prompt_guard.check_input(
+                db,
+                route="openai.chat_completions",
+                text=prompt_guard.last_message_content(payload.messages),
+                role="user",
+                block_message=prompt_guard.BLOCK_MESSAGE_USER_INPUT,
+                user_id=user_id,
+            )
+        except prompt_guard.GuardBlockedError as exc:
+            return _guard_error_response(exc)
+
+        return StreamingResponse(
+            _sse_stream_guarded(
+                payload.model,
+                client,
+                config,
+                payload.messages,
+                db,
+                "openai.chat_completions",
+                user_id,
+            ),
+            media_type="text/event-stream",
+        )
 
     async def run(hardened: ConfigSnapshot) -> str:
         return await run_agent_chat_with_model_fallback(
@@ -163,13 +240,11 @@ async def chat_completions(
             default_model=default_model,
         )
 
-    # La réponse complète est contrôlée (sortie + juge) avant toute émission, y compris
-    # en stream : un contenu bloqué n'est jamais envoyé, même partiellement.
     try:
         reply = await prompt_guard.guarded_agent_chat(
             db,
             route="openai.chat_completions",
-            user_id=_audit_user_id(x_openwebui_user_id),
+            user_id=user_id,
             config=config,
             history=payload.messages,
             run=run,
@@ -181,11 +256,6 @@ async def chat_completions(
             "chat/completions: echec LLM (agent=%s): %s", agent_id, exc.original
         )
         return _llm_error_response()
-
-    if payload.stream:
-        return StreamingResponse(
-            _sse_full_reply(payload.model, reply), media_type="text/event-stream"
-        )
 
     return OpenAIChatCompletionResponse(
         id=f"chatcmpl-{uuid.uuid4().hex}",

@@ -96,7 +96,8 @@ def build_retriever_tool(knowledge_ids: list[str]) -> BaseTool:
 
     @tool
     async def knowledge_search(query: str) -> str:
-        """Recherche des informations pertinentes dans les bases de connaissances de l'agent."""
+        """Recherche des informations pertinentes dans les bases de connaissances de l'agent.
+        Cite systématiquement les sources (nom du fichier, identifiant du document)."""
         store = await asyncio.to_thread(_make_store)
         if store is None:
             return "Aucun document indexé pour l'instant."
@@ -105,6 +106,14 @@ def build_retriever_tool(knowledge_ids: list[str]) -> BaseTool:
         )
         if not docs:
             return "Aucun document pertinent trouvé."
-        return "\n\n---\n\n".join(d.page_content for d in docs)
+        parts: list[str] = []
+        for i, d in enumerate(docs, 1):
+            filename = d.metadata.get("filename", "source inconnue")
+            doc_id = d.metadata.get("document_id", "")
+            source = f"[Source {i} : {filename}]"
+            if doc_id:
+                source += f" (document_id={doc_id})"
+            parts.append(f"{source}\n{d.page_content}")
+        return "\n\n---\n\n".join(parts)
 
     return knowledge_search
