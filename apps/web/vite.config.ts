@@ -15,7 +15,7 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
-    allowedHosts: ['example.invalid'],
+    allowedHosts: process.env.VITE_ALLOWED_HOSTS?.split(',') ?? [],
     // Derrière un domaine de port-forwarding (code-server), le client HMR doit joindre l'hôte public en wss.
     hmr: process.env.HMR_HOST
       ? { host: process.env.HMR_HOST, protocol: 'wss', clientPort: 443 }
