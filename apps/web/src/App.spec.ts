@@ -2,6 +2,12 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { setActivePinia, createPinia } from 'pinia'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
+import VueDsfr from '@gouvminint/vue-dsfr'
+
+import '@gouvfr/dsfr/dist/dsfr.min.css'
+import '@gouvfr/dsfr/dist/utility/icons/icons.min.css'
+import '@gouvminint/vue-dsfr/styles'
+
 import App from './App.vue'
 
 describe('App.vue', () => {
@@ -11,21 +17,21 @@ describe('App.vue', () => {
   })
 
   it('affiche un bandeau d\'erreur si ?auth_error=authentication_failed', async () => {
-    const router = createRouter({
-      history: createMemoryHistory('/?auth_error=authentication_failed'),
-      routes: [
-        {
-          path: '/',
-          component: { template: '<div>Home</div>' },
-        },
-      ],
-    })
+     const router = createRouter({
+       history: createMemoryHistory('/?auth_error=authentication_failed'),
+       routes: [
+         {
+           path: '/',
+           component: { template: '<div>Home</div>' },
+         },
+       ],
+     })
 
-    const wrapper = mount(App, {
-      global: {
-        plugins: [router],
-      },
-    })
+     const wrapper = mount(App, {
+       global: {
+         plugins: [router, VueDsfr],
+       },
+     })
 
     await router.isReady()
     await flushPromises()
@@ -38,21 +44,21 @@ describe('App.vue', () => {
   })
 
   it('affiche un message différent si ?auth_error=auth_unavailable', async () => {
-    const router = createRouter({
-      history: createMemoryHistory('/?auth_error=auth_unavailable'),
-      routes: [
-        {
-          path: '/',
-          component: { template: '<div>Home</div>' },
-        },
-      ],
-    })
+     const router = createRouter({
+       history: createMemoryHistory('/?auth_error=auth_unavailable'),
+       routes: [
+         {
+           path: '/',
+           component: { template: '<div>Home</div>' },
+         },
+       ],
+     })
 
-    const wrapper = mount(App, {
-      global: {
-        plugins: [router],
-      },
-    })
+     const wrapper = mount(App, {
+       global: {
+         plugins: [router, VueDsfr],
+       },
+     })
 
     await router.isReady()
     await flushPromises()
@@ -63,21 +69,21 @@ describe('App.vue', () => {
   })
 
   it('nettoie le paramètre ?auth_error de l\'URL après le montage', async () => {
-    const router = createRouter({
-      history: createMemoryHistory('/?auth_error=authentication_failed'),
-      routes: [
-        {
-          path: '/',
-          component: { template: '<div>Home</div>' },
-        },
-      ],
-    })
+     const router = createRouter({
+       history: createMemoryHistory('/?auth_error=authentication_failed'),
+       routes: [
+         {
+           path: '/',
+           component: { template: '<div>Home</div>' },
+         },
+       ],
+     })
 
-    mount(App, {
-      global: {
-        plugins: [router],
-      },
-    })
+     mount(App, {
+       global: {
+         plugins: [router, VueDsfr],
+       },
+     })
 
     await router.isReady()
     await flushPromises()
@@ -87,21 +93,21 @@ describe('App.vue', () => {
   })
 
   it('affiche le lien "Se reconnecter" et ferme l\'alerte quand cliqué', async () => {
-    const router = createRouter({
-      history: createMemoryHistory('/?auth_error=authentication_failed'),
-      routes: [
-        {
-          path: '/',
-          component: { template: '<div>Home</div>' },
-        },
-      ],
-    })
+     const router = createRouter({
+       history: createMemoryHistory('/?auth_error=authentication_failed'),
+       routes: [
+         {
+           path: '/',
+           component: { template: '<div>Home</div>' },
+         },
+       ],
+     })
 
-    const wrapper = mount(App, {
-      global: {
-        plugins: [router],
-      },
-    })
+     const wrapper = mount(App, {
+       global: {
+         plugins: [router, VueDsfr],
+       },
+     })
 
     await router.isReady()
     await flushPromises()
@@ -118,21 +124,21 @@ describe('App.vue', () => {
   })
 
   it('n\'affiche pas l\'alerte si pas de paramètre ?auth_error', async () => {
-    const router = createRouter({
-      history: createMemoryHistory('/'),
-      routes: [
-        {
-          path: '/',
-          component: { template: '<div>Home</div>' },
-        },
-      ],
-    })
+     const router = createRouter({
+       history: createMemoryHistory('/'),
+       routes: [
+         {
+           path: '/',
+           component: { template: '<div>Home</div>' },
+         },
+       ],
+     })
 
-    const wrapper = mount(App, {
-      global: {
-        plugins: [router],
-      },
-    })
+     const wrapper = mount(App, {
+       global: {
+         plugins: [router, VueDsfr],
+       },
+     })
 
     await router.isReady()
     await flushPromises()
