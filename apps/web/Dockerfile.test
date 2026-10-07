@@ -12,4 +12,5 @@ WORKDIR /app
 
 # Les node_modules sont montés via un volume depuis l'image Bun
 # Les tests s'exécutent directement sans réinstallation
-ENTRYPOINT ["node", "node_modules/.bin/vitest", "run"]
+# Par défaut : lance les tests vitest
+CMD ["node", "node_modules/.bin/vitest", "run"]
