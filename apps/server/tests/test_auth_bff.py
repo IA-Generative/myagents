@@ -230,7 +230,9 @@ async def test_callback_oidc_error_redirects_with_auth_error_param(client, keycl
     assert res.status_code == 302
     assert res.headers["location"] == "/?auth_error=authentication_failed"
     # Vérifier que le cookie flow est supprimé (max_age=0 ou similar)
-    flow_cookies = [c for c in res.headers.get_list("set-cookie") if "myagents_oidc_flow" in c]
+    flow_cookies = [
+        c for c in res.headers.get_list("set-cookie") if "myagents_oidc_flow" in c
+    ]
     assert len(flow_cookies) > 0  # Cookie doit être présent pour être supprimé
     assert any(
         "max-age=0" in c.lower() or c.lower().startswith("myagents_oidc_flow=")
@@ -352,9 +354,7 @@ async def test_resolve_session_concurrent_refresh_is_serialized(
         result1 = await auth_sessions.resolve_session(
             db, client.cookies.get("myagents_session")
         )
-        await auth_sessions.resolve_session(
-            db, client.cookies.get("myagents_session")
-        )
+        await auth_sessions.resolve_session(db, client.cookies.get("myagents_session"))
 
     # Vérifier que le premier appel a retourné un utilisateur
     assert result1 is not None
@@ -364,7 +364,11 @@ async def test_resolve_session_concurrent_refresh_is_serialized(
     # ou None si la session a été supprimée, mais le comportement acceptable
     # est soit résultat1, soit résultat2 avec un seul refresh Keycloak
     # (no double refresh token call)
-    refresh_calls = [c for c in keycloak["calls"][call_count:] if c.get("grant_type") == "refresh_token"]
+    refresh_calls = [
+        c
+        for c in keycloak["calls"][call_count:]
+        if c.get("grant_type") == "refresh_token"
+    ]
     # Au maximum 1 appel refresh pour les deux requêtes concurrentes
     assert len(refresh_calls) <= 1
 
