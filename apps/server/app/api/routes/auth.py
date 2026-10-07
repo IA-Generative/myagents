@@ -133,7 +133,9 @@ async def callback(
         raw = await auth_sessions.create_session(db, user, tokens)
     except OIDCError as exc:
         logger.warning("callback OIDC refusé: %s", exc)
-        error_code = "auth_unavailable" if "unavailable" in str(exc) else "authentication_failed"
+        error_code = (
+            "auth_unavailable" if "unavailable" in str(exc) else "authentication_failed"
+        )
         response = RedirectResponse("/?auth_error=" + error_code, status_code=302)
         response.delete_cookie(_FLOW_COOKIE, path=_FLOW_COOKIE_PATH)
         return response
