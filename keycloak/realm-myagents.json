@@ -57,10 +57,10 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "frontchannelLogout": true,
-      "redirectUris": ["http://localhost:5173/api/auth/callback", "http://localhost:5174/api/auth/callback"],
+      "redirectUris": ["http://localhost:5173/api/auth/callback", "http://localhost:5174/api/auth/callback", "${KC_WEB_REDIRECT_5173}", "${KC_WEB_REDIRECT_5174}"],
       "webOrigins": [],
       "attributes": {
-        "post.logout.redirect.uris": "http://localhost:5173/*##http://localhost:5174/*",
+        "post.logout.redirect.uris": "http://localhost:5173/*##http://localhost:5174/*##${KC_WEB_LOGOUT_5173}##${KC_WEB_LOGOUT_5174}",
         "pkce.code.challenge.method": "S256"
       },
       "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "email", "myagents-api", "groups"],
@@ -79,11 +79,13 @@
       "frontchannelLogout": true,
       "redirectUris": [
         "http://localhost:3001/api/auth/callback/keycloak",
-        "http://localhost:3001/*"
+        "http://localhost:3001/*",
+        "${KC_NEXT_REDIRECT_3001}",
+        "${KC_NEXT_REDIRECT_3001_WC}"
       ],
-      "webOrigins": ["http://localhost:3001"],
+      "webOrigins": ["http://localhost:3001", "${KC_NEXT_ORIGIN_3001}"],
       "attributes": {
-        "post.logout.redirect.uris": "http://localhost:3001/*"
+        "post.logout.redirect.uris": "http://localhost:3001/*##${KC_NEXT_LOGOUT_3001}"
       },
       "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "email", "myagents-api", "groups"],
       "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"]
@@ -99,10 +101,10 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "frontchannelLogout": true,
-      "redirectUris": ["http://localhost:3000/*", "http://localhost:8080/*"],
-      "webOrigins": ["http://localhost:3000", "http://localhost:8080"],
+      "redirectUris": ["http://localhost:3000/*", "http://localhost:8080/*", "${KC_OWUI_REDIRECT_3000}"],
+      "webOrigins": ["http://localhost:3000", "http://localhost:8080", "${KC_OWUI_ORIGIN_3000}"],
       "attributes": {
-        "post.logout.redirect.uris": "http://localhost:3000/*##http://localhost:8080/*"
+        "post.logout.redirect.uris": "http://localhost:3000/*##http://localhost:8080/*##${KC_OWUI_LOGOUT_3000}"
       },
       "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "email", "myagents-api", "groups"],
       "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"]
