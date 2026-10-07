@@ -12,9 +12,10 @@ primary model differs from the default model.
 """
 
 import logging
+from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING
 
-from app.llm.agent_runtime import arun_agent_chat
+from app.llm.agent_runtime import StreamEvent, arun_agent_chat, arun_agent_chat_stream
 from app.llm.client import LlmModelNotFoundError, LlmParseError, LlmUnavailableError
 from app.schemas.agent import ChatMessage, ConfigSnapshot
 
@@ -43,6 +44,8 @@ async def run_agent_chat_with_model_fallback(
     temperature: float,
     primary_model: str,
     default_model: str,
+    *,
+    thread_id: str | None = None,
 ) -> str:
     """Run an agent chat with automatic fallback to *default_model*.
 
@@ -79,6 +82,7 @@ async def run_agent_chat_with_model_fallback(
             history=history,
             model=primary_model,
             temperature=temperature,
+            thread_id=thread_id,
         )
         return reply
     except LlmModelNotFoundError as exc:
@@ -98,6 +102,7 @@ async def run_agent_chat_with_model_fallback(
                 history=history,
                 model=default_model,
                 temperature=temperature,
+                thread_id=thread_id,
             )
             return reply
         except (LlmUnavailableError, LlmParseError) as exc2:
@@ -108,7 +113,114 @@ async def run_agent_chat_with_model_fallback(
                 exc2,
             )
             raise LlmModelResolutionError(exc2) from exc2
-    except (LlmUnavailableError, LlmParseError) as exc:
-        # Hub injoignable, délai dépassé, réponse illisible : pas de repli (le défaut
-        # passe par le même hub), mais une erreur que les routes savent traduire.
+    except LlmUnavailableError as exc:
+        if primary_model == default_model:
+            raise LlmModelResolutionError(exc) from exc
+        logger.warning(
+            "hub indisponible avec '%s', fallback sur '%s'",
+            primary_model,
+            default_model,
+        )
+        try:
+            reply = await arun_agent_chat(
+                client,
+                config,
+                history=history,
+                model=default_model,
+                temperature=temperature,
+                thread_id=thread_id,
+            )
+            return reply
+        except (LlmUnavailableError, LlmParseError) as exc2:
+            logger.error(
+                "echec appel LLM: fallback sur '%s' echoué (model=%s): %s",
+                default_model,
+                primary_model,
+                exc2,
+            )
+            raise LlmModelResolutionError(exc2) from exc2
+    except LlmParseError as exc:
+        raise LlmModelResolutionError(exc) from exc
+
+
+async def run_agent_chat_stream_with_model_fallback(
+    client: LlmClient,  # type: ignore[name-defined]
+    config: ConfigSnapshot,
+    history: list[ChatMessage],
+    temperature: float,
+    primary_model: str,
+    default_model: str,
+    *,
+    thread_id: str | None = None,
+) -> AsyncIterator[StreamEvent]:
+    """Stream agent chat with automatic fallback to *default_model*.
+
+    Same resolution and fallback semantics as ``run_agent_chat_with_model_fallback``,
+    but yields ``StreamEvent`` objects instead of returning a string.
+    """
+    try:
+        async for event in arun_agent_chat_stream(
+            client,
+            config,
+            history=history,
+            model=primary_model,
+            temperature=temperature,
+            thread_id=thread_id,
+        ):
+            yield event
+    except LlmModelNotFoundError as exc:
+        if primary_model == default_model:
+            logger.warning(
+                "modele '%s' introuvable, skip fallback (identique au defaut)",
+                primary_model,
+            )
+            raise LlmModelResolutionError(exc) from exc
+        logger.warning(
+            "modele '%s' introuvable, fallback sur '%s'", primary_model, default_model
+        )
+        try:
+            async for event in arun_agent_chat_stream(
+                client,
+                config,
+                history=history,
+                model=default_model,
+                temperature=temperature,
+                thread_id=thread_id,
+            ):
+                yield event
+        except (LlmUnavailableError, LlmParseError) as exc2:
+            logger.error(
+                "echec appel LLM: fallback sur '%s' echoué (model=%s): %s",
+                default_model,
+                primary_model,
+                exc2,
+            )
+            raise LlmModelResolutionError(exc2) from exc2
+    except LlmUnavailableError as exc:
+        if primary_model == default_model:
+            raise LlmModelResolutionError(exc) from exc
+        logger.warning(
+            "hub indisponible avec '%s', fallback sur '%s'",
+            primary_model,
+            default_model,
+        )
+        try:
+            async for event in arun_agent_chat_stream(
+                client,
+                config,
+                history=history,
+                model=default_model,
+                temperature=temperature,
+                thread_id=thread_id,
+            ):
+                yield event
+        except (LlmUnavailableError, LlmParseError) as exc2:
+            logger.error(
+                "echec appel LLM: fallback sur '%s' echoué (model=%s): %s",
+                default_model,
+                primary_model,
+                exc2,
+            )
+            raise LlmModelResolutionError(exc2) from exc2
+    except LlmParseError as exc:
         raise LlmModelResolutionError(exc) from exc

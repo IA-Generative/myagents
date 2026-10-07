@@ -140,7 +140,10 @@ async def test_chat_with_agent_returns_llm_reply(client):
         )
 
     assert res.status_code == 200, res.text
-    assert res.json() == {"reply": "Bonjour !"}
+    body = res.json()
+    assert body["reply"] == "Bonjour !"
+    assert body["conversation_id"] is not None
+    assert body["message_id"] is not None
 
 
 async def test_chat_with_hub_down_is_llm_unavailable(client):
