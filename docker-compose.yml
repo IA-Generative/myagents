@@ -81,35 +81,36 @@ services:
       retries: 10
     restart: unless-stopped
 
-   web:
-     build:
-       context: apps/web
-     environment:
-       API_PROXY_TARGET: http://server:8000
-       # Le websocket HMR doit viser l'URL publique (wss, port 443) et non localhost:5173.
-       HMR_HOST: ${CODE_SERVER_DOMAIN:+${WEB_PORT:-5173}.${CODE_SERVER_DOMAIN}}
-     volumes:
-       - ./apps/web:/app
-       # Volume nommé : conserve les node_modules de l'image et les partage avec web-test.
-       - web_node_modules:/app/node_modules
+  web:
+    build:
+      context: apps/web
+    environment:
+      API_PROXY_TARGET: http://server:8000
+      # Le websocket HMR doit viser l'URL publique (wss, port 443) et non localhost:5173.
+      HMR_HOST: ${CODE_SERVER_DOMAIN:+${WEB_PORT:-5173}.${CODE_SERVER_DOMAIN}}
+    volumes:
+      - ./apps/web:/app
+      # Volume nommé : conserve les node_modules de l'image et les partage avec web-test.
+      - web_node_modules:/app/node_modules
     ports:
       - "${WEB_PORT:-5173}:5173"
-     depends_on:
-       server:
-         condition: service_healthy
-     restart: unless-stopped
+    depends_on:
+      server:
+        condition: service_healthy
+    restart: unless-stopped
 
-   web-test:
-     image: node:22-alpine
-     working_dir: /app
-     profiles: [test]
-     volumes:
-       - ./apps/web:/app
-       # Réutilise les node_modules installés par Bun dans l'image web.
-       - web_node_modules:/app/node_modules
-     command: ["node", "node_modules/.bin/vitest", "run"]
+  web-test:
+    build:
+      context: apps/web
+      dockerfile: Dockerfile.test
+    working_dir: /app
+    profiles: [test]
+    volumes:
+      - ./apps/web:/app
+      # Réutilise les node_modules installés par Bun dans l'image web.
+      - web_node_modules:/app/node_modules
 
-   # OpenWebUI local (profil `owui`, voir `make up-owui`) : affiche les agents exposés par
+  # OpenWebUI local (profil `owui`, voir `make up-owui`) : affiche les agents exposés par
   # le server via /v1 (openai_compat.py). Appelle le server par le réseau compose interne.
   # Joint aussi le réseau partagé `myagents-shared` pour être joignable par apps/next.
   openwebui:
@@ -222,8 +223,8 @@ networks:
     name: myagents-shared
 
 volumes:
-   postgres-data:
-   qdrant-data:
-   openwebui-data:
-   keycloak-data:
-   web_node_modules:
+  postgres-data:
+  qdrant-data:
+  openwebui-data:
+  keycloak-data:
+  web_node_modules:
