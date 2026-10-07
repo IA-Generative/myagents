@@ -16,6 +16,7 @@ from app.api.routes import (
     agents,
     auth,
     catalog,
+    conversations,
     favorites,
     knowledge,
     models,
@@ -28,6 +29,7 @@ from app.api.routes import (
 from app.core.config import get_settings
 from app.core.csp import CSP_EXEMPT_PATHS, build_csp
 from app.core.logging import setup_logging
+from app.llm.checkpointer import setup_checkpointer
 from app.services.prompt_guard import GuardBlockedError
 from app.version import VERSION_PATH
 from app.version import router as version_router
@@ -47,6 +49,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         settings.openai_base_url,
         settings.llm_default_model,
     )
+    await setup_checkpointer()
     yield
     logger.info("arrêt de %s", settings.app_name)
 
@@ -171,6 +174,7 @@ for router in (
     auth.router,
     agents.router,
     catalog.router,
+    conversations.router,
     ratings.router,
     favorites.router,
     models.router,

@@ -14,17 +14,19 @@ casse jamais la requête : le blocage prime sur l'audit).
 
 import contextlib
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.llm.agent_runtime import StreamEvent
 from app.llm.guard import (
     BLOCK_MESSAGE_OUTPUT,
     BLOCK_MESSAGE_USER_INPUT,
     DEFAULT_GUARD_CONFIG,
     GuardResult,
     Signal,
+    StreamingOutputInspector,
     harden_system_prompt,
     inspect_input,
     inspect_output,
@@ -194,3 +196,90 @@ async def guarded_agent_chat(
         db, route=route, text=reply, user_id=user_id, role="user", canary=canary
     )
     return reply
+
+
+async def guarded_agent_chat_stream(
+    db: AsyncSession | None,
+    *,
+    route: str,
+    user_id: str | None,
+    config: ConfigSnapshot,
+    history: list[ChatMessage],
+    run: Callable[[ConfigSnapshot], AsyncIterator[StreamEvent]],
+    skip_input_check: bool = False,
+) -> AsyncIterator[StreamEvent]:
+    """Conversation avec streaming sous les trois couches de la garde.
+
+    Couche 1 (entrée) et couche 2 (durcissement + canari) identiques à
+    ``guarded_agent_chat``. La différence est la couche 3 : les tokens sont
+    inspectés au fil de l'eau via ``StreamingOutputInspector`` (heuristiques
+    keylogger + fuite canari), puis le LLM-juge est appelé sur le texte
+    complet assemblé après la fin du stream.
+
+    Si l'inspecteur bloque en cours de stream, on émet un événement
+    ``blocked`` et on interrompt. Si le juge bloque après le stream, on
+    émet aussi ``blocked`` (les tokens ont pu être envoyés, mais le message
+    n'est pas persisté).
+    """
+    if not skip_input_check:
+        await check_input(
+            db,
+            route=route,
+            text=last_message_content(history),
+            role="user",
+            block_message=BLOCK_MESSAGE_USER_INPUT,
+            user_id=user_id,
+        )
+
+    canary = make_canary()
+    hardened = config.model_copy(
+        update={
+            "system_prompt": harden_system_prompt(
+                config.system_prompt or DEFAULT_PERSONA, canary
+            )
+        }
+    )
+
+    inspector = StreamingOutputInspector(canary=canary)
+    assembled: list[str] = []
+
+    async for event in run(hardened):
+        if event.type == "token":
+            inspector.push(event.content)
+            assembled.append(event.content)
+            if inspector.done().blocked:
+                await record_guard_event(
+                    db,
+                    route=route,
+                    stage="output",
+                    signals=inspector.done().signals,
+                    user_id=user_id,
+                    role="user",
+                )
+                yield StreamEvent(type="blocked", content=BLOCK_MESSAGE_OUTPUT)
+                return
+            yield event
+        else:
+            yield event
+
+    full_reply = "".join(assembled).strip()
+
+    heuristics = inspect_output(full_reply, canary=canary)
+    verdict = await judge_output(full_reply)
+    signals = [
+        *heuristics.signals,
+        Signal("judge", verdict.complied, verdict.reason, "medium"),
+    ]
+    if fired_signals(signals):
+        await record_guard_event(
+            db,
+            route=route,
+            stage="output",
+            signals=signals,
+            user_id=user_id,
+            role="user",
+        )
+        yield StreamEvent(type="blocked", content=BLOCK_MESSAGE_OUTPUT)
+        return
+
+    yield StreamEvent(type="done", content=full_reply)

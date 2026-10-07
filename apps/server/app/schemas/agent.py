@@ -80,10 +80,14 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: list[ChatMessage] = Field(max_length=MAX_MESSAGES)
+    stream: bool = False
+    conversation_id: uuid.UUID | None = None
 
 
 class ChatResponse(BaseModel):
     reply: str
+    conversation_id: uuid.UUID | None = None
+    message_id: uuid.UUID | None = None
 
 
 class RatingCreate(BaseModel):
