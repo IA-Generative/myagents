@@ -44,31 +44,33 @@ describe('App.vue', () => {
      expect(alert.props('description')).toContain('Votre session a expiré')
   })
 
-  it('affiche un message différent si ?auth_error=auth_unavailable', async () => {
-     const router = createRouter({
-       history: createMemoryHistory('/?auth_error=auth_unavailable'),
-       routes: [
-         {
-           path: '/',
-           component: { template: '<div>Home</div>' },
-         },
-       ],
-     })
-
-      const wrapper = mount(App, {
-        global: {
-          plugins: [router, VueDsfr],
-        },
+   it('affiche un message différent si ?auth_error=auth_unavailable', async () => {
+      const router = createRouter({
+        history: createMemoryHistory(),
+        routes: [
+          {
+            path: '/',
+            component: { template: '<div>Home</div>' },
+          },
+        ],
       })
 
-     await router.isReady()
-     await wrapper.vm.$nextTick()
-     await flushPromises()
+       await router.push('/?auth_error=auth_unavailable')
+       await router.isReady()
 
-     const alert = wrapper.findComponent({ name: 'DsfrAlert' })
-     expect(alert.exists()).toBe(true)
-     expect(alert.props('description')).toContain('temporairement indisponible')
-  })
+       const wrapper = mount(App, {
+         global: {
+           plugins: [router, VueDsfr],
+         },
+       })
+
+      await wrapper.vm.$nextTick()
+      await flushPromises()
+
+      const alert = wrapper.findComponent({ name: 'DsfrAlert' })
+      expect(alert.exists()).toBe(true)
+      expect(alert.props('description')).toContain('temporairement indisponible')
+   })
 
   it('nettoie le paramètre ?auth_error de l\'URL après le montage', async () => {
      const router = createRouter({
@@ -94,16 +96,19 @@ describe('App.vue', () => {
     expect(router.currentRoute.value.query.auth_error).toBeUndefined()
   })
 
-  it('affiche le lien "Se reconnecter" et ferme l\'alerte quand cliqué', async () => {
-     const router = createRouter({
-       history: createMemoryHistory('/?auth_error=authentication_failed'),
-       routes: [
-         {
-           path: '/',
-           component: { template: '<div>Home</div>' },
-         },
-       ],
-     })
+   it('affiche le lien "Se reconnecter" et ferme l\'alerte quand cliqué', async () => {
+      const router = createRouter({
+        history: createMemoryHistory(),
+        routes: [
+          {
+            path: '/',
+            component: { template: '<div>Home</div>' },
+          },
+        ],
+      })
+
+      await router.push('/?auth_error=authentication_failed')
+      await router.isReady()
 
       const wrapper = mount(App, {
         global: {
@@ -111,7 +116,6 @@ describe('App.vue', () => {
         },
       })
 
-     await router.isReady()
      await wrapper.vm.$nextTick()
      await flushPromises()
 
