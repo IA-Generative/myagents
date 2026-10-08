@@ -73,6 +73,27 @@ async def _find(db: AsyncSession, raw: str) -> AuthSession | None:
     return result.scalar_one_or_none()
 
 
+async def _find_for_update(db: AsyncSession, raw: str) -> AuthSession | None:
+    """Trouve la session avec verrou FOR UPDATE (bloquant).
+    Sérialise les refreshes concurrents : bloque jusqu'au commit du concurrent,
+    puis relit pour éviter la race condition sur access_expires_at.
+    PostgreSQL l'applique strictement ; SQLite l'ignore (fallback sur lecture).
+    """
+    try:
+        result = await db.execute(
+            select(AuthSession)
+            .where(AuthSession.token_hash == _hash(raw))
+            .with_for_update(
+                skip_locked=False, read=False
+            )  # ← Bloquant, pas skip_locked
+        )
+        return result.scalar_one_or_none()
+    except NotImplementedError, AttributeError:
+        # SQLite ne supporte pas FOR UPDATE ; retombe sur lecture simple.
+        # Reste vulnerable sur SQLite, mais compatible.
+        return await _find(db, raw)
+
+
 async def _drop(db: AsyncSession, session: AuthSession) -> None:
     await db.delete(session)
     await db.commit()
@@ -88,29 +109,48 @@ async def resolve_session(db: AsyncSession, raw: str) -> AuthUser | None:
         await _drop(db, session)
         return None
 
-    if _aware(session.access_expires_at) - _REFRESH_SKEW <= now:
-        refresh_token = (
-            decrypt(session.refresh_token_enc) if session.refresh_token_enc else None
-        )
-        if not refresh_token:
+    if _aware(session.access_expires_at) - _REFRESH_SKEW > now:
+        return AuthUser(**session.user)
+
+    # Access token expiré ou expirant : tenter de verrouiller pour le refresh
+    session = await _find_for_update(db, raw)
+    if session is None:
+        # FOR UPDATE bloquant : attend le concurrent, mais le concurrent a pu supprimé la session.
+        return None
+
+    # CRUCIAL : relire après verrou pour vérifier que le concurrent n'a pas déjà rafraîchi.
+    # Sans cette relecture, on lit un snapshot stale (avant le commit du concurrent).
+    if _aware(session.access_expires_at) - _REFRESH_SKEW > now:
+        return AuthUser(**session.user)
+
+    refresh_token = (
+        decrypt(session.refresh_token_enc) if session.refresh_token_enc else None
+    )
+    if not refresh_token:
+        await _drop(db, session)
+        return None
+    try:
+        tokens = await oidc_client.refresh(refresh_token)
+        user = await asyncio.to_thread(oidc_client.user_from_tokens, tokens)
+    except OIDCError as exc:
+        logger.warning("renouvellement de session refusé: %s", exc)
+        # Keycloak injoignable : on garde la session, seul un refus l'invalide.
+        if "unavailable" not in str(exc):
             await _drop(db, session)
-            return None
-        try:
-            tokens = await oidc_client.refresh(refresh_token)
-            user = await asyncio.to_thread(oidc_client.user_from_tokens, tokens)
-        except OIDCError as exc:
-            logger.warning("renouvellement de session refusé: %s", exc)
-            # Keycloak injoignable : on garde la session, seul un refus l'invalide.
-            if "unavailable" not in str(exc):
-                await _drop(db, session)
-            return None
-        session.user = asdict(user)
-        session.refresh_token_enc = (
-            _enc(tokens.refresh_token) or session.refresh_token_enc
+        return None
+    session.user = asdict(user)
+    session.refresh_token_enc = _enc(tokens.refresh_token) or session.refresh_token_enc
+    session.id_token_enc = _enc(tokens.id_token) or session.id_token_enc
+    session.access_expires_at = now + timedelta(seconds=tokens.expires_in)
+    # Renouveler expires_at au refresh : utilisateur actif peut prolonger sa session
+    # jusqu'à création + session_ttl_hours, ou jusque now + refresh_expires_in, le plus court gagnant.
+    if tokens.refresh_expires_in > 0:
+        session.expires_at = min(
+            _aware(session.created_at)
+            + timedelta(hours=get_settings().session_ttl_hours),
+            now + timedelta(seconds=tokens.refresh_expires_in),
         )
-        session.id_token_enc = _enc(tokens.id_token) or session.id_token_enc
-        session.access_expires_at = now + timedelta(seconds=tokens.expires_in)
-        await db.commit()
+    await db.commit()
 
     return AuthUser(**session.user)
 

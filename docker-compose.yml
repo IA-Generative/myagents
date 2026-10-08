@@ -90,14 +90,25 @@ services:
       HMR_HOST: ${CODE_SERVER_DOMAIN:+${WEB_PORT:-5173}.${CODE_SERVER_DOMAIN}}
     volumes:
       - ./apps/web:/app
-      # Volume anonyme : conserve les node_modules de l'image malgré le montage du source.
-      - /app/node_modules
+      # Volume nommé : conserve les node_modules de l'image et les partage avec web-test.
+      - web_node_modules:/app/node_modules
     ports:
       - "${WEB_PORT:-5173}:5173"
     depends_on:
       server:
         condition: service_healthy
     restart: unless-stopped
+
+  web-test:
+    build:
+      context: apps/web
+      dockerfile: Dockerfile.test
+    working_dir: /app
+    profiles: [test]
+    volumes:
+      - ./apps/web:/app
+      # Réutilise les node_modules installés par Bun dans l'image web.
+      - web_node_modules:/app/node_modules
 
   # OpenWebUI local (profil `owui`, voir `make up-owui`) : affiche les agents exposés par
   # le server via /v1 (openai_compat.py). Appelle le server par le réseau compose interne.
@@ -216,3 +227,4 @@ volumes:
   qdrant-data:
   openwebui-data:
   keycloak-data:
+  web_node_modules:

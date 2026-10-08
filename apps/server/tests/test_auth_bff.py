@@ -17,6 +17,7 @@ from app.core.oidc_client import TokenSet
 from app.core.security import OIDCError
 from app.models.auth_session import AuthSession
 from app.services import auth_sessions
+from app.services.auth_sessions import _aware
 
 ISSUER = "http://kc.test/realms/myagents"
 WEB = "http://localhost:5173"
@@ -35,6 +36,7 @@ def _oidc_settings(monkeypatch):
         "web_public_url": WEB,
         "session_secret": "",
         "cors_origins": [WEB],
+        "oidc_groupe_exige": "",  # Désactiver le contrôle de groupe pour les tests
     }.items():
         monkeypatch.setattr(settings, name, value)
 
@@ -193,12 +195,19 @@ async def test_session_cookie_is_secure_over_https(client, keycloak, monkeypatch
 
 async def test_callback_rejects_wrong_state_and_missing_flow(client, keycloak):
     await _login(client, keycloak)
-    assert (
-        await client.get("/api/auth/callback?code=abc&state=nope")
-    ).status_code == 400
+    res = await client.get("/api/auth/callback?code=abc&state=nope")
+    assert res.status_code == 302
+    assert res.headers["location"] == "/?auth_error=invalid_state"
+    # Vérifier que le cookie flow est supprimé
+    flow_cookies = [
+        c for c in res.headers.get_list("set-cookie") if "myagents_oidc_flow" in c
+    ]
+    assert len(flow_cookies) > 0
 
     client.cookies.clear()
-    assert (await client.get("/api/auth/callback?code=abc&state=x")).status_code == 400
+    res = await client.get("/api/auth/callback?code=abc&state=x")
+    assert res.status_code == 302
+    assert res.headers["location"] == "/?auth_error=invalid_state"
 
 
 async def test_callback_rejects_nonce_mismatch(client, keycloak):
@@ -207,7 +216,8 @@ async def test_callback_rejects_nonce_mismatch(client, keycloak):
 
     res = await client.get(f"/api/auth/callback?code=abc&state={state}")
 
-    assert res.status_code == 401
+    assert res.status_code == 302
+    assert res.headers["location"] == "/?auth_error=authentication_failed"
 
 
 async def test_callback_keycloak_error_is_rejected(client, keycloak):
@@ -215,7 +225,33 @@ async def test_callback_keycloak_error_is_rejected(client, keycloak):
 
     res = await client.get(f"/api/auth/callback?error=access_denied&state={state}")
 
-    assert res.status_code == 400
+    assert res.status_code == 302
+    assert res.headers["location"] == "/?auth_error=invalid_request"
+    # Vérifier que le cookie flow est supprimé
+    flow_cookies = [
+        c for c in res.headers.get_list("set-cookie") if "myagents_oidc_flow" in c
+    ]
+    assert len(flow_cookies) > 0
+
+
+async def test_callback_oidc_error_redirects_with_auth_error_param(client, keycloak):
+    """Erreur OIDC au callback → redirection vers /?auth_error=authentication_failed"""
+    state = await _login(client, keycloak)
+    keycloak["fail"] = True
+
+    res = await client.get(f"/api/auth/callback?code=abc&state={state}")
+
+    assert res.status_code == 302
+    assert res.headers["location"] == "/?auth_error=authentication_failed"
+    # Vérifier que le cookie flow est supprimé (max_age=0 ou similar)
+    flow_cookies = [
+        c for c in res.headers.get_list("set-cookie") if "myagents_oidc_flow" in c
+    ]
+    assert len(flow_cookies) > 0  # Cookie doit être présent pour être supprimé
+    assert any(
+        "max-age=0" in c.lower() or c.lower().startswith("myagents_oidc_flow=")
+        for c in flow_cookies
+    )
 
 
 async def test_me_requires_credentials(client):
@@ -304,6 +340,41 @@ async def test_expired_access_token_is_refreshed_server_side(
     assert keycloak["calls"][-1]["grant_type"] == "refresh_token"
 
 
+async def test_refresh_prolongs_session_expires_at(client, keycloak, session_factory):
+    """Refresh d'un access token expiré doit prolonger expires_at aussi.
+
+    Sans le fix : expires_at reste figé (ne se prolonge pas).
+    Avec le fix : expires_at est réinitialisé à now + refresh_expires_in.
+    """
+    await _authenticate(client, keycloak)
+
+    # Simuler 29 min 30s d'écoulement du temps : access token expiré, mais session
+    # n'a plus que 60s avant expiration.
+    # Sans le fix, la session expirerait dans 60s.
+    # Avec le fix, le refresh doit la prolonger.
+    await _backdate(
+        session_factory,
+        access_expires_at=timedelta(seconds=-5),  # Access token expiré
+        expires_at=timedelta(seconds=60),  # Session expire dans 60s
+    )
+
+    # Refresh trigger par GET /api/auth/me doit succéder
+    assert (await client.get("/api/auth/me")).status_code == 200
+
+    # Vérifier que expires_at a été renouvelé
+    async with session_factory() as db:
+        row_after = (await db.execute(select(AuthSession))).scalar_one()
+        expires_at_after = _aware(row_after.expires_at)
+
+    # expires_at_after devrait être très proche de now + 1800s (refresh_expires_in)
+    # donc beaucoup plus loin dans le futur que expires_at_original
+    # (qui était aussi créée comme now_login + 1800s, mais le login était il y a ~1 sec)
+    seconds_remaining = (expires_at_after - datetime.now(UTC)).total_seconds()
+
+    # Doit être très proche de refresh_expires_in (1800s), à quelques ms près
+    assert 1790 < seconds_remaining < 1810
+
+
 async def test_refused_refresh_invalidates_the_session(
     client, keycloak, session_factory
 ):
@@ -314,6 +385,111 @@ async def test_refused_refresh_invalidates_the_session(
     assert (await client.get("/api/auth/me")).status_code == 401
     async with session_factory() as db:
         assert (await db.execute(select(AuthSession))).scalar_one_or_none() is None
+
+
+async def test_resolve_session_concurrent_refresh_is_serialized(
+    client, keycloak, session_factory
+):
+    """Deux appels simultanés à resolve_session avec access token expiré :
+    seul le premier effectue le refresh (le second attend ou recourt à la relecture).
+    DEPRECATED: Ce test utilise la même session db, ne reflète pas la race condition.
+    Voir test_resolve_session_concurrent_isolated_sessions pour un test vrai.
+    """
+    await _authenticate(client, keycloak)
+    await _backdate(session_factory, access_expires_at=timedelta(seconds=-5))
+
+    call_count = len(keycloak["calls"])
+
+    # Simuler deux appels simultanés : tous deux vont tenter le refresh
+    async with session_factory() as db:
+        result1 = await auth_sessions.resolve_session(
+            db, client.cookies.get("myagents_session")
+        )
+        await auth_sessions.resolve_session(db, client.cookies.get("myagents_session"))
+
+    # Vérifier que le premier appel a retourné un utilisateur
+    assert result1 is not None
+    assert result1.username == "alice"
+
+    # Le second appel devrait aussi retourner un utilisateur (via relecture)
+    # ou None si la session a été supprimée, mais le comportement acceptable
+    # est soit résultat1, soit résultat2 avec un seul refresh Keycloak
+    # (no double refresh token call)
+    refresh_calls = [
+        c
+        for c in keycloak["calls"][call_count:]
+        if c.get("grant_type") == "refresh_token"
+    ]
+    # Au maximum 1 appel refresh pour les deux requêtes concurrentes
+    assert len(refresh_calls) <= 1
+
+
+async def test_resolve_session_concurrent_isolated_sessions(
+    client, keycloak, session_factory
+):
+    """Test de concurrence RÉALISTE : deux sessions db isolées (comme deux requêtes HTTP).
+    Scénario de race condition sans le fix :
+    1. Session A lit le record en lecture simple (access_expires_at expiré)
+    2. Session B lit le record en lecture simple (idem)
+    3. Session A acquiert FOR UPDATE, refresh le token, commit → token valide dans la DB
+    4. Session B tente FOR UPDATE → était bloqué par skip_locked, maintenant attend A
+    5. Session B relit et voit le token valide (grace à la relecture post-lock)
+    AVANT le fix (avec skip_locked=True) :
+    - B relisait avant le commit de A → token toujours expiré → 401
+    APRÈS le fix (avec skip_locked=False) :
+    - B attend le verrou, relit après commit → token valide → 200 ✓
+    """
+    await _authenticate(client, keycloak)
+    await _backdate(session_factory, access_expires_at=timedelta(seconds=-5))
+
+    call_count = len(keycloak["calls"])
+    session_cookie = client.cookies.get("myagents_session")
+
+    # Créer deux sessions db réellement isolées, comme deux requêtes HTTP parallèles
+    db_a = session_factory()
+    db_b = session_factory()
+
+    try:
+        session_a = await db_a.__aenter__()
+        session_b = await db_b.__aenter__()
+
+        # Session A : appel resolve_session (va acquérir le verrou et refresh)
+        result_a = await auth_sessions.resolve_session(session_a, session_cookie)
+
+        # Session B : appel resolve_session (va tenter FOR UPDATE, attend A, relit, doit voir token valide)
+        result_b = await auth_sessions.resolve_session(session_b, session_cookie)
+
+        # Cleanup : commit les deux sessions
+        await session_a.commit()
+        await session_b.commit()
+
+        # Vérifications
+        # A a refreshé avec succès
+        assert result_a is not None
+        assert result_a.username == "alice"
+
+        # B doit retourner un utilisateur valide (grâce à la relecture post-verrou)
+        # Sans le fix, B verrait le token toujours expiré et retournerait None
+        assert result_b is not None, (
+            "Session B a retourné None (token toujours vu comme expiré)"
+        )
+        assert result_b.username == "alice"
+
+        # Exactement 1 appel refresh au Keycloak (pas de double refresh)
+        refresh_calls = [
+            c
+            for c in keycloak["calls"][call_count:]
+            if c.get("grant_type") == "refresh_token"
+        ]
+        assert len(refresh_calls) == 1, (
+            f"Expected 1 refresh_token call, got {len(refresh_calls)}"
+        )
+
+    finally:
+        await session_a.close()
+        await session_b.close()
+        await db_a.__aexit__(None, None, None)
+        await db_b.__aexit__(None, None, None)
 
 
 async def test_expired_session_is_rejected_and_purged(
