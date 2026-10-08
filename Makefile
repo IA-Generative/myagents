@@ -11,7 +11,7 @@ IMAGE  ?= mes-agents:dev
 	migrate migration seed \
 	install install-server install-web dev-server dev-web \
 	check test test-server test-web lint lint-server lint-web typecheck-web format \
-	image
+	image hooks
 
 help: ## Affiche cette aide
 	@grep -E '^[a-zA-Z_%-]+:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*##"}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -134,6 +134,12 @@ format: ## Formate le backend (ruff)
 
 image: ## Construit l'image de production server+web (IMAGE=nom:tag)
 	docker build -f Dockerfile -t $(IMAGE) .
+
+hooks: ## Installe les hooks pre-commit (pre-commit + commit-msg)
+	@command -v pre-commit >/dev/null 2>&1 || { \
+		echo 'pre-commit non installé. Installez-le : pipx install pre-commit'; exit 1; }
+	pre-commit install --install-hooks
+	@echo '✓ Hooks pre-commit installés (pre-commit + commit-msg).'
 
 # --- apps/next (autonome, en cours de dépréciation) --------------------------
 
