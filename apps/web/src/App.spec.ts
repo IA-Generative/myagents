@@ -72,9 +72,69 @@ describe('App.vue', () => {
       const alert = wrapper.findComponent({ name: 'DsfrAlert' })
       expect(alert.exists()).toBe(true)
       expect(alert.props('description')).toContain('temporairement indisponible')
-   })
+    })
 
-  it('nettoie le paramètre ?auth_error de l\'URL après le montage', async () => {
+    it('affiche un bandeau d\'erreur si ?auth_error=invalid_state', async () => {
+      const router = createRouter({
+        history: createMemoryHistory(),
+        routes: [
+          {
+            path: '/',
+            component: { template: '<div>Home</div>' },
+          },
+        ],
+      })
+
+      await router.push('/?auth_error=invalid_state')
+      await router.isReady()
+
+      const wrapper = mount(App, {
+        global: {
+          plugins: [router, VueDsfr],
+        },
+      })
+
+      await wrapper.vm.$nextTick()
+      await flushPromises()
+
+      const alert = wrapper.findComponent({ name: 'DsfrAlert' })
+      expect(alert.exists()).toBe(true)
+      expect(alert.props('type')).toBe('error')
+      expect(alert.props('title')).toBe('Erreur de connexion')
+      expect(alert.props('description')).toContain('Votre session a expiré')
+    })
+
+    it('affiche un bandeau d\'erreur si ?auth_error=invalid_request', async () => {
+      const router = createRouter({
+        history: createMemoryHistory(),
+        routes: [
+          {
+            path: '/',
+            component: { template: '<div>Home</div>' },
+          },
+        ],
+      })
+
+      await router.push('/?auth_error=invalid_request')
+      await router.isReady()
+
+      const wrapper = mount(App, {
+        global: {
+          plugins: [router, VueDsfr],
+        },
+      })
+
+      await wrapper.vm.$nextTick()
+      await flushPromises()
+
+      const alert = wrapper.findComponent({ name: 'DsfrAlert' })
+      expect(alert.exists()).toBe(true)
+      expect(alert.props('type')).toBe('error')
+      expect(alert.props('title')).toBe('Erreur de connexion')
+      expect(alert.props('description')).toContain('Votre session a expiré')
+    })
+
+   it('nettoie le paramètre ?auth_error de l\'URL après le montage', async () => {
      const router = createRouter({
        history: createMemoryHistory('/?auth_error=authentication_failed'),
        routes: [
