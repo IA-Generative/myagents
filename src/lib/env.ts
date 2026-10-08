@@ -13,7 +13,14 @@ const serverSchema = z.object({
   // Keycloak / OIDC
   KEYCLOAK_ISSUER: z.string().url(),
   KEYCLOAK_CLIENT_ID: z.string().min(1),
-  KEYCLOAK_CLIENT_SECRET: z.string().min(1),
+  // Vide = client PUBLIC (PKCE, sans secret) : c'est le client `mirai-preview` du
+  // Keycloak intermédiaire des previews bêta. Renseigné = client confidentiel.
+  KEYCLOAK_CLIENT_SECRET: z.string().optional(),
+  // Adresse INTERNE du realm pour le canal serveur (découverte, échange du code,
+  // clés, déconnexion). Depuis un pod, l'adresse publique du Keycloak des previews
+  // repasse par le répartiteur et ne répond qu'une fois sur deux (retour en
+  // épingle). L'émetteur des jetons reste KEYCLOAK_ISSUER. Absente = KEYCLOAK_ISSUER.
+  KEYCLOAK_INTERNAL_URL: z.string().url().optional(),
 
   // NextAuth
   NEXTAUTH_URL: z.string().url(),
@@ -61,6 +68,7 @@ function parseEnv(): ServerEnv {
       KEYCLOAK_ISSUER: 'https://build-placeholder/realms/build',
       KEYCLOAK_CLIENT_ID: 'build-placeholder',
       KEYCLOAK_CLIENT_SECRET: 'build-placeholder',
+      KEYCLOAK_INTERNAL_URL: undefined,
       NEXTAUTH_URL: 'http://build-placeholder',
       NEXTAUTH_SECRET: 'build-placeholder',
       DATABASE_URL: 'postgresql://build:build@build/build',

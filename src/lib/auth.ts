@@ -12,7 +12,7 @@ import { env } from './env';
 // Sans cela, un nouveau « Se connecter » re-loguerait automatiquement.
 async function keycloakEndSession(token: JWT): Promise<void> {
   try {
-    const base = env().KEYCLOAK_ISSUER.replace(/\/$/, '');
+    const base = (env().KEYCLOAK_INTERNAL_URL ?? env().KEYCLOAK_ISSUER).replace(/\/$/, '');
     const url = new URL(`${base}/protocol/openid-connect/logout`);
     if (token.idToken) {
       url.searchParams.set('id_token_hint', token.idToken);
@@ -29,8 +29,21 @@ export const authOptions: NextAuthOptions = {
   providers: [
     KeycloakProvider({
       clientId: env().KEYCLOAK_CLIENT_ID,
-      clientSecret: env().KEYCLOAK_CLIENT_SECRET,
+      clientSecret: env().KEYCLOAK_CLIENT_SECRET ?? '',
       issuer: env().KEYCLOAK_ISSUER,
+      // Découverte par l'adresse interne : Keycloak (KC_HOSTNAME_BACKCHANNEL_DYNAMIC)
+      // y répond avec l'émetteur public, l'autorisation publique, et les points
+      // serveur (jeton, clés, userinfo) à l'adresse interne.
+      ...(env().KEYCLOAK_INTERNAL_URL
+        ? {
+            wellKnown: `${env().KEYCLOAK_INTERNAL_URL!.replace(/\/$/, '')}/.well-known/openid-configuration`,
+          }
+        : {}),
+      // Client public : pas d'authentification au point de jeton, PKCE seul
+      // (le fournisseur Keycloak de NextAuth vérifie déjà pkce + state).
+      ...(env().KEYCLOAK_CLIENT_SECRET
+        ? {}
+        : { client: { token_endpoint_auth_method: 'none' as const } }),
     }),
   ],
   session: {
@@ -41,19 +54,18 @@ export const authOptions: NextAuthOptions = {
     maxAge: 12 * 60 * 60,
   },
   callbacks: {
-    // Restriction d'acces au groupe declare dans OIDC_GROUPE_EXIGE. Le claim
-    // `groups` porte le NOM FEUILLE des groupes (mapper Keycloak full.path=false),
-    // jamais leur chemin : on compare donc a un nom, pas a un « /chemin/groupe ».
+    // Restriction d'acces au groupe declare dans OIDC_GROUPE_EXIGE. Le realm
+    // `mirai` porte le NOM FEUILLE des groupes (mapper full.path=false) ; le
+    // Keycloak des previews porte le CHEMIN COMPLET (`/g/mirai-beta-testeurs`).
+    // On compare donc le dernier segment au nom attendu.
     // Variable absente = aucune restriction, comportement historique inchange.
     async signIn({ profile }) {
       const exige = env().OIDC_GROUPE_EXIGE;
       if (!exige) return true;
       const brut = (profile as { groups?: unknown } | undefined)?.groups;
-      const groupes = Array.isArray(brut)
-        ? brut.map(String)
-        : typeof brut === 'string'
-          ? [brut]
-          : [];
+      const groupes = (
+        Array.isArray(brut) ? brut.map(String) : typeof brut === 'string' ? [brut] : []
+      ).map((g) => g.split('/').pop() ?? g);
       if (groupes.includes(exige)) return true;
       // Tracer le refus sans nommer la personne : le motif suffit au diagnostic.
       console.warn(
