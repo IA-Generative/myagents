@@ -250,12 +250,11 @@ async def test_openai_compat_blocks_hostile_output_without_emitting_it(
     with fake_llm(HOSTILE_REPLY):
         res = await _completion(client, "Une page de contact.", stream=stream)
     if stream:
-        # Streaming: 200 + SSE with content_filter (guard blocks mid-stream).
-        assert res.status_code == 200
-        assert "text/event-stream" in res.headers["content-type"]
-        assert "content_filter" in res.text
+        # Streaming: 422 JSON (guard blocks before any SSE emission, same as beta).
+        assert_openai_blocked(res, "blocked_output", BLOCK_MESSAGE_OUTPUT)
     else:
         assert_openai_blocked(res, "blocked_output", BLOCK_MESSAGE_OUTPUT)
+    assert "data:" not in res.text
     assert "localStorage" not in res.text
 
 

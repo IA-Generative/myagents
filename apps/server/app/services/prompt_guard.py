@@ -216,10 +216,16 @@ async def guarded_agent_chat_stream(
     keylogger + fuite canari), puis le LLM-juge est appelé sur le texte
     complet assemblé après la fin du stream.
 
-    Si l'inspecteur bloque en cours de stream, on émet un événement
-    ``blocked`` et on interrompt. Si le juge bloque après le stream, on
-    émet aussi ``blocked`` (les tokens ont pu être envoyés, mais le message
-    n'est pas persisté).
+    .. note::
+        Les jetons sont émis au client avant le verdict du juge LLM. Les
+        heuristiques en vol (signatures keylogger, fuite du canari) interceptent
+        les contenus manifestement hostiles pendant l'émission, mais le juge
+        ne se prononce qu'après. S'il refuse, un événement ``blocked`` est émis
+        (``finish_reason: content_filter`` côté OpenAI) et le message n'est pas
+        persisté. La route ``/v1/chat/completions`` ne diffuse jamais les jetons
+        avant le verdict (voir ``openai_compat._sse_full_reply``) ; cette
+        fonction n'est utilisée que par le streaming interne (``/api/agents``
+        et ``/api/catalog``), où les étapes d'outils sont affichées en direct.
     """
     if not skip_input_check:
         await check_input(
@@ -247,6 +253,20 @@ async def guarded_agent_chat_stream(
         if event.type == "token":
             inspector.push(event.content)
             assembled.append(event.content)
+            if inspector.done().blocked:
+                await record_guard_event(
+                    db,
+                    route=route,
+                    stage="output",
+                    signals=inspector.done().signals,
+                    user_id=user_id,
+                    role="user",
+                )
+                yield StreamEvent(type="blocked", content=BLOCK_MESSAGE_OUTPUT)
+                return
+            yield event
+        elif event.type == "tool_result" and event.tool_result:
+            inspector.push(event.tool_result)
             if inspector.done().blocked:
                 await record_guard_event(
                     db,
