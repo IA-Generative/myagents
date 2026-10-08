@@ -114,9 +114,15 @@ async def callback(
     except SessionCryptoUnavailableError as exc:
         raise HTTPException(status_code=503, detail="session_unavailable") from exc
     if flow is None or not state or not hmac.compare_digest(flow["state"], state):
-        raise HTTPException(status_code=400, detail="invalid_state")
+        logger.warning("callback invalid state: flow mismatch or missing state")
+        response = RedirectResponse("/?auth_error=invalid_state", status_code=302)
+        response.delete_cookie(_FLOW_COOKIE, path=_FLOW_COOKIE_PATH)
+        return response
     if error or not code:
-        raise HTTPException(status_code=400, detail="authorization_failed")
+        logger.warning("callback invalid request: missing code or Keycloak error")
+        response = RedirectResponse("/?auth_error=invalid_request", status_code=302)
+        response.delete_cookie(_FLOW_COOKIE, path=_FLOW_COOKIE_PATH)
+        return response
 
     try:
         tokens = await oidc_client.exchange_code(code, flow["verifier"])
