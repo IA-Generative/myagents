@@ -10,7 +10,7 @@ IMAGE  ?= mes-agents:dev
 	ensure-env bootstrap reset \
 	migrate migration seed \
 	install install-server install-web dev-server dev-web \
-	check test test-server test-web lint lint-server lint-web typecheck-web format \
+	check check-docker test test-server test-web test-server-docker test-web-docker \
 	image hooks
 
 help: ## Affiche cette aide
@@ -108,6 +108,8 @@ dev-web: ## Frontend en local avec hot reload (port 5173)
 
 check: lint typecheck-web test ## Lint + typecheck + tests (équivalent CI)
 
+check-docker: test-server-docker test-web-docker lint typecheck-web ## Tests en Docker + lint + typecheck
+
 test: test-server test-web ## Tests server + web
 
 test-server: ## Tests backend (pytest)
@@ -115,6 +117,18 @@ test-server: ## Tests backend (pytest)
 
 test-web: ## Tests frontend (vitest)
 	cd $(WEB) && bun run test
+
+test-server-docker:  ## Tests backend en Docker (évite "credentials required")
+	docker build -f apps/server/Dockerfile -t myagents-server:test apps/server
+	docker run --rm \
+		-v $(shell pwd)/apps/server:/app \
+		-w /app \
+		--env-file $(shell pwd)/.env.test.example \
+		myagents-server:test \
+		uv run pytest -q
+
+test-web-docker: ## Tests frontend avec service docker-compose web-test
+	docker compose run --rm web-test bun run test
 
 lint: lint-server lint-web ## Lint server + web
 
