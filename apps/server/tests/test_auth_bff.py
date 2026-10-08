@@ -17,6 +17,7 @@ from app.core.oidc_client import TokenSet
 from app.core.security import OIDCError
 from app.models.auth_session import AuthSession
 from app.services import auth_sessions
+from app.services.auth_sessions import _aware
 
 ISSUER = "http://kc.test/realms/myagents"
 WEB = "http://localhost:5173"
@@ -324,6 +325,41 @@ async def test_expired_access_token_is_refreshed_server_side(
 
     assert res.status_code == 200
     assert keycloak["calls"][-1]["grant_type"] == "refresh_token"
+
+
+async def test_refresh_prolongs_session_expires_at(client, keycloak, session_factory):
+    """Refresh d'un access token expiré doit prolonger expires_at aussi.
+
+    Sans le fix : expires_at reste figé (ne se prolonge pas).
+    Avec le fix : expires_at est réinitialisé à now + refresh_expires_in.
+    """
+    await _authenticate(client, keycloak)
+
+    # Simuler 29 min 30s d'écoulement du temps : access token expiré, mais session
+    # n'a plus que 60s avant expiration.
+    # Sans le fix, la session expirerait dans 60s.
+    # Avec le fix, le refresh doit la prolonger.
+    await _backdate(
+        session_factory,
+        access_expires_at=timedelta(seconds=-5),  # Access token expiré
+        expires_at=timedelta(seconds=60),  # Session expire dans 60s
+    )
+
+    # Refresh trigger par GET /api/auth/me doit succéder
+    assert (await client.get("/api/auth/me")).status_code == 200
+
+    # Vérifier que expires_at a été renouvelé
+    async with session_factory() as db:
+        row_after = (await db.execute(select(AuthSession))).scalar_one()
+        expires_at_after = _aware(row_after.expires_at)
+
+    # expires_at_after devrait être très proche de now + 1800s (refresh_expires_in)
+    # donc beaucoup plus loin dans le futur que expires_at_original
+    # (qui était aussi créée comme now_login + 1800s, mais le login était il y a ~1 sec)
+    seconds_remaining = (expires_at_after - datetime.now(UTC)).total_seconds()
+
+    # Doit être très proche de refresh_expires_in (1800s), à quelques ms près
+    assert 1790 < seconds_remaining < 1810
 
 
 async def test_refused_refresh_invalidates_the_session(
