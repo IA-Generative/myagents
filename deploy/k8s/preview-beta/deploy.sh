@@ -7,7 +7,7 @@
 # Retrait : kubectl delete ns preview-myagents-nextjs
 set -euo pipefail
 cd "$(dirname "$0")"
-TAG="${1:?étiquette d'image requise}"
+TAG="${1:?usage: deploy.sh <tag>}"
 REGISTRE=rg.fr-par.scw.cloud/funcscwnspricelessmontalcinhiacgnzi/myagents
 NS=preview-myagents-nextjs
 
