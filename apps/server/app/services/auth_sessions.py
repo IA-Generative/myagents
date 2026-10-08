@@ -137,6 +137,14 @@ async def resolve_session(db: AsyncSession, raw: str) -> AuthUser | None:
     session.refresh_token_enc = _enc(tokens.refresh_token) or session.refresh_token_enc
     session.id_token_enc = _enc(tokens.id_token) or session.id_token_enc
     session.access_expires_at = now + timedelta(seconds=tokens.expires_in)
+    # Renouveler expires_at au refresh : utilisateur actif peut prolonger sa session
+    # jusqu'à création + session_ttl_hours, ou jusque now + refresh_expires_in, le plus court gagnant.
+    if tokens.refresh_expires_in > 0:
+        session.expires_at = min(
+            _aware(session.created_at)
+            + timedelta(hours=get_settings().session_ttl_hours),
+            now + timedelta(seconds=tokens.refresh_expires_in),
+        )
     await db.commit()
 
     return AuthUser(**session.user)
