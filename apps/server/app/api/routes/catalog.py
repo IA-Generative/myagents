@@ -88,14 +88,6 @@ async def chat_with_catalog_agent(
         )
         conv_id = conv.id
 
-    last_user_msg = payload.messages[-1] if payload.messages else None
-    if last_user_msg and last_user_msg.role == "user":
-        await conv_service.add_message(
-            db, conv_id, MessageRole.user, last_user_msg.content
-        )
-
-    thread_id = str(conv_id)
-
     if payload.stream:
 
         async def run_stream(hardened: ConfigSnapshot):
@@ -106,7 +98,6 @@ async def chat_with_catalog_agent(
                 temperature=config.temperature,
                 primary_model=primary_model,
                 default_model=default_model,
-                thread_id=thread_id,
             ):
                 yield event
 
@@ -126,6 +117,7 @@ async def chat_with_catalog_agent(
         async def sse_generator():
             full_reply: list[str] = []
             blocked = False
+            user_persisted = False
             try:
                 async for event in prompt_guard.guarded_agent_chat_stream(
                     db,
@@ -139,6 +131,15 @@ async def chat_with_catalog_agent(
                         full_reply.append(event.content)
                     elif event.type == "blocked":
                         blocked = True
+                    elif event.type == "done" and not user_persisted:
+                        last_user_msg = (
+                            payload.messages[-1] if payload.messages else None
+                        )
+                        if last_user_msg and last_user_msg.role == "user":
+                            await conv_service.add_message(
+                                db, conv_id, MessageRole.user, last_user_msg.content
+                            )
+                        user_persisted = True
                     yield _sse(event)
                 if not blocked and full_reply:
                     reply_text = "".join(full_reply).strip()
@@ -162,7 +163,6 @@ async def chat_with_catalog_agent(
             temperature=config.temperature,
             primary_model=primary_model,
             default_model=default_model,
-            thread_id=thread_id,
         )
 
     try:
@@ -177,5 +177,10 @@ async def chat_with_catalog_agent(
     except LlmModelResolutionError as exc:
         raise HTTPException(status_code=502, detail="llm_unavailable") from exc
 
+    last_user_msg = payload.messages[-1] if payload.messages else None
+    if last_user_msg and last_user_msg.role == "user":
+        await conv_service.add_message(
+            db, conv_id, MessageRole.user, last_user_msg.content
+        )
     msg = await conv_service.add_message(db, conv_id, MessageRole.assistant, reply)
     return ChatResponse(reply=reply, conversation_id=conv_id, message_id=msg.id)

@@ -8,7 +8,8 @@ Resolution chain (3 levels)::
     config.model_id -> agent.model_ref -> llm_default_model
 
 The fallback is triggered on ``LlmModelNotFoundError`` and only when the
-primary model differs from the default model.
+primary model differs from the default model. Hub injoignable, délai dépassé,
+réponse illisible : pas de repli (le défaut passe par le même hub).
 """
 
 import logging
@@ -44,8 +45,6 @@ async def run_agent_chat_with_model_fallback(
     temperature: float,
     primary_model: str,
     default_model: str,
-    *,
-    thread_id: str | None = None,
 ) -> str:
     """Run an agent chat with automatic fallback to *default_model*.
 
@@ -82,7 +81,6 @@ async def run_agent_chat_with_model_fallback(
             history=history,
             model=primary_model,
             temperature=temperature,
-            thread_id=thread_id,
         )
         return reply
     except LlmModelNotFoundError as exc:
@@ -102,7 +100,6 @@ async def run_agent_chat_with_model_fallback(
                 history=history,
                 model=default_model,
                 temperature=temperature,
-                thread_id=thread_id,
             )
             return reply
         except (LlmUnavailableError, LlmParseError) as exc2:
@@ -113,33 +110,7 @@ async def run_agent_chat_with_model_fallback(
                 exc2,
             )
             raise LlmModelResolutionError(exc2) from exc2
-    except LlmUnavailableError as exc:
-        if primary_model == default_model:
-            raise LlmModelResolutionError(exc) from exc
-        logger.warning(
-            "hub indisponible avec '%s', fallback sur '%s'",
-            primary_model,
-            default_model,
-        )
-        try:
-            reply = await arun_agent_chat(
-                client,
-                config,
-                history=history,
-                model=default_model,
-                temperature=temperature,
-                thread_id=thread_id,
-            )
-            return reply
-        except (LlmUnavailableError, LlmParseError) as exc2:
-            logger.error(
-                "echec appel LLM: fallback sur '%s' echoué (model=%s): %s",
-                default_model,
-                primary_model,
-                exc2,
-            )
-            raise LlmModelResolutionError(exc2) from exc2
-    except LlmParseError as exc:
+    except (LlmUnavailableError, LlmParseError) as exc:
         raise LlmModelResolutionError(exc) from exc
 
 
@@ -150,13 +121,14 @@ async def run_agent_chat_stream_with_model_fallback(
     temperature: float,
     primary_model: str,
     default_model: str,
-    *,
-    thread_id: str | None = None,
 ) -> AsyncIterator[StreamEvent]:
     """Stream agent chat with automatic fallback to *default_model*.
 
     Same resolution and fallback semantics as ``run_agent_chat_with_model_fallback``,
-    but yields ``StreamEvent`` objects instead of returning a string.
+    but yields ``StreamEvent`` objects instead of returning a string. The fallback
+    only triggers on ``LlmModelNotFoundError`` (before any token is emitted); a
+    timeout or hub error after the first token propagates immediately, avoiding
+    a restart of the response from the beginning.
     """
     try:
         async for event in arun_agent_chat_stream(
@@ -165,7 +137,6 @@ async def run_agent_chat_stream_with_model_fallback(
             history=history,
             model=primary_model,
             temperature=temperature,
-            thread_id=thread_id,
         ):
             yield event
     except LlmModelNotFoundError as exc:
@@ -185,7 +156,6 @@ async def run_agent_chat_stream_with_model_fallback(
                 history=history,
                 model=default_model,
                 temperature=temperature,
-                thread_id=thread_id,
             ):
                 yield event
         except (LlmUnavailableError, LlmParseError) as exc2:
@@ -196,31 +166,5 @@ async def run_agent_chat_stream_with_model_fallback(
                 exc2,
             )
             raise LlmModelResolutionError(exc2) from exc2
-    except LlmUnavailableError as exc:
-        if primary_model == default_model:
-            raise LlmModelResolutionError(exc) from exc
-        logger.warning(
-            "hub indisponible avec '%s', fallback sur '%s'",
-            primary_model,
-            default_model,
-        )
-        try:
-            async for event in arun_agent_chat_stream(
-                client,
-                config,
-                history=history,
-                model=default_model,
-                temperature=temperature,
-                thread_id=thread_id,
-            ):
-                yield event
-        except (LlmUnavailableError, LlmParseError) as exc2:
-            logger.error(
-                "echec appel LLM: fallback sur '%s' echoué (model=%s): %s",
-                default_model,
-                primary_model,
-                exc2,
-            )
-            raise LlmModelResolutionError(exc2) from exc2
-    except LlmParseError as exc:
+    except (LlmUnavailableError, LlmParseError) as exc:
         raise LlmModelResolutionError(exc) from exc

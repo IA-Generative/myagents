@@ -17,7 +17,6 @@ import openai
 from langchain.agents import create_agent
 
 from app.llm.chains import history_messages, preview
-from app.llm.checkpointer import get_checkpointer
 from app.llm.client import (
     LlmClient,
     LlmModelNotFoundError,
@@ -60,21 +59,12 @@ def _build_agent(
     client: LlmClient, config: ConfigSnapshot, model: str, temperature: float
 ):
     tools = resolve_tools(config.tool_ids, config.knowledge_ids)
-    checkpointer = get_checkpointer()
     agent = create_agent(
         client.chat_model(model, temperature),
         tools=tools,
         system_prompt=config.system_prompt,
-        checkpointer=checkpointer,
     )
-    return agent, tools, checkpointer
-
-
-def _invoke_config(thread_id: str | None, checkpointer) -> dict:
-    invoke_config: dict = {"recursion_limit": 25}
-    if thread_id and checkpointer:
-        invoke_config["configurable"] = {"thread_id": thread_id}
-    return invoke_config
+    return agent, tools
 
 
 async def arun_agent_chat(
@@ -83,21 +73,16 @@ async def arun_agent_chat(
     history: list[ChatMessage],
     model: str,
     temperature: float,
-    *,
-    thread_id: str | None = None,
 ) -> str:
-    agent, tools, checkpointer = _build_agent(client, config, model, temperature)
+    agent, tools = _build_agent(client, config, model, temperature)
     # Le prompt système de l'agent fait foi : on ignore les messages "system" fournis par l'appelant.
     history = [m for m in history if m.role != "system"]
-    invoke_config = _invoke_config(thread_id, checkpointer)
 
     label = "agent_chat"
     logger.info("[%s] appel IA démarré (model=%s, tools=%d)", label, model, len(tools))
     start = time.perf_counter()
     try:
-        result = await agent.ainvoke(
-            {"messages": history_messages(history)}, config=invoke_config
-        )
+        result = await agent.ainvoke({"messages": history_messages(history)})
     except Exception as exc:
         duration_ms = (time.perf_counter() - start) * 1000
         if _is_model_not_found(exc):
@@ -135,17 +120,14 @@ async def arun_agent_chat_stream(
     history: list[ChatMessage],
     model: str,
     temperature: float,
-    *,
-    thread_id: str | None = None,
 ) -> AsyncIterator[StreamEvent]:
     """Stream agent execution events: tokens, tool calls, tool results.
 
     Yields StreamEvent objects. The caller (guard + SSE endpoint) consumes
     them to display tokens live, show tool progress, and inspect output.
     """
-    agent, tools, checkpointer = _build_agent(client, config, model, temperature)
+    agent, tools = _build_agent(client, config, model, temperature)
     history = [m for m in history if m.role != "system"]
-    invoke_config = _invoke_config(thread_id, checkpointer)
 
     label = "agent_chat_stream"
     logger.info("[%s] appel IA démarré (model=%s, tools=%d)", label, model, len(tools))
@@ -154,7 +136,6 @@ async def arun_agent_chat_stream(
     try:
         async for event in agent.astream_events(
             {"messages": history_messages(history)},
-            config=invoke_config,
             version="v2",
         ):
             kind = event.get("event", "")
