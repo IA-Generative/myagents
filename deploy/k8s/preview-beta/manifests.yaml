@@ -1,0 +1,210 @@
+# Preview bêta MANUELLE de l'ancienne pile Next.js (branche preview/nextjs-controle-groupe),
+# pour comparer son fonctionnel à la nouvelle pile (FastAPI + Vue, PR beta-preview).
+# Même modèle que preview-mysearch-recette : namespace preview-* étiqueté mirai-preview=beta,
+# donc Reflector y recopie le certificat wildcard et myagents-preview-app (clé de la passerelle),
+# et l'automate du Keycloak des previews autorise l'adresse de retour de l'Ingress.
+# Secrets posés hors dépôt par deploy/k8s/preview-beta/deploy.sh. Retrait : supprimer le namespace.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: preview-myagents-nextjs
+  labels:
+    mirai-preview: beta
+    env: beta-sdid
+    app.kubernetes.io/part-of: myagents
+  annotations:
+    preview/manuel: "Ancienne pile Next.js (branche preview/nextjs-controle-groupe) pour comparaison avec la nouvelle pile ; à supprimer après la comparaison"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-builder-config
+  namespace: preview-myagents-nextjs
+data:
+  NODE_ENV: production
+  NEXTAUTH_URL: https://myagents-nextjs.beta-preview.numerique-interieur.com
+  KEYCLOAK_ISSUER: https://sso.beta-preview.numerique-interieur.com/realms/preview
+  KEYCLOAK_INTERNAL_URL: http://keycloak.sso-preview.svc.cluster.local:8080/realms/preview
+  KEYCLOAK_CLIENT_ID: mirai-preview
+  OIDC_GROUPE_EXIGE: mirai-beta-testeurs
+  SCW_LLM_BASE_URL: https://gateway.api.ai.numerique-interieur.com/v1
+  SCW_LLM_MODEL: chat
+  GUARD_JUDGE_MODEL: chat-pro
+  # Exigée par la validation de l'environnement, mais sans OWUI_ADMIN_API_KEY : la publication
+  # s'arrête à la base (« agent créé en base seulement »), rien n'est posé dans Mon assistant.
+  OWUI_BASE_URL: http://openwebui.socle-owui.svc.cluster.local
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: preview-myagents-nextjs
+spec:
+  selector: {app: postgres}
+  ports:
+    - {name: pg, port: 5432, targetPort: 5432}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: preview-myagents-nextjs
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: {app: postgres}
+  template:
+    metadata:
+      labels: {app: postgres}
+    spec:
+      securityContext: {runAsUser: 70, runAsGroup: 70, fsGroup: 70, runAsNonRoot: true}
+      containers:
+        - name: postgres
+          image: docker.io/postgres:16-alpine
+          env:
+            - {name: POSTGRES_DB, value: agentbuilder}
+            - {name: POSTGRES_USER, value: app}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: agent-builder-postgres, key: password}}
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+          ports:
+            - {containerPort: 5432}
+          readinessProbe:
+            exec: {command: ["pg_isready", "-U", "app", "-d", "agentbuilder"]}
+            periodSeconds: 5
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 512Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/postgresql/data}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: sbs-5k
+        resources:
+          requests: {storage: 1Gi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-builder
+  namespace: preview-myagents-nextjs
+spec:
+  selector: {app: agent-builder}
+  ports:
+    - {name: http, port: 80, targetPort: http}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-builder
+  namespace: preview-myagents-nextjs
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: agent-builder}
+  template:
+    metadata:
+      labels: {app: agent-builder}
+    spec:
+      imagePullSecrets:
+        - name: scw-registry-pull
+      securityContext: {runAsNonRoot: true, runAsUser: 1001, runAsGroup: 1001, fsGroup: 1001}
+      containers:
+        - name: agent-builder
+          image: IMAGE_RUNNER
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef: {name: agent-builder-config}
+            - secretRef: {name: agent-builder-secrets}
+          env:
+            # Clé de la passerelle LLM des previews, recopiée par Reflector.
+            - name: SCW_SECRET_KEY_LLM
+              valueFrom: {secretKeyRef: {name: myagents-preview-app, key: OPENAI_API_KEY}}
+          ports:
+            - {name: http, containerPort: 3000}
+          readinessProbe:
+            httpGet: {path: /api/health, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /api/health, port: http}
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: "1", memory: 1Gi}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: next-cache, mountPath: /app/.next/cache}
+      volumes:
+        - {name: tmp, emptyDir: {}}
+        - {name: next-cache, emptyDir: {}}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agent-builder
+  namespace: preview-myagents-nextjs
+  labels:
+    mirai-preview: beta
+  annotations:
+    # Cookies NextAuth + Keycloak (state, PKCE, CSRF) : le défaut de 4k les tronque.
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "4"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [myagents-nextjs.beta-preview.numerique-interieur.com]
+      secretName: wildcard-beta-preview-tls
+  rules:
+    - host: myagents-nextjs.beta-preview.numerique-interieur.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: {name: agent-builder, port: {name: http}}
+---
+# Menu commun : même paire que apps/argocd/previews/menu-commun du dépôt privé.
+apiVersion: v1
+kind: Service
+metadata:
+  name: apps-menu
+  namespace: preview-myagents-nextjs
+  labels: {app.kubernetes.io/part-of: mirai-apps-menu, mirai-preview: beta}
+spec:
+  type: ExternalName
+  externalName: apps-menu.apps-menu.svc.cluster.local.
+  ports:
+    - {name: http, port: 80, targetPort: 80, protocol: TCP}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: apps-menu-beta
+  namespace: preview-myagents-nextjs
+  labels: {app.kubernetes.io/part-of: mirai-apps-menu, mirai-preview: beta}
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [myagents-nextjs.beta-preview.numerique-interieur.com]
+      secretName: wildcard-beta-preview-tls
+  rules:
+    - host: myagents-nextjs.beta-preview.numerique-interieur.com
+      http:
+        paths:
+          - path: /_beta
+            pathType: Prefix
+            backend:
+              service: {name: apps-menu, port: {number: 80}}

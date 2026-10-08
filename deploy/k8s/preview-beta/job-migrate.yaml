@@ -1,0 +1,30 @@
+# prisma migrate deploy (jamais db push) — rejoué par deploy.sh avant chaque déploiement.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: agent-builder-migrate
+  namespace: preview-myagents-nextjs
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: scw-registry-pull
+      securityContext: {runAsNonRoot: true, runAsUser: 1001, runAsGroup: 1001, fsGroup: 1001}
+      containers:
+        - name: migrate
+          image: IMAGE_MIGRATOR
+          imagePullPolicy: Always
+          command: ["node_modules/.bin/prisma", "migrate", "deploy"]
+          envFrom:
+            - secretRef: {name: agent-builder-secrets}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: tmp, emptyDir: {}}
