@@ -195,12 +195,19 @@ async def test_session_cookie_is_secure_over_https(client, keycloak, monkeypatch
 
 async def test_callback_rejects_wrong_state_and_missing_flow(client, keycloak):
     await _login(client, keycloak)
-    assert (
-        await client.get("/api/auth/callback?code=abc&state=nope")
-    ).status_code == 400
+    res = await client.get("/api/auth/callback?code=abc&state=nope")
+    assert res.status_code == 302
+    assert res.headers["location"] == "/?auth_error=invalid_state"
+    # Vérifier que le cookie flow est supprimé
+    flow_cookies = [
+        c for c in res.headers.get_list("set-cookie") if "myagents_oidc_flow" in c
+    ]
+    assert len(flow_cookies) > 0
 
     client.cookies.clear()
-    assert (await client.get("/api/auth/callback?code=abc&state=x")).status_code == 400
+    res = await client.get("/api/auth/callback?code=abc&state=x")
+    assert res.status_code == 302
+    assert res.headers["location"] == "/?auth_error=invalid_state"
 
 
 async def test_callback_rejects_nonce_mismatch(client, keycloak):
@@ -218,7 +225,13 @@ async def test_callback_keycloak_error_is_rejected(client, keycloak):
 
     res = await client.get(f"/api/auth/callback?error=access_denied&state={state}")
 
-    assert res.status_code == 400
+    assert res.status_code == 302
+    assert res.headers["location"] == "/?auth_error=invalid_request"
+    # Vérifier que le cookie flow est supprimé
+    flow_cookies = [
+        c for c in res.headers.get_list("set-cookie") if "myagents_oidc_flow" in c
+    ]
+    assert len(flow_cookies) > 0
 
 
 async def test_callback_oidc_error_redirects_with_auth_error_param(client, keycloak):
