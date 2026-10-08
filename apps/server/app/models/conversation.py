@@ -4,7 +4,7 @@ import enum
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String, Text
+from sqlalchemy import JSON, DateTime, Enum, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -49,7 +49,10 @@ class ChatMessageRecord(Base):
     conversation_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("conversations.id"), index=True
     )
-    role: Mapped[MessageRole] = mapped_column(default=MessageRole.user)
+    role: Mapped[MessageRole] = mapped_column(
+        Enum(MessageRole, native_enum=False, length=20, create_constraint=False),
+        default=MessageRole.user,
+    )
     content: Mapped[str] = mapped_column(Text)
     tool_calls: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     tool_call_id: Mapped[str | None] = mapped_column(String(255), nullable=True)

@@ -57,7 +57,7 @@ class LlmClient:
             model=model,
             temperature=temperature,
             timeout=self.timeout,
-            max_retries=2,
+            max_retries=0,
         )
 
     def embeddings(self, model: str | None = None) -> OpenAIEmbeddings:
