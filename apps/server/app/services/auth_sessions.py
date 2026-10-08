@@ -74,16 +74,23 @@ async def _find(db: AsyncSession, raw: str) -> AuthSession | None:
 
 
 async def _find_for_update(db: AsyncSession, raw: str) -> AuthSession | None:
-    """Trouve la session avec verrou FOR UPDATE SKIP LOCKED (PostgreSQL ; SQLite ignore)."""
+    """Trouve la session avec verrou FOR UPDATE (bloquant).
+    Sérialise les refreshes concurrents : bloque jusqu'au commit du concurrent,
+    puis relit pour éviter la race condition sur access_expires_at.
+    PostgreSQL l'applique strictement ; SQLite l'ignore (fallback sur lecture).
+    """
     try:
         result = await db.execute(
             select(AuthSession)
             .where(AuthSession.token_hash == _hash(raw))
-            .with_for_update(skip_locked=True, read=False)
+            .with_for_update(
+                skip_locked=False, read=False
+            )  # ← Bloquant, pas skip_locked
         )
         return result.scalar_one_or_none()
     except NotImplementedError, AttributeError:
-        # SQLite ne supporte pas FOR UPDATE SKIP LOCKED ; on retombe sur une lecture simple.
+        # SQLite ne supporte pas FOR UPDATE ; retombe sur lecture simple.
+        # Reste vulnerable sur SQLite, mais compatible.
         return await _find(db, raw)
 
 
@@ -108,15 +115,13 @@ async def resolve_session(db: AsyncSession, raw: str) -> AuthUser | None:
     # Access token expiré ou expirant : tenter de verrouiller pour le refresh
     session = await _find_for_update(db, raw)
     if session is None:
-        # Un concurrent a verrouillé (SKIP LOCKED) ou supprimé la session.
-        # Relire sans verrou : peut-être que le concurrent a déjà rafraîchi.
-        session = await _find(db, raw)
-        if session is None:
-            return None
-        # Si le concurrent a rafraîchi entre-temps, l'access token est valide.
-        if _aware(session.access_expires_at) - _REFRESH_SKEW > now:
-            return AuthUser(**session.user)
-        return None  # Toujours expiré, on refuse proprement
+        # FOR UPDATE bloquant : attend le concurrent, mais le concurrent a pu supprimé la session.
+        return None
+
+    # CRUCIAL : relire après verrou pour vérifier que le concurrent n'a pas déjà rafraîchi.
+    # Sans cette relecture, on lit un snapshot stale (avant le commit du concurrent).
+    if _aware(session.access_expires_at) - _REFRESH_SKEW > now:
+        return AuthUser(**session.user)
 
     refresh_token = (
         decrypt(session.refresh_token_enc) if session.refresh_token_enc else None

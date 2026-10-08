@@ -379,6 +379,8 @@ async def test_resolve_session_concurrent_refresh_is_serialized(
 ):
     """Deux appels simultanés à resolve_session avec access token expiré :
     seul le premier effectue le refresh (le second attend ou recourt à la relecture).
+    DEPRECATED: Ce test utilise la même session db, ne reflète pas la race condition.
+    Voir test_resolve_session_concurrent_isolated_sessions pour un test vrai.
     """
     await _authenticate(client, keycloak)
     await _backdate(session_factory, access_expires_at=timedelta(seconds=-5))
@@ -407,6 +409,74 @@ async def test_resolve_session_concurrent_refresh_is_serialized(
     ]
     # Au maximum 1 appel refresh pour les deux requêtes concurrentes
     assert len(refresh_calls) <= 1
+
+
+async def test_resolve_session_concurrent_isolated_sessions(
+    client, keycloak, session_factory
+):
+    """Test de concurrence RÉALISTE : deux sessions db isolées (comme deux requêtes HTTP).
+    Scénario de race condition sans le fix :
+    1. Session A lit le record en lecture simple (access_expires_at expiré)
+    2. Session B lit le record en lecture simple (idem)
+    3. Session A acquiert FOR UPDATE, refresh le token, commit → token valide dans la DB
+    4. Session B tente FOR UPDATE → était bloqué par skip_locked, maintenant attend A
+    5. Session B relit et voit le token valide (grace à la relecture post-lock)
+    AVANT le fix (avec skip_locked=True) :
+    - B relisait avant le commit de A → token toujours expiré → 401
+    APRÈS le fix (avec skip_locked=False) :
+    - B attend le verrou, relit après commit → token valide → 200 ✓
+    """
+    await _authenticate(client, keycloak)
+    await _backdate(session_factory, access_expires_at=timedelta(seconds=-5))
+
+    call_count = len(keycloak["calls"])
+    session_cookie = client.cookies.get("myagents_session")
+
+    # Créer deux sessions db réellement isolées, comme deux requêtes HTTP parallèles
+    db_a = session_factory()
+    db_b = session_factory()
+
+    try:
+        session_a = await db_a.__aenter__()
+        session_b = await db_b.__aenter__()
+
+        # Session A : appel resolve_session (va acquérir le verrou et refresh)
+        result_a = await auth_sessions.resolve_session(session_a, session_cookie)
+
+        # Session B : appel resolve_session (va tenter FOR UPDATE, attend A, relit, doit voir token valide)
+        result_b = await auth_sessions.resolve_session(session_b, session_cookie)
+
+        # Cleanup : commit les deux sessions
+        await session_a.commit()
+        await session_b.commit()
+
+        # Vérifications
+        # A a refreshé avec succès
+        assert result_a is not None
+        assert result_a.username == "alice"
+
+        # B doit retourner un utilisateur valide (grâce à la relecture post-verrou)
+        # Sans le fix, B verrait le token toujours expiré et retournerait None
+        assert result_b is not None, (
+            "Session B a retourné None (token toujours vu comme expiré)"
+        )
+        assert result_b.username == "alice"
+
+        # Exactement 1 appel refresh au Keycloak (pas de double refresh)
+        refresh_calls = [
+            c
+            for c in keycloak["calls"][call_count:]
+            if c.get("grant_type") == "refresh_token"
+        ]
+        assert len(refresh_calls) == 1, (
+            f"Expected 1 refresh_token call, got {len(refresh_calls)}"
+        )
+
+    finally:
+        await session_a.close()
+        await session_b.close()
+        await db_a.__aexit__(None, None, None)
+        await db_b.__aexit__(None, None, None)
 
 
 async def test_expired_session_is_rejected_and_purged(
