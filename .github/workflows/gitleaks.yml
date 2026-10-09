@@ -18,9 +18,9 @@ env:
 
 jobs:
   scan:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0 # historique complet pour scanner tous les commits
       - name: Install gitleaks
@@ -30,4 +30,4 @@ jobs:
           sudo install gitleaks /usr/local/bin/gitleaks
           gitleaks version
       - name: Scan git history
-        run: gitleaks git . --redact --verbose --exit-code 1
+        run: gitleaks git . --config .gitleaks.toml --redact --verbose --exit-code 1

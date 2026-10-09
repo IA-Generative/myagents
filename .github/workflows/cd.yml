@@ -1,0 +1,59 @@
+name: CD
+
+on:
+  push:
+    branches:
+      # Releases sur beta uniquement pour l'instant ; main sera câblé plus tard.
+      - beta
+  workflow_dispatch:
+
+jobs:
+  release:
+    uses: dnum-mi/fabnum-cicd/.github/workflows/release-app.yml@v0
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    with:
+      RELEASE_BRANCH: beta
+      TAG_MAJOR_AND_MINOR: true
+      RELEASE_CONFIG_FILE: .github/release/release-please-config.json
+      RELEASE_MANIFEST_FILE: .github/release/.release-please-manifest.json
+
+  build-app:
+    needs: release
+    if: ${{ needs.release.outputs.release-created == 'true' }}
+    uses: dnum-mi/fabnum-cicd/.github/workflows/build-docker.yml@v0
+    permissions:
+      contents: read
+      packages: write
+    with:
+      IMAGE_NAME: ghcr.io/${{ github.repository }}/mes-agents
+      IMAGE_TAG: ${{ needs.release.outputs.version }}
+      IMAGE_CONTEXT: ./
+      IMAGE_DOCKERFILE: ./Dockerfile
+      LATEST_TAG: true
+      # /app/version.json, servi sur /__version__ (ADR-0004) : la version publiée et son
+      # CHANGELOG. head_commit.timestamp existe : ce job ne tourne que sur push.
+      BUILD_ARGS: |
+        VERSION=${{ needs.release.outputs.version }}
+        COMMIT=${{ github.sha }}
+        BUILD=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        CODE_DATE=${{ github.event.head_commit.timestamp }}
+        SOURCE=${{ github.server_url }}/${{ github.repository }}
+
+  scan-trivy:
+    needs:
+      - release
+      - build-app
+    if: ${{ needs.release.outputs.release-created == 'true' }}
+    uses: dnum-mi/fabnum-cicd/.github/workflows/scan-trivy.yml@v0
+    permissions:
+      contents: read
+      security-events: write
+      packages: read
+      pull-requests: write
+    with:
+      IMAGE: ${{ needs.build-app.outputs.image }}
+      FORMAT: sarif
+      GITHUB_SECURITY_TAB: true

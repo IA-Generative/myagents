@@ -15,73 +15,102 @@ d'OpenWebUI. Spec complète dans [docs/specs/agent-builder-spec.md](docs/specs/a
 
 - **Framework** : Next.js 14 (App Router) + React 18 + TypeScript
 - **Design system** : DSFR officiel (`@codegouvfr/react-dsfr`)
-- **Auth** : NextAuth 4 + Keycloak (realm `openwebui` du socle owuicore-main)
-- **DB** : PostgreSQL (partagée avec le socle, base `agentbuilder`) + Prisma
-- **BFF** : routes Next.js côté serveur, wrapper `src/lib/owui-client.ts`
-- **Conteneur** : Docker multi-stage (Node 20 alpine, Next.js standalone)
+- **Auth** : NextAuth 4, stub "utilisateur local" en dev standalone (voir `apps/next/src/lib/auth.ts`)
+- **DB** : PostgreSQL (conteneur local dédié, base `agentbuilder`) + Prisma
+- **BFF** : routes Next.js côté serveur, wrapper `apps/next/src/lib/owui-client.ts`
+- **Package manager** : Bun (`apps/next/package.json`, `apps/next/bun.lock`)
+- **Conteneur** : Docker multi-stage (Bun alpine, Next.js standalone), contexte = `apps/next/`
 - **Déploiement** : Kubernetes Scaleway, namespace `miraiku`, ingress nginx +
   cert-manager letsencrypt-prod, URL `https://myagents.fake-domain.name`
 
 ## Pré-requis
 
-Le socle [owuicore-main](../owuicore-main/) doit être déployé **avant** :
-- En local : `docker compose up -d` dans `owuicore-main` crée le réseau
-  `owui-net` auquel ce compose se rattache.
-- En K8s : le socle fournit Keycloak, OpenWebUI, PostgreSQL et le cert-manager.
+Aucun : l'application tourne en standalone, `docker-compose.yml` lance son
+propre conteneur PostgreSQL (pas de dépendance à un socle externe type
+`owuicore-main`).
 
-## Configuration — `.env` en cascade
+## Configuration — `.env`
 
-**Règle** : les credentials Scaleway (registry, LLM), Keycloak et PostgreSQL
-restent dans `../owuicore-main/.env`. Notre `./.env` ne contient que ce qui
-est **spécifique à l'Agent Builder** (image, host, NEXTAUTH_SECRET,
-DATABASE_URL propre à la base `agentbuilder`).
-
-[deploy/prepare-env.sh](deploy/prepare-env.sh) charge en cascade (première
-valeur rencontrée gagne) :
-
-1. variables shell déjà exportées (CI, override ponctuel)
-2. `./.env` (overrides Agent Builder)
-3. `../owuicore-main/.env` (credentials partagés du socle)
-
-La fonction `load_dotenv_preserve_existing` (copiée depuis le socle dans
-[deploy/scripts/load_env.sh](deploy/scripts/load_env.sh)) n'écrase jamais une variable
-déjà définie — d'où l'ordre « overrides d'abord, défauts ensuite ».
-
-Pour pointer vers un autre emplacement du `.env` du socle :
-```bash
-OWUICORE_ENV_FILE=/autre/chemin/.env ./deploy/deploy-k8s.sh
-```
-
-Variables requises côté Agent Builder uniquement (à mettre dans `./.env`) :
-- `AGENT_BUILDER_IMAGE` (ou laissé dérivé de `${REGISTRY}/miraiku-agents:${IMAGE_TAG}`)
-- `AGENTS_HOST` (défaut : `myagents.fake-domain.name`)
+`./.env` contient uniquement les variables nécessaires en local :
+- `AGENT_BUILDER_IMAGE`
+- `AGENTS_HOST` (utilisé seulement pour le déploiement K8s)
+- `NEXTAUTH_URL` (`http://localhost:3001` en local)
 - `NEXTAUTH_SECRET` (générer avec `openssl rand -base64 32`)
-- `DATABASE_URL` (pointant vers la base `agentbuilder` du Postgres du socle)
+- `DATABASE_URL` (pointe vers le service `postgres` du compose)
 
-Tout le reste (`REGISTRY_SERVER`, `REGISTRY_PASSWORD`, `KEYCLOAK_CLIENT_SECRET`,
-`KEYCLOAK_HOST`, `LETSENCRYPT_EMAIL`, `NAMESPACE`...) est hérité du socle.
+Les variables Scaleway (`SCW_LLM_BASE_URL`, `SCW_SECRET_KEY_LLM`) et
+`OWUI_PUBLIC_URL` sont optionnelles (voir `.env.example`).
 
 ## Démarrage local
 
 ```bash
-# 1. Configurer l'environnement (minimal — le reste est hérité du socle)
+# 1. Configurer l'environnement
 cp .env.example .env
-# → renseigner NEXTAUTH_SECRET et DATABASE_URL au minimum.
-# KEYCLOAK_CLIENT_SECRET, REGISTRY_*, LETSENCRYPT_EMAIL : déjà dans
-# ../owuicore-main/.env, rien à recopier.
+# → NEXTAUTH_SECRET est généré automatiquement au premier lancement si absent.
 
-# 2. Créer la base agentbuilder sur le Postgres du socle (une seule fois)
-docker exec -it owuicore-main-postgres-1 \
-  psql -U owui -c "CREATE DATABASE agentbuilder; GRANT ALL ON DATABASE agentbuilder TO app;"
-
-# 3. Lancer
+# 2. Lancer (Postgres + migration Prisma + app, tout est inclus)
 docker compose up -d --build
 curl -fsS http://localhost:3001/api/health
 # → {"status":"ok","service":"miraiku-agents"}
 ```
 
-Ouvrir http://localhost:3001 → redirection vers `/sign-in` → SSO Keycloak →
-`/agents`.
+Ouvrir http://localhost:3001 → `/sign-in` → bouton "Continuer" (connexion
+locale automatique, pas de SSO) → `/agents`.
+
+## OpenWebUI local
+
+Instance OpenWebUI optionnelle (profil compose `owui`) qui affiche les agents du
+`server` FastAPI (`/v1`) et reçoit les modèles poussés par `apps/next`.
+
+Raccourci : `make bootstrap` crée `.env` (clés générées), lance la stack + Keycloak + OpenWebUI,
+applique les migrations et le seed. `make reset` supprime d'abord les volumes.
+Détail des étapes :
+
+```bash
+# 1. Racine : générer la clé partagée server <-> OpenWebUI dans .env
+cp -n .env.example .env
+#    OPENWEBUI_API_KEY=$(openssl rand -hex 32)
+#    OPENWEBUI_WEBUI_SECRET_KEY=$(openssl rand -hex 32)
+
+# 2. Lancer la stack + OpenWebUI (crée le réseau partagé `myagents-shared`)
+make up-owui
+# → http://localhost:3000 : créer le compte admin (1er inscrit), les agents
+#   apparaissent comme modèles (connexion http://server:8000/v1 auto-configurée).
+
+# 3. apps/next (optionnel) : Paramètres > Compte > Clés API dans OpenWebUI, puis
+#    dans apps/next/.env : OWUI_ADMIN_API_KEY=sk-...  (OWUI_BASE_URL=http://openwebui:8080 par défaut)
+cd apps/next && docker compose up -d --force-recreate agent-builder
+```
+
+`make down` arrête aussi OpenWebUI ; `make clean` supprime ses données.
+
+## SSO Keycloak local
+
+Keycloak (realm `myagents`) fournit un SSO partagé entre `apps/web`, `apps/next`
+et OpenWebUI. Le realm est importé au démarrage depuis
+[`keycloak/realm-myagents.json`](keycloak/realm-myagents.json) :
+
+- **Utilisateurs** : `admin` (rôle `admin`) et `user1` (rôle `user`). Leurs mots de passe sont
+  `KEYCLOAK_DEV_ADMIN_PASSWORD` et `KEYCLOAK_DEV_USER_PASSWORD` dans `.env` (générés par `make ensure-env`)
+- **Clients** : `myagents-server` (FastAPI, confidentiel, flux code + PKCE côté serveur pour le front Vue), `miraiku-agents` (Next.js, confidentiel), `open-webui` (OWUI, confidentiel)
+- **Mappers** : `myagents-api` (audience pour le server FastAPI), `groups` (claim `groups`, `full.path=false`)
+
+```bash
+# Racine : lance la stack + Keycloak + OpenWebUI (profils `sso` + `owui`)
+make up-sso
+# → Keycloak   http://localhost:8180  (console /admin : compte `admin`, mot de passe KEYCLOAK_ADMIN_PASSWORD)
+# → OpenWebUI  http://localhost:3000  (SSO "Keycloak" : `admin` ou `user1`)
+# → Server     http://localhost:8000  (OIDC_ENABLED=true : /api/auth/* mène le flux OIDC, accepte aussi les Bearer JWT)
+# → Web        http://localhost:5173  (redirige vers /api/auth/login si non authentifié)
+```
+
+Le front Vue ne manipule aucun jeton : le server échange le code avec Keycloak, garde les jetons
+chiffrés en base (`auth_sessions`) et ne remet au navigateur qu'un cookie de session `HttpOnly`.
+Le realm n'est importé qu'au premier démarrage de Keycloak : sur une base existante, créer le client
+`myagents-server` (ou `make reset`).
+
+`make bootstrap` lance aussi le SSO complet (Keycloak + OpenWebUI). Pour activer
+la validation JWT côté server hors Docker, poser `OIDC_ENABLED=true` dans `.env`.
 
 ## Déploiement Kubernetes Scaleway
 
@@ -108,28 +137,37 @@ kubectl -n miraiku logs deploy/agent-builder --tail=50
 
 ```
 .
-├── app/                    Next.js App Router — pages + API BFF
-│   ├── agents/new/         Wizard de création (4 étapes DSFR)
-│   ├── api/ab/             Endpoints BFF (§6 de la spec)
-│   └── api/auth/           NextAuth / Keycloak
-├── src/
-│   ├── lib/                Adaptateurs : env, auth, prisma, clients OWUI/Scaleway, prompt-guard
-│   ├── packages/           Modules isolés réutilisables (prompt-guard : cœur sans dépendance)
-│   └── types/              Augmentations de types (NextAuth)
-├── prisma/                 schema.prisma (tables ab_*) + migrations
-├── tests/redteam/          Suite red-team / prompt-injection (opt-in, voir le README local)
+├── apps/
+│   └── next/               Application Next.js — 100% indépendante (deps, lockfile, Dockerfile)
+│       ├── app/            Next.js App Router — pages + API BFF
+│       │   ├── agents/new/ Wizard de création (4 étapes DSFR)
+│       │   ├── api/ab/     Endpoints BFF (§6 de la spec)
+│       │   └── api/auth/   NextAuth / Keycloak
+│       ├── src/
+│       │   ├── lib/        Adaptateurs : env, auth, prisma, clients OWUI/Scaleway, prompt-guard
+│       │   ├── packages/   Modules isolés réutilisables (prompt-guard : cœur sans dépendance)
+│       │   └── types/      Augmentations de types (NextAuth)
+│       ├── prisma/         schema.prisma (tables ab_*) + migrations
+│       ├── tests/redteam/  Suite red-team / prompt-injection (opt-in, voir le README local)
+│       ├── public/         Assets statiques
+│       ├── package.json  bun.lock
+│       └── Dockerfile      Contexte de build = apps/next/
 ├── deploy/                 Tout le déploiement au même endroit :
-│   ├── *.sh                Scripts build / push / deploy
+│   ├── *.sh                Scripts build / push / deploy (référencent apps/next/Dockerfile)
 │   ├── scripts/            helper load_env.sh (cascade .env)
 │   ├── k8s/base/           Manifestes templates (rendus via envsubst)
 │   └── keycloak/           Client OIDC à importer dans le realm openwebui
-├── public/                 Assets statiques
 ├── docs/                   📚 Toute la documentation — voir docs/README.md
 │   ├── specs/              Spec produit + roadmap V2
 │   └── mockups/            Maquettes DSFR (HTML + PNG)
-├── Dockerfile  docker-compose.yml
+├── docker-compose.yml      Contexte de build : apps/next
+├── Makefile                Cibles délèguent à `cd apps/next && bun ...`
 └── README.md  AGENTS.md    Ce fichier · contexte pour les assistants de code
 ```
+
+Chaque application sous `apps/` est indépendante en dépendances (son propre
+`package.json` + lockfile Bun + Dockerfile). D'autres apps pourront être
+ajoutées sous `apps/<nom>/` sans impacter `apps/next/`.
 
 Toute la documentation vit sous [docs/](docs/) (point d'entrée : [docs/README.md](docs/README.md)).
 

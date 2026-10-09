@@ -1,0 +1,297 @@
+{
+  "realm": "myagents",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "accountTheme": "keycloak.v2",
+  "eventsEnabled": false,
+  "roles": {
+    "realm": [
+      { "name": "admin", "description": "Administrateurs MyAgents", "composite": false },
+      { "name": "user", "description": "Utilisateurs standards MyAgents", "composite": false }
+    ]
+  },
+  "groups": [
+    { "name": "myagents-admin", "path": "/myagents-admin" },
+    { "name": "myagents-user", "path": "/myagents-user" }
+  ],
+  "users": [
+    {
+      "id": "00000000-0000-0000-0000-000000000010",
+      "username": "admin",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "admin@myagents.local",
+      "firstName": "Admin",
+      "lastName": "MyAgents",
+      "credentials": [{ "type": "password", "value": "${KEYCLOAK_DEV_ADMIN_PASSWORD}", "temporary": false }],
+      "realmRoles": ["admin", "user"],
+      "groups": ["myagents-admin"]
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000011",
+      "username": "user1",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "user1@myagents.local",
+      "firstName": "User",
+      "lastName": "One",
+      "credentials": [{ "type": "password", "value": "${KEYCLOAK_DEV_USER_PASSWORD}", "temporary": false }],
+      "realmRoles": ["user"],
+      "groups": ["myagents-user"]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "myagents-server",
+      "name": "MyAgents Server (FastAPI, flux OIDC côté serveur pour le front Vue)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "dev-myagents-server-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "redirectUris": ["http://localhost:5173/api/auth/callback", "http://localhost:5174/api/auth/callback"],
+      "webOrigins": [],
+      "attributes": {
+        "post.logout.redirect.uris": "http://localhost:5173/*##http://localhost:5174/*",
+        "pkce.code.challenge.method": "S256"
+      },
+      "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "email", "myagents-api", "groups"],
+      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"]
+    },
+    {
+      "clientId": "miraiku-agents",
+      "name": "MirAI Agent Builder (apps/next)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "dev-miraiku-agents-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "redirectUris": [
+        "http://localhost:3001/api/auth/callback/keycloak",
+        "http://localhost:3001/*"
+      ],
+      "webOrigins": ["http://localhost:3001"],
+      "attributes": {
+        "post.logout.redirect.uris": "http://localhost:3001/*"
+      },
+      "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "email", "myagents-api", "groups"],
+      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"]
+    },
+    {
+      "clientId": "open-webui",
+      "name": "OpenWebUI",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "dev-openwebui-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "redirectUris": ["http://localhost:3000/*", "http://localhost:8080/*"],
+      "webOrigins": ["http://localhost:3000", "http://localhost:8080"],
+      "attributes": {
+        "post.logout.redirect.uris": "http://localhost:3000/*##http://localhost:8080/*"
+      },
+      "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "email", "myagents-api", "groups"],
+      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"]
+    }
+  ],
+  "clientScopes": [
+    {
+      "name": "web-origins",
+      "description": "OpenID Connect scope for add allowed web origins to the access token",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "false", "display.on.consent.screen": "false" },
+      "protocolMappers": [
+        {
+          "name": "allowed web origins",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-allowed-origins-mapper",
+          "consentRequired": false,
+          "config": {
+            "id.token.claim": "true",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "acr",
+      "description": "OpenID Connect scope for add acr (authentication context class reference) to the token",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "false", "display.on.consent.screen": "false" },
+      "protocolMappers": [
+        {
+          "name": "acr loa level",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-acr-mapper",
+          "consentRequired": false,
+          "config": {
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "profile",
+      "description": "OpenID Connect built-in scope: profile claims",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "true", "consent.screen.text": "${profileScopeConsentText}" },
+      "protocolMappers": [
+        { "name": "sub", "protocol": "openid-connect", "protocolMapper": "oidc-sub-mapper", "consentRequired": false, "config": { "id.token.claim": "true", "access.token.claim": "true" } },
+        { "name": "username", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-property-mapper", "consentRequired": false, "config": { "user.attribute": "username", "claim.name": "preferred_username", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true" } },
+        { "name": "given name", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-property-mapper", "consentRequired": false, "config": { "user.attribute": "firstName", "claim.name": "given_name", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true" } },
+        { "name": "family name", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-property-mapper", "consentRequired": false, "config": { "user.attribute": "lastName", "claim.name": "family_name", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true" } },
+        { "name": "full name", "protocol": "openid-connect", "protocolMapper": "oidc-full-name-mapper", "consentRequired": false, "config": { "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true" } }
+      ]
+    },
+    {
+      "name": "email",
+      "description": "OpenID Connect built-in scope: email claims",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "true", "consent.screen.text": "${emailScopeConsentText}" },
+      "protocolMappers": [
+        { "name": "email", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-property-mapper", "consentRequired": false, "config": { "user.attribute": "email", "claim.name": "email", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true" } },
+        { "name": "email verified", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-attribute-mapper", "consentRequired": false, "config": { "user.attribute": "emailVerified", "claim.name": "email_verified", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true" } }
+      ]
+    },
+    {
+      "name": "roles",
+      "description": "OpenID Connect scope for add user roles to the access token",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "false", "display.on.consent.screen": "true", "consent.screen.text": "${rolesScopeConsentText}" },
+      "protocolMappers": [
+        {
+          "name": "realm roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "realmRoles",
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "multivalued": "true"
+          }
+        },
+        {
+          "name": "client roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "clientRoles",
+            "claim.name": "resource_access.${client_id}.roles",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "multivalued": "true"
+          }
+        },
+        {
+          "name": "audience resolve",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-resolve-mapper",
+          "consentRequired": false,
+          "config": {}
+        }
+      ]
+    },
+    {
+      "name": "myagents-api",
+      "description": "Audience myagents-api pour le server FastAPI",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "false", "display.on.consent.screen": "false" },
+      "protocolMappers": [
+        {
+          "name": "audience-myagents-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "myagents-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "groups",
+      "description": "Claim groups (full.path=false) pour NextAuth",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "false", "display.on.consent.screen": "false" },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "full.path": "false",
+            "claim.name": "groups",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "address",
+      "description": "OpenID Connect built-in scope: address claims",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "true", "consent.screen.text": "${addressScopeConsentText}" },
+      "protocolMappers": [
+        { "name": "address", "protocol": "openid-connect", "protocolMapper": "oidc-address-mapper", "consentRequired": false, "config": { "user.attribute.formatted": "formatted", "user.attribute.street": "street", "user.attribute.locality": "locality", "user.attribute.region": "region", "user.attribute.postal_code": "postal_code", "user.attribute.country": "country", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true" } }
+      ]
+    },
+    {
+      "name": "phone",
+      "description": "OpenID Connect built-in scope: phone claims",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "true", "consent.screen.text": "${phoneScopeConsentText}" },
+      "protocolMappers": [
+        { "name": "phone number", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-attribute-mapper", "consentRequired": false, "config": { "user.attribute": "phoneNumber", "claim.name": "phone_number", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true" } },
+        { "name": "phone number verified", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-attribute-mapper", "consentRequired": false, "config": { "user.attribute": "phoneNumberVerified", "claim.name": "phone_number_verified", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true" } }
+      ]
+    },
+    {
+      "name": "offline_access",
+      "description": "OpenID Connect built-in scope: offline_access",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "true", "consent.screen.text": "${offlineAccessScopeConsentText}" }
+    },
+    {
+      "name": "microprofile-jwt",
+      "description": "Microprofile JWT scope: upn and groups claims",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "true", "consent.screen.text": "${microprofileScopeConsentText}" },
+      "protocolMappers": [
+        { "name": "upn", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-property-mapper", "consentRequired": false, "config": { "user.attribute": "username", "claim.name": "upn", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true" } },
+        { "name": "groups", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-realm-role-mapper", "consentRequired": false, "config": { "user.attribute": "realmRoles", "claim.name": "groups", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true", "multivalued": "true" } }
+      ]
+    }
+  ],
+  "browserSecurityHeaders": {
+    "contentSecurityPolicy": "frame-src 'self'; frame-ancestors 'self'; object-src 'none';",
+    "xFrameOptions": "SAMEORIGIN"
+  }
+}

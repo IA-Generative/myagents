@@ -1,57 +1,62 @@
-# MirAI Agent Builder — Dockerfile multi-stage (Next.js 14 standalone)
-# Registre cible : rg.fr-par.scw.cloud/${NAMESPACE}/miraiku-agents:${IMAGE_TAG}
+# Image unique apps/server (FastAPI) + apps/web (Vue, servi en statique par FastAPI).
+ARG BUN_VERSION=1.4.2
+ARG PYTHON_VERSION=3.14.7
+ARG UV_VERSION=0.12.20
 
-# ---------- Stage 1 : deps ----------
-FROM node:20-alpine AS deps
-RUN apk add --no-cache libc6-compat openssl
+FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
+
+# ---------- Stage 1 : frontend ----------
+FROM oven/bun:${BUN_VERSION}-alpine AS frontend-builder
+WORKDIR /build
+COPY apps/web/package.json apps/web/bun.lock ./
+RUN bun install --frozen-lockfile
+COPY apps/web/ ./
+RUN bun run build && test -f dist/index.html
+
+# ---------- Stage 2 : dépendances backend ----------
+# WORKDIR identique au stage final : les shebangs du venv embarquent un chemin absolu.
+FROM python:${PYTHON_VERSION}-slim-trixie AS backend-builder
+COPY --from=uv /uv /uvx /bin/
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci
+COPY apps/server/pyproject.toml apps/server/uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
 
-# ---------- Stage 2 : builder ----------
-FROM node:20-alpine AS builder
-RUN apk add --no-cache openssl
+# ---------- Stage 3 : production ----------
+FROM python:${PYTHON_VERSION}-slim-trixie AS production
+# UID 10001 aligné sur le securityContext du chart helm/.
+RUN useradd --system --uid 10001 --gid root --no-create-home appuser
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-# Copie les assets DSFR dans public/ pour qu'ils soient servis statiquement
-# par Next.js, sans passer par le css-loader webpack qui explose sa pile
-# sur l'arborescence d'imports de main.css.
-RUN mkdir -p public/dsfr && cp -r node_modules/@codegouvfr/react-dsfr/dsfr/* public/dsfr/
-# Prisma client a besoin du schema avant le build Next
-RUN npx prisma generate
-ENV NEXT_TELEMETRY_DISABLED=1
-# Skip runtime env validation during build — secrets sont injectés au démarrage
-# du conteneur, pas au build. src/lib/env.ts retourne des placeholders quand
-# SKIP_ENV_VALIDATION=1 pour que Next.js puisse faire le static analysis des
-# routes API sans qu'authOptions/KeycloakProvider ne plante.
-ENV SKIP_ENV_VALIDATION=1
-RUN npm run build
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
 
-# ---------- Stage 3 : runner ----------
-FROM node:20-alpine AS runner
-RUN apk add --no-cache openssl
-WORKDIR /app
-ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
-ENV PORT=3000
+COPY --from=backend-builder /app/.venv /app/.venv
+COPY apps/server/ ./
+COPY --from=frontend-builder /build/dist ./static/
 
-# User non-root aligné avec le securityContext K8s (runAsUser: 1001)
-RUN addgroup --system --gid 1001 nodejs \
-    && adduser --system --uid 1001 nextjs
+# Convention ADR-0004 MirAI next, alignée sur Dockerflow : l'image porte son journal en
+# /app/version.json, servi sur /__version__. Les valeurs viennent de la CI (build-args :
+# ci.yml pr-<n>, branches.yml beta-<sha8>, cd.yml X.Y.Z) ; un build de poste donne « dev ».
+# Posé avant USER : lisible par l'utilisateur non-root, racine en lecture seule compatible.
+ARG VERSION=dev
+ARG COMMIT=
+ARG BUILD=
+ARG CODE_DATE=
+ARG SOURCE=
+COPY scripts/version_json.py CHANGELOG.md* /tmp/version/
+RUN python /tmp/version/version_json.py --version "$VERSION" --commit "$COMMIT" --build "$BUILD" \
+      --code-date "$CODE_DATE" --source "$SOURCE" --changelog /tmp/version/CHANGELOG.md \
+      --out /app/version.json \
+ && chmod 0644 /app/version.json \
+ && rm -rf /tmp/version
 
-COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-# Le client Prisma et le schéma sont requis au runtime pour les migrations
-COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma/client ./node_modules/@prisma/client
+USER 10001
+EXPOSE 8000
 
-USER nextjs
-EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD ["python", "-c", "import urllib.request as u,sys; o=u.build_opener(u.ProxyHandler({})); sys.exit(0 if o.open('http://127.0.0.1:8000/api/health', timeout=4).status == 200 else 1)"]
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-  CMD node -e "fetch('http://localhost:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
-
-CMD ["node", "server.js"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]

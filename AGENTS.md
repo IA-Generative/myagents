@@ -1,122 +1,94 @@
 # AGENTS.md
 
-Contexte pour assistants de code (Cursor, Copilot, etc.). Pieges
-operationnels appris en incident, non derivables du code seul. **Pour la stack,
-le setup et le demarrage local, voir [README.md](README.md)** — ce fichier
-n'y revient pas.
+Contexte pour assistants de code. Pièges opérationnels appris en incident, non dérivables du
+code seul. Stack, installation et démarrage local : [README.md](README.md).
 
 ## TL;DR
 
-App Next.js 14 + Prisma + Postgres. Double cible : Docker compose (dev local,
-via le socle `../owuicore-main/`) et K8s Scaleway (namespace `miraiku`,
-`https://myagents.fake-domain.name`).
+- `apps/server` (FastAPI, SQLAlchemy async, Alembic, LangChain) + `apps/web` (Vue 3, vue-dsfr) :
+  **une seule image** (`Dockerfile` racine), le server sert la SPA. C'est l'application cible.
+- `apps/next` : l'ancienne app Next.js + Prisma, encore en service sur la bêta
+  (`mesagents.numerique-interieur.com`) jusqu'à la bascule. En dépréciation : correctifs de
+  sécurité seulement.
+- Déploiement : chart `helm/`, piloté par Argo CD. Les valeurs réelles (hôtes, secrets) vivent
+  dans le dépôt privé `IA-Generative/mirai-apps-beta-private`, **jamais ici** (dépôt public).
 
-## Invariants a ne pas casser
+## Invariants à ne pas casser
 
-### Schema DB — **jamais `prisma db push`** en prod
+### Schéma : Alembic seulement, révisions jamais réécrites
 
-Le Job K8s [deploy/k8s/base/job-migrate.yaml](deploy/k8s/base/job-migrate.yaml) execute
-`prisma migrate deploy`. Les migrations SQL sont versionnees dans
-[prisma/migrations/](prisma/migrations/). Reecrire une migration existante ou
-rebasculer sur `db push` reintroduit un bug qui corrompt silencieusement la DB
-(un migrator avec un schema stale avait supprime une valeur d'enum vivante et
-des tables entieres).
+Toute évolution passe par une nouvelle révision dans `apps/server/alembic/versions/`
+(`make migration MSG=...`). Réécrire une révision déjà appliquée, ou créer les tables par
+`Base.metadata.create_all` hors des tests, désynchronise silencieusement la base (incident
+connu sur l'ancienne app avec `prisma db push`).
 
-### Toute modif de `schema.prisma` → rebuild **les deux** images
+### La migration passe avant tout nouveau pod
 
-Le runner embarque `@prisma/client` (genere au build), le migrator embarque
-le CLI Prisma + `prisma/migrations/`. `./deploy/build-image.sh` build les deux,
-`./deploy/push-image.sh` push les deux. Oublier le migrator laisse la DB
-desynchronisee du code.
+Sous Argo CD, le Job `alembic upgrade head` est un hook Sync de vague 1 : après la base
+(vague 0), avant le Deployment (vague 2). Ne pas le repasser en PostSync : de nouveaux pods
+tourneraient sur l'ancien schéma.
 
-### `imagePullPolicy: Always` partout
+### `imagePullPolicy: Always`
 
-Deployment ET Job migrate. On re-push souvent la meme balise `:dev` avec un
-digest different ; `IfNotPresent` laisse le node reutiliser une ancienne image
-cachee et reintroduit le bug ci-dessus.
+On republie des étiquettes stables (`pr-<n>`, `beta`). Avec `IfNotPresent`, un nœud relance
+une image périmée en cache. Les previews forcent en plus le redémarrage par l'annotation
+`preview/commit`.
 
-### `OWUI_BASE_URL` : port different Docker vs K8s
+### Sous-chart postgres : clés `postgres.auth.*`, mot de passe hors `lookup`
 
-- Docker compose : `http://openwebui:8080` (le container expose 8080)
-- K8s : `http://openwebui` (port 80 — le Service `openwebui` mappe 80→8080)
+Le sous-chart cloudpirates lit `postgres.auth.{username,database,password,existingSecret}` ;
+toute autre clé est ignorée sans erreur. Sans `existingSecret`, son mot de passe est tiré par
+`lookup`, qu'Argo CD ne sait pas évaluer : il changerait à chaque synchronisation. Sous Argo CD,
+toujours un `existingSecret`, et `DATABASE_URL` fournie par `app.envFromSecrets`.
 
-**Ne pas fixer `OWUI_BASE_URL` dans `.env`** — `deploy/prepare-env.sh` applique
-le defaut K8s correct, et compose a son propre defaut.
+### Variables LLM obligatoires, sans valeur par défaut
 
-### `OWUI_ADMIN_API_KEY` obligatoire dans `agent-builder-secrets`
+`OPENAI_BASE_URL`, `OPENAI_API_KEY`, `LLM_DEFAULT_MODEL`, `LLM_EMBEDDING_MODEL`,
+`LLM_ASSIST_MODEL`, `LLM_ONBOARDING_MODEL` : le server refuse de démarrer sans elles. Ne pas
+réintroduire de nom de modèle en dur dans le code : un modèle retiré du hub casse l'app sans
+erreur visible (cas réel : `mistral-small-3.2-24b-instruct-2506`, retiré le 25/08). Préférer
+les alias de la passerelle (`chat`, `chat-pro`, `vision`).
 
-Sans cette cle, la creation d'agent tombe en fallback silencieux
-("agent cree en base seulement") et le modele n'apparait jamais dans
-OpenWebUI. A recuperer dans OWUI > Settings > Account > API Keys d'un compte
-admin. Geree par `deploy/prepare-secrets.sh` si la variable est dans
-l'environnement.
+### Accès : SSO obligatoire en production, groupe exigé
 
-### Ingress nginx : buffer eleve pour NextAuth
+- `ENVIRONMENT=production` refuse `OIDC_ENABLED=false`. Hors production, sans OIDC, l'en-tête
+  `X-User-ID` est cru : ne jamais exposer un environnement OIDC désactivé.
+- `OIDC_GROUPE_EXIGE` restreint l'accès à un groupe Keycloak (nom feuille, ou chemin s'il
+  commence par `/`). Contrôlé au retour de connexion (aucune session créée) et à chaque
+  requête. Vide = ouvert à tout le realm.
 
-[deploy/k8s/base/ingress.yaml](deploy/k8s/base/ingress.yaml) doit garder :
-```
-nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
-nginx.ingress.kubernetes.io/proxy-buffers-number: "4"
-```
-Le defaut (4k) tronque les cookies NextAuth + Keycloak (state, PKCE, CSRF,
-callback-url — tous chiffres) → `OAUTH_CALLBACK_ERROR state mismatch` au
-login.
+### Garde anti-injection sur tout appel au modèle
 
-### `AGENT_BUILDER_IMAGE` : ne pas override dans `.env`
+Toute route qui envoie du texte utilisateur au modèle passe par `app/llm/guard.py` (entrée,
+system prompt durci, sortie + juge), y compris `/v1/chat/completions`. Une nouvelle route LLM
+sans garde est une régression de sécurité.
 
-Laisser `prepare-env.sh` la deriver en `${REGISTRY}/miraiku-agents:${IMAGE_TAG}`.
-Un override local sans prefix registry (ex: `miraiku-agents:dev`) casse
-`push-image.sh`.
+## Version de l'image (`/__version__`, ADR-0004)
 
-## Cascade `.env`
+L'image écrit `/app/version.json` à sa construction (`scripts/version_json.py`, copié tel quel
+depuis la skill `repo-version-json` — ne pas l'adapter) et le sert sur `GET /__version__` :
+public, hors OpenAPI, hors journaux. Les cinq build-args (`VERSION`, `COMMIT`, `BUILD`,
+`CODE_DATE`, `SOURCE`) sont passés par `ci.yml` (`pr-<n>`), `branches.yml` (`beta-<sha8>`, qui
+vérifie que l'image dit le commit fusionné) et `cd.yml` (`X.Y.Z`). Un build de poste donne
+`version: "dev"`. La route doit rester déclarée **avant** le catch-all de la SPA, sinon
+`/__version__` rend `index.html` en 200.
 
-Shell > `./.env` > `../owuicore-main/.env`. Credentials partages (Scaleway,
-Keycloak, Postgres, registry) restent dans le socle. Detail dans
-[README.md](README.md).
+## Previews
 
-## Workflow evolution du schema DB
-
-```
-1. editer prisma/schema.prisma
-2. npx prisma migrate dev --name <description>   # genere + applique en local
-3. git add prisma/migrations/<timestamp>_<desc>/
-4. ./deploy/build-image.sh && ./deploy/push-image.sh
-5. ./deploy/deploy-k8s.sh                        # run job migrate-deploy + rollout
-```
-
-## Diagnostic rapide
+Une PR étiquetée `beta-preview` est construite (`mes-agents:pr-<n>`) et déployée par l'Argo CD
+d'internal-gw sur `https://myagents-pr-<n>.beta-preview.numerique-interieur.com`, avec sa propre
+base. ApplicationSet et secrets : `mirai-apps-beta-private/apps/argocd/`.
 
 ```bash
-# Logs
-kubectl -n miraiku logs deploy/agent-builder --tail=100 -f
-kubectl -n miraiku logs job/agent-builder-migrate
-
-# Etat DB agentbuilder
-kubectl -n miraiku exec deploy/postgres -- psql -U app -d agentbuilder -c "\dt"
-kubectl -n miraiku exec deploy/postgres -- \
-  psql -U app -d agentbuilder -c 'SELECT unnest(enum_range(NULL::"Visibility"));'
-kubectl -n miraiku exec deploy/postgres -- \
-  psql -U app -d agentbuilder -c 'SELECT * FROM "_prisma_migrations";'
-
-# OWUI (sqlite dans /app/backend/data/webui.db)
-kubectl -n miraiku exec deploy/openwebui -- python3 -c "
-import sqlite3
-c=sqlite3.connect('/app/backend/data/webui.db')
-for r in c.execute('SELECT id, email, role FROM user'): print(r)
-"
-
-# Tester un endpoint depuis le pod (pour contourner l'ingress/auth)
-POD=$(kubectl -n miraiku get pod -l app=agent-builder -o jsonpath='{.items[0].metadata.name}')
-IP=$(kubectl -n miraiku get pod "$POD" -o jsonpath='{.status.podIP}')
-kubectl -n miraiku exec "$POD" -- node -e "
-  require('http').get('http://$IP:3000/api/health', r => {
-    let b=''; r.on('data',c=>b+=c); r.on('end',()=>console.log(r.statusCode, b));
-  });
-"
+kubectl -n argocd get applications -l preview/depot=myagents
+kubectl -n preview-myagents-<n> get pods,jobs
+kubectl -n preview-myagents-<n> logs deploy/mes-agents --tail=100 -f
+kubectl -n preview-myagents-<n> logs job/mes-agents-migrate
 ```
 
-## References
+## Tests
 
-- Spec fonctionnelle : [docs/specs/agent-builder-spec.md](docs/specs/agent-builder-spec.md)
-- Socle Keycloak+OWUI+Postgres : `../owuicore-main/`
-- Orchestrateur deploy : [deploy/deploy-k8s.sh](deploy/deploy-k8s.sh)
+```bash
+cp .env.test.example apps/server/.env   # variables LLM factices
+make check                              # ruff, pytest, eslint, vue-tsc, vitest
+```

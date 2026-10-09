@@ -27,7 +27,7 @@
 
 ### Objectif
 
-Remplacer l'étape 3 actuellement stubée ([app/agents/new/_components/step-knowledge.tsx](app/agents/new/_components/step-knowledge.tsx)) par une sélection réelle, adossée aux API OWUI **déjà câblées** dans [src/lib/owui-client.ts](src/lib/owui-client.ts) (`listTools()`, `listKnowledge()`, `uploadFile()`). Pas de nouveau modèle Prisma : la sélection est sérialisée dans `AgentVersion.configSnapshot` (champ JSON déjà utilisé).
+Remplacer l'étape 3 actuellement stubée ([apps/next/app/agents/new/_components/step-knowledge.tsx](apps/next/app/agents/new/_components/step-knowledge.tsx)) par une sélection réelle, adossée aux API OWUI **déjà câblées** dans [apps/next/src/lib/owui-client.ts](apps/next/src/lib/owui-client.ts) (`listTools()`, `listKnowledge()`, `uploadFile()`). Pas de nouveau modèle Prisma : la sélection est sérialisée dans `AgentVersion.configSnapshot` (champ JSON déjà utilisé).
 
 ### UX wizard — étape 3 remaniée
 
@@ -1348,9 +1348,9 @@ Positionnement des extensions sur la roadmap existante (§8 du prompt principal)
 > **Extensions V2 — contrat minimal à respecter**
 >
 > - Le champ `AgentVersion.configSnapshot` est désormais un contrat évolutif. Ne JAMAIS faire de migration SQL qui en change la structure — seulement des ajouts de clés optionnelles. Les lectures doivent toujours tolérer l'absence de clés nouvelles (rétro-compat).
-> - Toute nouvelle API BFF qui touche OWUI passe par [src/lib/owui-client.ts](src/lib/owui-client.ts) (consumer APIs avec token utilisateur) ou [src/lib/owui-admin-client.ts](src/lib/owui-admin-client.ts) (admin APIs avec clé admin). Ne jamais fetch OWUI directement depuis un route handler.
+> - Toute nouvelle API BFF qui touche OWUI passe par [apps/next/src/lib/owui-client.ts](apps/next/src/lib/owui-client.ts) (consumer APIs avec token utilisateur) ou [apps/next/src/lib/owui-admin-client.ts](apps/next/src/lib/owui-admin-client.ts) (admin APIs avec clé admin). Ne jamais fetch OWUI directement depuis un route handler.
 > - Les trois types d'agent (`model`, `prompt`, `alias`) doivent être gérés explicitement dans chaque route qui lit/écrit un agent — pas de branche implicite "else model".
-> - Le contrat de sécurité "une ressource attachée doit être ≥ ouverte que l'agent" est vérifié dans un helper unique [src/lib/visibility-check.ts](src/lib/visibility-check.ts) à créer, et utilisé par : POST agent, PUT agent, POST search, POST attachments/recompute.
+> - Le contrat de sécurité "une ressource attachée doit être ≥ ouverte que l'agent" est vérifié dans un helper unique [apps/next/src/lib/visibility-check.ts](apps/next/src/lib/visibility-check.ts) à créer, et utilisé par : POST agent, PUT agent, POST search, POST attachments/recompute.
 > - Extension 3 : ne rien implémenter côté BFF tant que la V2 roadmap n'est pas ouverte. Mais dès aujourd'hui, réserver dans `AgentVersion.configSnapshot` les clés `actionSequence` et `allowedActionDomains` en tant que champs optionnels, et ajouter sur `Agent` la colonne `agentMode` (enum, défaut `conversational`). Une migration oubliée aujourd'hui = une migration bloquante au moment où l'extension 3 ouvrira.
 > - Tout endpoint de recherche (`/search`) retourne un champ `source` identifiant l'origine des résultats — c'est un contrat d'UI.
 > - Extension 5 : l'API locale TB est appelée **depuis le frontend** (pas le BFF). Le BFF ne fait que fournir le token myvault via un endpoint dédié. Le frontend relay les résultats au BFF pour injection dans le prompt LLM. Ne jamais tenter d'appeler `127.0.0.1` depuis le BFF K8s.

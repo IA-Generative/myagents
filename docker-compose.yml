@@ -1,63 +1,218 @@
-# MirAI Agent Builder — Compose de dev local.
-#
-# Pré-requis : owuicore-main doit tourner (docker compose up -d dans ce repo).
-# Ce compose se branche sur le réseau externe `owui-net` pour parler à
-# openwebui, keycloak et postgres directement par leur nom de service.
+# Dev local apps/server (FastAPI, hot reload) + apps/web (Vite, hot reload).
+# apps/next tourne séparément : voir apps/next/docker-compose.yml.
+
+name: myagents
 
 services:
-  agent-builder:
-    image: ${AGENT_BUILDER_IMAGE:-miraiku-agents:dev}
-    build:
-      context: .
-      dockerfile: Dockerfile
-    # Cascade : le .env du socle fournit SCW_SECRET_KEY_LLM, SCW_LLM_BASE_URL,
-    # KEYCLOAK_*, etc. Notre .env local override ce qu'il faut (model, host,
-    # NEXTAUTH_SECRET, etc.). En Docker Compose, **le dernier env_file gagne**
-    # quand une variable est définie plusieurs fois, donc .env local en dernier.
-    env_file:
-      - ../owuicore-main/.env
-      - .env
+  postgres:
+    image: postgres:18.6-alpine
     environment:
-      # En dev local, OpenWebUI écoute sur http://openwebui:8080 (service Docker)
-      OWUI_BASE_URL: ${OWUI_BASE_URL:-http://openwebui:8080}
-      # Keycloak est exposé sur host.docker.internal depuis owuicore-main
-      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER_LOCAL:-http://host.docker.internal:8082/realms/openwebui}
-      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3001}
-      DATABASE_URL: ${DATABASE_URL:-postgresql://app:app@postgres:5432/agentbuilder?schema=public}
+      POSTGRES_USER: agents
+      POSTGRES_PASSWORD: agents
+      POSTGRES_DB: agents
+    volumes:
+      # Postgres 18 : les données vivent sous /var/lib/postgresql/<major>/docker.
+      - postgres-data:/var/lib/postgresql
     ports:
-      - "${AGENT_BUILDER_PORT:-3001}:3000"
-    networks:
-      - owui-net
-    depends_on:
-      - migrate
-    restart: unless-stopped
+      - "${POSTGRES_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
-      interval: 15s
+      test: ["CMD-SHELL", "pg_isready -U agents -d agents"]
+      interval: 5s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
 
-  # Job one-shot de migration Prisma — joue prisma db push puis s'éteint.
-  # Utilise le stage `builder` (node_modules complet incluant le CLI prisma)
-  # plutôt que le runner minimaliste qui n'a que @prisma/client.
-  migrate:
-    image: miraiku-agents:migrator
+  qdrant:
+    image: qdrant/qdrant:v1.19.1
+    volumes:
+      - qdrant-data:/qdrant/storage
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+    restart: unless-stopped
+
+  server:
     build:
-      context: .
-      dockerfile: Dockerfile
-      target: builder
+      context: apps/server
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql://app:app@postgres:5432/agentbuilder?schema=public}
-    command: ["node_modules/.bin/prisma", "migrate", "deploy"]
+      DATABASE_URL: postgresql+asyncpg://agents:agents@postgres:5432/agents
+      QDRANT_URL: http://qdrant:6333
+      CORS_ORIGINS: '["http://localhost:${WEB_PORT:-5173}"]'
+      # --- SSO Keycloak (activé quand le profil `sso` ou `owui` tourne) ---
+      OIDC_ENABLED: ${OIDC_ENABLED:-false}
+      # L'issuer des tokens est l'URL publique de Keycloak (--hostname) ; les clés JWKS
+      # sont récupérées par le réseau compose interne.
+      OIDC_ISSUER: ${KEYCLOAK_HOSTNAME:-${KEYCLOAK_PUBLIC_URL:-http://localhost:${KEYCLOAK_PORT:-8180}}}/realms/myagents
+      OIDC_JWKS_URL: http://keycloak:8080/realms/myagents/protocol/openid-connect/certs
+      OIDC_AUDIENCE: myagents-api
+      # Flux OIDC mené par le server (BFF) : le navigateur n'a qu'un cookie de session.
+      OIDC_CLIENT_ID: myagents-server
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-dev-myagents-server-secret}
+      OIDC_INTERNAL_URL: http://keycloak:8080/realms/myagents
+      # Origine du front vue par le navigateur (redirect_uri, cookie, contrôle d'Origin) ; vide =
+      # https://<WEB_PORT>.<CODE_SERVER_DOMAIN> si le domaine code-server est défini, sinon localhost.
+      WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:-}
+      # --- Endpoints LLM compatibles OpenAI (Scaleway, OpenWebUI, Ollama, OpenAI...) -----------
+      # Source de vérité pour le dev local. Variables obligatoires : surcharger via .env ou env vars.
+      # En K8s : Vault fournit les valeurs. Aucun default Python dans config.py.
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://localhost:11434/v1}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LLM_DEFAULT_MODEL: ${LLM_DEFAULT_MODEL:-gpt-oss-120b}
+      LLM_EMBEDDING_MODEL: ${LLM_EMBEDDING_MODEL:-nomic-embed-text}
+      LLM_ASSIST_MODEL: ${LLM_ASSIST_MODEL:-gpt-oss-120b}
+      LLM_ONBOARDING_MODEL: ${LLM_ONBOARDING_MODEL:-mistral-small-3.2-24b-instruct-2506}
+      # LLM-juge de la garde anti-prompt-injection (fail-closed) ; vide = LLM_ASSIST_MODEL.
+      LLM_GUARD_JUDGE_MODEL: ${LLM_GUARD_JUDGE_MODEL:-}
+    volumes:
+      - ./apps/server:/app
+    ports:
+      - "${SERVER_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u,sys; o=u.build_opener(u.ProxyHandler({})); sys.exit(0 if o.open('http://127.0.0.1:8000/api/health', timeout=4).status == 200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  web:
+    build:
+      context: apps/web
+    environment:
+      API_PROXY_TARGET: http://server:8000
+      # Le websocket HMR doit viser l'URL publique (wss, port 443) et non localhost:5173.
+      HMR_HOST: ${CODE_SERVER_DOMAIN:+${WEB_PORT:-5173}.${CODE_SERVER_DOMAIN}}
+    volumes:
+      - ./apps/web:/app
+      # Volume anonyme : conserve les node_modules de l'image malgré le montage du source.
+      - /app/node_modules
+    ports:
+      - "${WEB_PORT:-5173}:5173"
+    depends_on:
+      server:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # OpenWebUI local (profil `owui`, voir `make up-owui`) : affiche les agents exposés par
+  # le server via /v1 (openai_compat.py). Appelle le server par le réseau compose interne.
+  # Joint aussi le réseau partagé `myagents-shared` pour être joignable par apps/next.
+  openwebui:
+    profiles: [owui]
+    image: ghcr.io/open-webui/open-webui:${OPENWEBUI_IMAGE_TAG:-v0.8.12}
+    environment:
+      WEBUI_SECRET_KEY: ${OPENWEBUI_WEBUI_SECRET_KEY:-dev-secret-change-me}
+      # URL publique vue par le navigateur (code-server ou localhost)
+      WEBUI_URL: ${OPENWEBUI_PUBLIC_URL:-http://localhost:${OPENWEBUI_PORT:-3000}}
+      ENABLE_API_KEY: "true"
+      # Les variables d'env restent la source de vérité (sinon la connexion est figée en base au 1er boot).
+      ENABLE_PERSISTENT_CONFIG: "false"
+      ENABLE_OPENAI_API: "true"
+      OPENAI_API_BASE_URLS: http://server:8000/v1
+      OPENAI_API_KEYS: ${OPENWEBUI_API_KEY:-}
+      ENABLE_OLLAMA_API: "false"
+      # Le transfert HF "Xet" reste bloque derriere un proxy corporate : fallback HTTP classique.
+      HF_HUB_DISABLE_XET: "1"
+      # --- SSO Keycloak (profil `sso` + `owui`) ---
+      ENABLE_OAUTH_SIGNUP: ${ENABLE_OAUTH_SIGNUP:-true}
+      OAUTH_CLIENT_ID: open-webui
+      OAUTH_CLIENT_SECRET: ${OPENWEBUI_OAUTH_CLIENT_SECRET:-dev-openwebui-secret}
+      OAUTH_PROVIDER_NAME: Keycloak
+      OAUTH_SCOPES: openid email profile roles
+      OAUTH_ROLES_CLAIM: roles
+      OAUTH_ADMIN_ROLES: admin
+      OAUTH_ALLOWED_ROLES: admin,user
+      ENABLE_OAUTH_ROLE_MANAGEMENT: "true"
+      OAUTH_MERGE_ACCOUNTS_BY_EMAIL: "true"
+      # OWUI construit le redirect_uri par défaut avec son port interne (8080).
+      # Il faut forcer le redirect_uri avec l'URL publique (code-server ou localhost)
+      # pour que le navigateur puisse recevoir le callback après authentification Keycloak.
+      OPENID_REDIRECT_URI: ${OPENWEBUI_PUBLIC_URL:-http://localhost:${OPENWEBUI_PORT:-3000}}/oauth/oidc/callback
+      # Le proxy corporate Orion intercepte les appels HTTP internes (keycloak, server).
+      # On bypass le proxy pour les hôtes du réseau Docker afin que OWUI joigne
+      # directement Keycloak et le server sans transiter par Orion.
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,host.docker.internal,keycloak,server,openwebui,postgres,qdrant}
+      no_proxy: ${NO_PROXY:-localhost,127.0.0.1,host.docker.internal,keycloak,server,openwebui,postgres,qdrant}
+      # authlib (utilisé par OWUI) n'ajoute PAS automatiquement le suffixe
+      # /.well-known/openid-configuration à OPENID_PROVIDER_URL. Il faut pointer
+      # directement sur l'endpoint de découverte OIDC.
+      OPENID_PROVIDER_URL: http://keycloak:8080/realms/myagents/.well-known/openid-configuration
+    volumes:
+      - openwebui-data:/app/backend/data
+    ports:
+      - "${OPENWEBUI_PORT:-3000}:8080"
     networks:
-      - owui-net
-    restart: "no"
+      default:
+      shared:
+        aliases:
+          - openwebui
+    healthcheck:
+      # Le healthcheck par défaut de l'image utilise `curl` sans `--noproxy`, ce qui
+      # fait transiter la requête vers localhost par le proxy corporate Orion (bloqué).
+      # On surcharge avec `--noproxy '*'` pour bypasser le proxy sur ce check interne.
+      test: ["CMD-SHELL", "curl --silent --fail --noproxy '*' http://localhost:${PORT:-8080}/health | jq -ne 'input.status == true' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      server:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Keycloak local (profils `sso` et `owui`). Realm `myagents` importé au démarrage
+  # (voir keycloak/realm-myagents.json) avec utilisateurs admin/admin et user1/user1.
+  # Joint le réseau partagé pour être joignable par apps/next et openwebui.
+  keycloak:
+    profiles: [sso, owui]
+    image: quay.io/keycloak/keycloak:${KEYCLOAK_IMAGE_TAG:-26.4.0}
+    command:
+      - start-dev
+      - --import-realm
+      - --hostname=${KEYCLOAK_HOSTNAME:-${KEYCLOAK_PUBLIC_URL:-http://localhost:${KEYCLOAK_PORT:-8180}}}
+      - --hostname-strict=false
+      - --hostname-backchannel-dynamic=true
+    environment:
+      # Keycloak 26+ a renommé KEYCLOAK_ADMIN[_PASSWORD] en KC_BOOTSTRAP_ADMIN_*.
+      # Les anciens noms émettent un warning KC-SERVICES0110 au démarrage.
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-}
+      # Mots de passe des comptes de dev du realm (substitués dans realm-myagents.json) ; `make ensure-env` les génère.
+      KEYCLOAK_DEV_ADMIN_PASSWORD: ${KEYCLOAK_DEV_ADMIN_PASSWORD:-}
+      KEYCLOAK_DEV_USER_PASSWORD: ${KEYCLOAK_DEV_USER_PASSWORD:-}
+      KC_HEALTH_ENABLED: "true"
+    volumes:
+      - ./keycloak/realm-myagents.json:/opt/keycloak/data/import/realm-myagents.json:ro
+      - keycloak-data:/opt/keycloak/data
+    ports:
+      - "${KEYCLOAK_PORT:-8180}:8080"
+    networks:
+      default:
+      shared:
+        aliases:
+          - keycloak
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nhost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | head -1 | grep -q '200 OK'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+    restart: unless-stopped
 
 networks:
-  # Réseau partagé avec owuicore-main (créé par son docker-compose.yml).
-  # En cas de lancement isolé, retirer "external: true" pour le créer localement.
-  owui-net:
-    external: true
-    name: owui-net
+  # Même `name:` dans apps/next/docker-compose.yml : le premier compose lancé crée le réseau.
+  shared:
+    name: myagents-shared
+
+volumes:
+  postgres-data:
+  qdrant-data:
+  openwebui-data:
+  keycloak-data:

@@ -1,0 +1,40 @@
+name: Clean preview images
+
+on:
+  schedule:
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+
+jobs:
+  list-closed-prs:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      prs: ${{ steps.list.outputs.prs }}
+    steps:
+      - id: list
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          CUTOFF=$(date -u -d "3 days ago" +%Y-%m-%dT%H:%M:%SZ)
+          PRS=$(gh pr list -R "$REPO" --state closed --limit 100 \
+            --json number,closedAt \
+            | jq -c --arg c "$CUTOFF" '[.[] | select(.closedAt >= $c) | {number}]')
+          echo "prs=$PRS" >> "$GITHUB_OUTPUT"
+
+  sweep-images:
+    needs: list-closed-prs
+    if: ${{ needs.list-closed-prs.outputs.prs != '[]' }}
+    uses: dnum-mi/fabnum-cicd/.github/workflows/clean-images.yml@v0
+    permissions:
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        pr: ${{ fromJSON(needs.list-closed-prs.outputs.prs) }}
+    with:
+      # Même image que ci.yml/cd.yml (ghcr.io/<repo>/mes-agents).
+      IMAGE: ghcr.io/${{ github.repository }}/mes-agents:pr-${{ matrix.pr.number }}
