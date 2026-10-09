@@ -4,8 +4,9 @@ import uuid
 from datetime import datetime
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
+from app.core.contrat import Input, Output
 from app.models.enums import AgentStatus, Visibility
 
 ShortText = Annotated[str, StringConstraints(max_length=255)]
@@ -34,6 +35,20 @@ class ConfigSnapshot(BaseModel):
     tool_ids: Annotated[list[ShortText], Field(max_length=20)] = Field(
         default_factory=list
     )
+    # Contrat d'agents MirAI : sur quoi l'agent sait travailler, et ce qu'il rend.
+    # Vocabulaire fermé (app.core.contrat) ; un instantané ancien vaut ["text"].
+    inputs: Annotated[list[Input], Field(max_length=16)] = Field(
+        default_factory=lambda: ["text"]
+    )
+    outputs: Annotated[list[Output], Field(max_length=16)] = Field(
+        default_factory=lambda: ["text"]
+    )
+
+    @field_validator("inputs", "outputs")
+    @classmethod
+    def _sans_doublon_ni_vide(cls, valeurs: list[str]) -> list[str]:
+        uniques = list(dict.fromkeys(valeurs))
+        return uniques or ["text"]
 
 
 class AgentCreate(BaseModel):

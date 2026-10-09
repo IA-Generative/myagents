@@ -17,7 +17,9 @@ from tests.test_agents_api import DRAFT_PAYLOAD, _create_agent
 
 ALICE = {"X-User-ID": "alice"}
 BOB = {"X-User-ID": "bob"}
-SHARED = {"visibility": "community", "status": "published"}
+# Ouvert à tout le ministère : un agent de communauté n'est partagé qu'avec les membres
+# de son groupe (contrat d'agents, règle d'accès unique).
+SHARED = {"visibility": "ministry", "status": "published"}
 
 
 async def _create_as(client, headers, **overrides):

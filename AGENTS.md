@@ -57,6 +57,18 @@ les alias de la passerelle (`chat`, `chat-pro`, `vision`).
   commence par `/`). Contrôlé au retour de connexion (aucune session créée) et à chaque
   requête. Vide = ouvert à tout le realm.
 
+### Contrat d'agents : une règle d'accès, un vocabulaire fermé
+
+`GET /api/v1/agents` et `/v1/*` sont lus par d'autres applications (Mon portail, Mes réunions,
+plug-ins) avec le jeton de la personne : `docs/contrats/contrat-agents-mirai.md` fait foi.
+La règle d'accès vit dans UNE fonction, `app/services/agents.py::is_accessible`, utilisée par
+le catalogue, la liste du contrat, `/v1/models` et `/v1/chat/completions`. Une route qui refait
+sa propre règle finit par montrer un agent privé. Le vocabulaire `inputs`/`outputs` est fermé
+(`app/core/contrat.py`) : l'étendre, c'est modifier le contrat d'abord, puis les consommateurs.
+L'audience `mesagents` est exigée par défaut (`CONTRAT_AUDIENCE`) ; la vider n'est acceptable
+que sur un environnement sans portée Keycloak. Les origines CORS du contrat sont des motifs
+(`CONTRAT_ORIGINES`), jamais `*`.
+
 ### Garde anti-injection sur tout appel au modèle
 
 Toute route qui envoie du texte utilisateur au modèle passe par `app/llm/guard.py` (entrée,

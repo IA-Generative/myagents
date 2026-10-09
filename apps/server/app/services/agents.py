@@ -1,8 +1,9 @@
 """Business logic for agent CRUD, versioning, forking and publishing."""
 
 import uuid
+from collections.abc import Iterable
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -54,16 +55,83 @@ def is_catalog_visible(agent: Agent) -> bool:
     return agent.visibility != Visibility.private and agent.status in _CATALOG_STATUSES
 
 
+def groupe_correspond(community_path: str | None, groups: Iterable[str]) -> bool:
+    """La communauté déclarée fait-elle partie des groupes du jeton ?
+
+    Un chemin (« /g/juridique ») se compare aux chemins complets ; un nom (« juridique ») au
+    nom feuille — même règle que `OIDC_GROUPE_EXIGE` (app.core.security.has_required_group).
+    """
+    chemin = (community_path or "").strip()
+    if not chemin:
+        return False
+    if chemin.startswith("/"):
+        return chemin.rstrip("/") in {g.rstrip("/") for g in groups}
+    return chemin in {g.rstrip("/").rsplit("/", 1)[-1] for g in groups}
+
+
+def is_accessible(agent: Agent, user_id: str, groups: Iterable[str] = ()) -> bool:
+    """LA règle d'accès (contrat d'agents §Les droits), la même pour toutes les surfaces.
+
+    Son auteur voit tout sauf l'archivé ; les autres voient un agent publié ou soumis,
+    ouvert au ministère ou à une communauté dont ils font partie.
+    """
+    if agent.status == AgentStatus.archived:
+        return False
+    if agent.creator_id == user_id:
+        return True
+    if agent.status not in _CATALOG_STATUSES:
+        return False
+    if agent.visibility == Visibility.ministry:
+        return True
+    if agent.visibility == Visibility.community:
+        return groupe_correspond(current_config(agent).community_path, groups)
+    return False
+
+
+def is_in_catalog(agent: Agent, user_id: str, groups: Iterable[str] = ()) -> bool:
+    """Dans le catalogue partagé : publié ou soumis, non privé, et accessible à la personne.
+
+    Ses propres brouillons n'y figurent pas (ils sont dans « Mes agents »).
+    """
+    return is_catalog_visible(agent) and is_accessible(agent, user_id, groups)
+
+
 async def get_accessible_agent(
-    db: AsyncSession, agent_id: uuid.UUID, user_id: str
+    db: AsyncSession, agent_id: uuid.UUID, user_id: str, groups: Iterable[str] = ()
 ) -> Agent | None:
-    """Agent readable by `user_id`: their own (non-archived) or one shared in the catalog."""
+    """Agent readable by `user_id`: their own (non-archived) or one shared with them."""
     agent = await get_agent(db, agent_id)
     if agent is None:
         return None
-    if agent.creator_id == user_id and agent.status != AgentStatus.archived:
-        return agent
-    return agent if is_catalog_visible(agent) else None
+    return agent if is_accessible(agent, user_id, groups) else None
+
+
+async def list_accessible(
+    db: AsyncSession, user_id: str, groups: Iterable[str] = ()
+) -> list[Agent]:
+    """Les agents que `user_id` peut lancer : les siens d'abord, puis les partagés avec lui."""
+    groups = list(groups)
+    stmt = _with_versions(
+        select(Agent)
+        .where(
+            Agent.status != AgentStatus.archived,
+            or_(
+                Agent.creator_id == user_id,
+                and_(
+                    Agent.visibility != Visibility.private,
+                    Agent.status.in_(_CATALOG_STATUSES),
+                ),
+            ),
+        )
+        .order_by(Agent.updated_at.desc())
+    )
+    agents = [
+        a
+        for a in (await db.execute(stmt)).scalars().all()
+        if is_accessible(a, user_id, groups)
+    ]
+    agents.sort(key=lambda a: a.creator_id != user_id)  # stable : les miens d'abord
+    return agents
 
 
 async def list_my_agents(db: AsyncSession, creator_id: str) -> list[Agent]:
@@ -88,7 +156,14 @@ async def list_exposed_agents(db: AsyncSession) -> list[Agent]:
     return list((await db.execute(stmt)).scalars().all())
 
 
-async def list_catalog(db: AsyncSession, category: str | None = None) -> list[Agent]:
+async def list_catalog(
+    db: AsyncSession,
+    category: str | None = None,
+    user_id: str | None = None,
+    groups: Iterable[str] = (),
+) -> list[Agent]:
+    """Catalogue partagé. Avec `user_id`, les agents de communauté sont filtrés par groupe."""
+    groups = list(groups)
     stmt = _with_versions(
         select(Agent).where(
             Agent.visibility != Visibility.private,
@@ -96,6 +171,8 @@ async def list_catalog(db: AsyncSession, category: str | None = None) -> list[Ag
         )
     )
     agents = list((await db.execute(stmt)).scalars().all())
+    if user_id is not None:
+        agents = [a for a in agents if is_in_catalog(a, user_id, groups)]
     if category:
         agents = [a for a in agents if category in a.category]
     return agents

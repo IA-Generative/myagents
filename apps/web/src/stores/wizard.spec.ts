@@ -20,6 +20,12 @@ describe('wizard store', () => {
     expect(wizard.draft.config.temperature).toBe(0.7)
   })
 
+  it('starts with the contract defaults for inputs and outputs', () => {
+    const wizard = useWizardStore()
+    expect(wizard.draft.config.inputs).toEqual(['text'])
+    expect(wizard.draft.config.outputs).toEqual(['text'])
+  })
+
   it('reset restores the initial draft', () => {
     const wizard = useWizardStore()
     wizard.updateConfig({ name: 'Mon agent' })
