@@ -22,8 +22,10 @@ from app.core.config import get_settings
 from app.llm.client import LlmClient, LlmParseError, LlmUnavailableError
 from app.schemas.agent import (
     ChatMessage,
+    ConfigSnapshot,
     OnboardingMessage,
     OnboardingTurn,
+    RefineConfigResponse,
     SuggestStartersResponse,
 )
 
@@ -168,10 +170,32 @@ async def suggest_starters(
 _onboarding_parser = PydanticOutputParser(pydantic_object=OnboardingTurn)
 
 _ONBOARDING_SYSTEM_PROMPT = """Tu es un assistant qui guide un utilisateur, par des questions \
-successives, pour construire la configuration de son agent IA (rôle, public, ton, contraintes, \
-nom, catégorie, description). Pose une question à la fois dans le champ "message". Tant que tu \
-n'as pas recueilli assez d'informations, laisse "ready" à false et les autres champs vides. Dès \
-que tu as assez d'informations, mets "ready" à true et remplis tous les champs.
+successives, pour construire la configuration de son agent IA. Tu mènes un entretien court \
+(5 à 6 échanges maximum) pour recueillir :
+
+1. Le rôle principal de l'agent (que fait-il ?)
+2. Le public visé (qui l'utilise ?)
+3. Le ton souhaité (formel, pédagogique, bienveillant...)
+4. Les contraintes ou garde-fous (ne pas inventer de sources, renvoyer vers un service, etc.)
+
+Pose **une seule question à la fois** dans le champ "message", de manière naturelle et \
+concise. Dans le champ "progress", liste les étapes déjà recueillies parmi : role, audience, \
+tone, constraints. Tant que tu n'as pas recueilli assez d'informations, laisse "ready" à false \
+et les autres champs vides. Dès que tu as assez d'informations, mets "ready" à true et remplis \
+tous les champs en t'appuyant sur les réponses de l'utilisateur.
+
+Quand "ready" est true :
+- "name" : un nom court et descriptif (ex. « Rédacteur de notes administratives »).
+- "category" : choisis parmi ces catégories existantes : rédaction, juridique, rh, sécurité, \
+préfecture, communication. Si aucune ne correspond, utilise "autre".
+- "system_prompt" : un prompt système structuré avec les sections Rôle, Public, Ton, \
+Contraintes — rédigé comme une consigne directe à l'agent.
+- "greeting" : un message d'accueil chaleureux qui présente l'agent et invite à interagir.
+- "examples" : exactement 3 exemples de prompts qu'un utilisateur final pourrait taper.
+
+IMPORTANT : ta réponse DOIT être un objet JSON valide conforme au schéma ci-dessous. Ne \
+renvoie JAMAIS de texte brut ou de prose en dehors du JSON. Le champ "message" contient ta \
+question ou remarque destinée à l'utilisateur.
 
 {format_instructions}"""
 
@@ -185,9 +209,69 @@ async def onboarding_turn(
 ) -> OnboardingTurn:
     model = get_settings().llm_onboarding_model
     chain = _ONBOARDING_PROMPT | client.chat_model(model, 0.6) | _onboarding_parser
-    return await _ainvoke(
-        chain,
-        {"history": history_messages(history[-40:])},
-        label="onboarding_turn",
-        model=model,
-    )
+    payload = {"history": history_messages(history[-40:])}
+    try:
+        return await _ainvoke(chain, payload, label="onboarding_turn", model=model)
+    except LlmParseError:
+        # Le modèle ne respecte pas les format_instructions (fréquent avec les
+        # petits modèles instruct) : il répond en texte brut au lieu de JSON.
+        # Plutôt que de renvoyer une erreur 502, on récupère le texte brut et
+        # on l'utilise comme question de relance (ready=False). L'utilisateur
+        # voit la question au lieu d'un message d'erreur.
+        logger.warning("[onboarding_turn] parsing JSON échoué, repli sur texte brut")
+        fallback_chain = (
+            _ONBOARDING_PROMPT | client.chat_model(model, 0.6) | StrOutputParser()
+        )
+        raw = await _ainvoke(
+            fallback_chain, payload, label="onboarding_turn (fallback)", model=model
+        )
+        return OnboardingTurn(message=raw.strip(), ready=False)
+
+
+# ---------------------------------------------------------------------------
+# 5. Refine config: adjust an agent config from user feedback.
+# ---------------------------------------------------------------------------
+
+_refine_parser = PydanticOutputParser(pydantic_object=RefineConfigResponse)
+
+_REFINE_SYSTEM_PROMPT = """Tu es un assistant qui ajuste la configuration d'un agent IA à \
+partir d'un feedback utilisateur. Tu reçois la config actuelle et un feedback (ex. « rends le \
+ton moins formel », « ajoute une contrainte sur les sources »). Tu retourne la config complète \
+ajustée en tenant compte du feedback, sans dégrader ce qui fonctionnait déjà.
+
+Conserve la structure du system_prompt (Rôle, Public, Ton, Contraintes). Si le feedback \
+concerne le nom, la description, le greeting ou les exemples, ajuste-les aussi. Le champ \
+"message" contient un résumé court des changements effectués.
+
+IMPORTANT : ta réponse DOIT être un objet JSON valide conforme au schéma ci-dessous. Ne \
+renvoie JAMAIS de texte brut ou de prose en dehors du JSON.
+
+{format_instructions}"""
+
+_REFINE_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        ("system", _REFINE_SYSTEM_PROMPT),
+        ("human", "{config_json}\n\nFeedback : {feedback}"),
+    ]
+).partial(format_instructions=_refine_parser.get_format_instructions())
+
+
+async def refine_config(
+    client: LlmClient, config: ConfigSnapshot, feedback: str
+) -> RefineConfigResponse:
+    model = get_settings().llm_assist_model
+    chain = _REFINE_PROMPT | client.chat_model(model, 0.4) | _refine_parser
+    payload = {
+        "config_json": config.model_dump_json(indent=2),
+        "feedback": feedback,
+    }
+    try:
+        return await _ainvoke(chain, payload, label="refine_config", model=model)
+    except LlmParseError:
+        # Même repli que pour onboarding_turn : si le modèle ne produit pas de JSON,
+        # on retourne la config inchangée avec un message d'erreur user-friendly.
+        logger.warning("[refine_config] parsing JSON échoué, config inchangée")
+        return RefineConfigResponse(
+            config=config,
+            message="Je n'ai pas pu ajuster la configuration. Vous pouvez la modifier manuellement dans le wizard.",
+        )

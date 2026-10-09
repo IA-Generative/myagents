@@ -14,7 +14,7 @@ describe('AgentChatWidget', () => {
       props: { agentName: 'Mon agent', send },
     })
 
-    await wrapper.find('input').setValue('Salut')
+    await wrapper.find('textarea').setValue('Salut')
     await wrapper.find('button').trigger('click')
     await flushPromises()
 
@@ -32,11 +32,11 @@ describe('AgentChatWidget', () => {
       props: { agentName: 'Mon agent', send },
     })
 
-    await wrapper.find('input').setValue('Premier message')
+    await wrapper.find('textarea').setValue('Premier message')
     await wrapper.find('button').trigger('click')
     await flushPromises()
 
-    await wrapper.find('input').setValue('Deuxieme message')
+    await wrapper.find('textarea').setValue('Deuxieme message')
     await wrapper.find('button').trigger('click')
     await flushPromises()
 
@@ -53,14 +53,14 @@ describe('AgentChatWidget', () => {
       props: { agentName: 'Mon agent', send },
     })
 
-    await wrapper.find('input').setValue('Salut')
+    await wrapper.find('textarea').setValue('Salut')
     await wrapper.find('button').trigger('click')
     await flushPromises()
 
     expect(wrapper.text()).toContain('Échec de l')
     // The failed turn is rolled back so it doesn't linger unanswered in the history.
     expect(wrapper.text()).not.toContain('Vous : Salut')
-    expect((wrapper.find('input').element as HTMLInputElement).value).toBe('Salut')
+    expect((wrapper.find('textarea').element as HTMLTextAreaElement).value).toBe('Salut')
   })
 
   it('shows a friendly message for known API error details', async () => {
@@ -69,7 +69,7 @@ describe('AgentChatWidget', () => {
       props: { agentName: 'Mon agent', send },
     })
 
-    await wrapper.find('input').setValue('Salut')
+    await wrapper.find('textarea').setValue('Salut')
     await wrapper.find('button').trigger('click')
     await flushPromises()
 
@@ -85,7 +85,7 @@ describe('AgentChatWidget', () => {
       props: { agentName: 'Mon agent', send },
     })
 
-    await wrapper.find('input').setValue('Salut')
+    await wrapper.find('textarea').setValue('Salut')
     await wrapper.find('button').trigger('click')
 
     expect(wrapper.find('button').attributes('disabled')).toBeDefined()
@@ -100,7 +100,7 @@ describe('AgentChatWidget', () => {
     const send = vi.fn(async () => ({ reply: '1. **Simplifier** une procédure\n2. *Orienter* l’usager' }))
     const wrapper = mount(AgentChatWidget, { props: { agentName: 'Mon agent', send } })
 
-    await wrapper.find('input').setValue('Mon **message**')
+    await wrapper.find('textarea').setValue('Mon **message**')
     await wrapper.find('button').trigger('click')
     await flushPromises()
 

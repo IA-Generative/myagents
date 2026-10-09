@@ -14,17 +14,19 @@ casse jamais la requête : le blocage prime sur l'audit).
 
 import contextlib
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.llm.agent_runtime import StreamEvent
 from app.llm.guard import (
     BLOCK_MESSAGE_OUTPUT,
     BLOCK_MESSAGE_USER_INPUT,
     DEFAULT_GUARD_CONFIG,
     GuardResult,
     Signal,
+    StreamingOutputInspector,
     harden_system_prompt,
     inspect_input,
     inspect_output,
@@ -194,3 +196,110 @@ async def guarded_agent_chat(
         db, route=route, text=reply, user_id=user_id, role="user", canary=canary
     )
     return reply
+
+
+async def guarded_agent_chat_stream(
+    db: AsyncSession | None,
+    *,
+    route: str,
+    user_id: str | None,
+    config: ConfigSnapshot,
+    history: list[ChatMessage],
+    run: Callable[[ConfigSnapshot], AsyncIterator[StreamEvent]],
+    skip_input_check: bool = False,
+) -> AsyncIterator[StreamEvent]:
+    """Conversation avec streaming sous les trois couches de la garde.
+
+    Couche 1 (entrée) et couche 2 (durcissement + canari) identiques à
+    ``guarded_agent_chat``. La différence est la couche 3 : les tokens sont
+    inspectés au fil de l'eau via ``StreamingOutputInspector`` (heuristiques
+    keylogger + fuite canari), puis le LLM-juge est appelé sur le texte
+    complet assemblé après la fin du stream.
+
+    .. note::
+        Les jetons sont émis au client avant le verdict du juge LLM. Les
+        heuristiques en vol (signatures keylogger, fuite du canari) interceptent
+        les contenus manifestement hostiles pendant l'émission, mais le juge
+        ne se prononce qu'après. S'il refuse, un événement ``blocked`` est émis
+        (``finish_reason: content_filter`` côté OpenAI) et le message n'est pas
+        persisté. La route ``/v1/chat/completions`` ne diffuse jamais les jetons
+        avant le verdict (voir ``openai_compat._sse_full_reply``) ; cette
+        fonction n'est utilisée que par le streaming interne (``/api/agents``
+        et ``/api/catalog``), où les étapes d'outils sont affichées en direct.
+    """
+    if not skip_input_check:
+        await check_input(
+            db,
+            route=route,
+            text=last_message_content(history),
+            role="user",
+            block_message=BLOCK_MESSAGE_USER_INPUT,
+            user_id=user_id,
+        )
+
+    canary = make_canary()
+    hardened = config.model_copy(
+        update={
+            "system_prompt": harden_system_prompt(
+                config.system_prompt or DEFAULT_PERSONA, canary
+            )
+        }
+    )
+
+    inspector = StreamingOutputInspector(canary=canary)
+    assembled: list[str] = []
+
+    async for event in run(hardened):
+        if event.type == "token":
+            inspector.push(event.content)
+            assembled.append(event.content)
+            if inspector.done().blocked:
+                await record_guard_event(
+                    db,
+                    route=route,
+                    stage="output",
+                    signals=inspector.done().signals,
+                    user_id=user_id,
+                    role="user",
+                )
+                yield StreamEvent(type="blocked", content=BLOCK_MESSAGE_OUTPUT)
+                return
+            yield event
+        elif event.type == "tool_result" and event.tool_result:
+            inspector.push(event.tool_result)
+            if inspector.done().blocked:
+                await record_guard_event(
+                    db,
+                    route=route,
+                    stage="output",
+                    signals=inspector.done().signals,
+                    user_id=user_id,
+                    role="user",
+                )
+                yield StreamEvent(type="blocked", content=BLOCK_MESSAGE_OUTPUT)
+                return
+            yield event
+        else:
+            yield event
+
+    full_reply = "".join(assembled).strip()
+
+    heuristics = inspect_output(full_reply, canary=canary)
+    verdict = await judge_output(full_reply)
+    signals = [
+        *heuristics.signals,
+        Signal("judge", verdict.complied, verdict.reason, "medium"),
+    ]
+    if fired_signals(signals):
+        await record_guard_event(
+            db,
+            route=route,
+            stage="output",
+            signals=signals,
+            user_id=user_id,
+            role="user",
+        )
+        yield StreamEvent(type="blocked", content=BLOCK_MESSAGE_OUTPUT)
+        return
+
+    yield StreamEvent(type="done", content=full_reply)

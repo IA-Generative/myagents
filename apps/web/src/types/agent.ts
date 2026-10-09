@@ -99,9 +99,60 @@ export interface OnboardingAgentConfig {
   system_prompt: string
   greeting: string
   examples: string[]
+  progress: string[]
 }
 
 export interface OnboardingMessage {
   role: 'user' | 'assistant'
   content: string
+}
+
+export interface RefineConfigRequest {
+  config: ConfigSnapshot
+  feedback: string
+}
+
+export interface RefineConfigResponse {
+  config: ConfigSnapshot
+  message: string
+}
+
+export interface ChatResponse {
+  reply: string
+  conversation_id?: string | null
+  message_id?: string | null
+}
+
+export interface Citation {
+  filename: string
+  document_id: string
+  chunk_id: string
+  score: number
+  snippet: string
+}
+
+export interface ToolStep {
+  tool_name: string
+  args: Record<string, unknown>
+  result: string
+  status: string
+}
+
+export interface Conversation {
+  id: string
+  agent_id: string
+  title: string
+  created_at: string
+  updated_at: string
+  last_message_at: string | null
+}
+
+export interface ConversationMessage {
+  id: string
+  role: 'user' | 'assistant' | 'tool' | 'system'
+  content: string
+  tool_calls: Record<string, unknown> | null
+  tool_call_id: string | null
+  metadata: Record<string, unknown> | null
+  created_at: string
 }

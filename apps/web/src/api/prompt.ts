@@ -1,5 +1,10 @@
 import { api } from './client'
-import type { OnboardingAgentConfig, OnboardingMessage } from '@/types/agent'
+import type {
+  ConfigSnapshot,
+  OnboardingAgentConfig,
+  OnboardingMessage,
+  RefineConfigResponse,
+} from '@/types/agent'
 
 export const promptApi = {
   assist: (prompt: string, hints: Record<string, string> = {}) =>
@@ -17,4 +22,6 @@ export const promptApi = {
       '/agents/onboarding-chat',
       { messages },
     ),
+  refineConfig: (config: ConfigSnapshot, feedback: string) =>
+    api.post<RefineConfigResponse>('/agents/prompt/refine', { config, feedback }),
 }

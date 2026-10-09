@@ -1,17 +1,25 @@
 """Routes: create/list/read/update/delete/fork/submit/chat for the current user's agents."""
 
+import json
 import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user_id, limit_llm_user
 from app.core.config import get_settings
 from app.db.session import get_db
+from app.llm.agent_runtime import StreamEvent
 from app.llm.client import LlmClient
-from app.llm.fallback import LlmModelResolutionError, run_agent_chat_with_model_fallback
+from app.llm.fallback import (
+    LlmModelResolutionError,
+    run_agent_chat_stream_with_model_fallback,
+    run_agent_chat_with_model_fallback,
+)
 from app.llm.guard import BLOCK_MESSAGE_AGENT_CONFIG
+from app.models.conversation import MessageRole
 from app.models.enums import AgentStatus
 from app.schemas.agent import (
     AgentCreate,
@@ -21,8 +29,10 @@ from app.schemas.agent import (
     ChatRequest,
     ChatResponse,
     ConfigSnapshot,
+    PreviewChatRequest,
 )
 from app.services import agents as agents_service
+from app.services import conversations as conv_service
 from app.services import knowledge as knowledge_service
 from app.services import prompt_guard
 
@@ -168,6 +178,87 @@ async def chat_with_agent(
     primary_model = config.model_id or agent.model_ref or default_model
     client = LlmClient()
 
+    conv_id = None
+    if payload.conversation_id:
+        conv = await conv_service.get_conversation(db, payload.conversation_id, user_id)
+        if conv is not None:
+            conv_id = conv.id
+    if conv_id is None:
+        conv = await conv_service.create_conversation(
+            db,
+            agent_id,
+            user_id,
+            title=payload.messages[-1].content[:500] if payload.messages else "",
+        )
+        conv_id = conv.id
+
+    if payload.stream:
+
+        async def run_stream(hardened: ConfigSnapshot):
+            async for event in run_agent_chat_stream_with_model_fallback(
+                client,
+                hardened,
+                history=payload.messages,
+                temperature=config.temperature,
+                primary_model=primary_model,
+                default_model=default_model,
+            ):
+                yield event
+
+        def _sse(event: StreamEvent) -> str:
+            payload_dict: dict = {"type": event.type}
+            if event.content:
+                payload_dict["content"] = event.content
+            if event.tool_name:
+                payload_dict["tool_name"] = event.tool_name
+            if event.tool_args:
+                payload_dict["tool_args"] = event.tool_args
+            if event.tool_result:
+                payload_dict["tool_result"] = event.tool_result
+            payload_dict["conversation_id"] = str(conv_id)
+            return f"data: {json.dumps(payload_dict)}\n\n"
+
+        async def sse_generator():
+            full_reply: list[str] = []
+            blocked = False
+            user_persisted = False
+            try:
+                async for event in prompt_guard.guarded_agent_chat_stream(
+                    db,
+                    route="agents.chat",
+                    user_id=user_id,
+                    config=config,
+                    history=payload.messages,
+                    run=run_stream,
+                ):
+                    if event.type == "token":
+                        full_reply.append(event.content)
+                    elif event.type == "blocked":
+                        blocked = True
+                    elif event.type == "done" and not user_persisted:
+                        last_user_msg = (
+                            payload.messages[-1] if payload.messages else None
+                        )
+                        if last_user_msg and last_user_msg.role == "user":
+                            await conv_service.add_message(
+                                db, conv_id, MessageRole.user, last_user_msg.content
+                            )
+                        user_persisted = True
+                    yield _sse(event)
+                if not blocked and full_reply:
+                    reply_text = "".join(full_reply).strip()
+                    if reply_text:
+                        await conv_service.add_message(
+                            db, conv_id, MessageRole.assistant, reply_text
+                        )
+            except prompt_guard.GuardBlockedError as exc:
+                yield _sse(StreamEvent(type="blocked", content=exc.message))
+            except LlmModelResolutionError:
+                yield _sse(StreamEvent(type="error", content="llm_unavailable"))
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(sse_generator(), media_type="text/event-stream")
+
     async def run(hardened: ConfigSnapshot) -> str:
         return await run_agent_chat_with_model_fallback(
             client,
@@ -182,6 +273,52 @@ async def chat_with_agent(
         reply = await prompt_guard.guarded_agent_chat(
             db,
             route="agents.chat",
+            user_id=user_id,
+            config=config,
+            history=payload.messages,
+            run=run,
+        )
+    except LlmModelResolutionError as exc:
+        raise HTTPException(status_code=502, detail="llm_unavailable") from exc
+
+    last_user_msg = payload.messages[-1] if payload.messages else None
+    if last_user_msg and last_user_msg.role == "user":
+        await conv_service.add_message(
+            db, conv_id, MessageRole.user, last_user_msg.content
+        )
+    msg = await conv_service.add_message(db, conv_id, MessageRole.assistant, reply)
+    return ChatResponse(reply=reply, conversation_id=conv_id, message_id=msg.id)
+
+
+@router.post("/preview-chat", response_model=ChatResponse)
+async def preview_chat(
+    payload: PreviewChatRequest,
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(limit_llm_user),
+):
+    """Teste un agent non encore enregistré : la config vient du client (wizard/onboarding)."""
+    config = payload.config
+    if not config.system_prompt.strip():
+        raise HTTPException(status_code=400, detail="prompt_required")
+    await _validate_config(db, user_id, config, route="agents.preview-chat")
+    default_model = get_settings().llm_default_model
+    primary_model = config.model_id or default_model
+    client = LlmClient()
+
+    async def run(hardened: ConfigSnapshot) -> str:
+        return await run_agent_chat_with_model_fallback(
+            client,
+            hardened,
+            history=payload.messages,
+            temperature=config.temperature,
+            primary_model=primary_model,
+            default_model=default_model,
+        )
+
+    try:
+        reply = await prompt_guard.guarded_agent_chat(
+            db,
+            route="agents.preview-chat",
             user_id=user_id,
             config=config,
             history=payload.messages,

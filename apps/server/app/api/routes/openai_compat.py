@@ -152,6 +152,7 @@ async def chat_completions(
     default_model = get_settings().llm_default_model
     primary_model = config.model_id or agent.model_ref or default_model
     client = LlmClient()
+    user_id = _audit_user_id(x_openwebui_user_id)
 
     async def run(hardened: ConfigSnapshot) -> str:
         return await run_agent_chat_with_model_fallback(
@@ -169,7 +170,7 @@ async def chat_completions(
         reply = await prompt_guard.guarded_agent_chat(
             db,
             route="openai.chat_completions",
-            user_id=_audit_user_id(x_openwebui_user_id),
+            user_id=user_id,
             config=config,
             history=payload.messages,
             run=run,

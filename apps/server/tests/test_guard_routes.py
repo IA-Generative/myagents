@@ -122,7 +122,7 @@ async def test_chat_lets_benign_exchange_through_with_hardened_prompt(
     with fake_llm(BENIGN_REPLY) as fake:
         res = await client.post(url, json=user_messages("Salut"))
     assert res.status_code == 200, res.text
-    assert res.json() == {"reply": BENIGN_REPLY}
+    assert res.json()["reply"] == BENIGN_REPLY
 
     system = fake.seen_messages[0]
     assert isinstance(system, SystemMessage)
@@ -249,9 +249,13 @@ async def test_openai_compat_blocks_hostile_output_without_emitting_it(
 ):
     with fake_llm(HOSTILE_REPLY):
         res = await _completion(client, "Une page de contact.", stream=stream)
-    assert_openai_blocked(res, "blocked_output", BLOCK_MESSAGE_OUTPUT)
-    assert "localStorage" not in res.text
+    if stream:
+        # Streaming: 422 JSON (guard blocks before any SSE emission, same as beta).
+        assert_openai_blocked(res, "blocked_output", BLOCK_MESSAGE_OUTPUT)
+    else:
+        assert_openai_blocked(res, "blocked_output", BLOCK_MESSAGE_OUTPUT)
     assert "data:" not in res.text
+    assert "localStorage" not in res.text
 
 
 @pytest.mark.parametrize("stream", [False, True])
