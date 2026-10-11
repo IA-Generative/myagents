@@ -61,6 +61,14 @@ services:
       LLM_ASSIST_MODEL: chat
       LLM_ONBOARDING_MODEL: chat
 
+  # Le volume du journal appartient à root à sa création ; le serveur tourne en 10001.
+  journal-init:
+    image: ${CONFORMITE_IMAGE:-mes-agents:conformite}
+    user: root
+    command: ["sh", "-c", "mkdir -p /journal && chown 10001:0 /journal && chmod 0775 /journal"]
+    volumes:
+      - journal:/journal
+
   server:
     image: ${CONFORMITE_IMAGE:-mes-agents:conformite}
     build:
@@ -98,6 +106,8 @@ services:
     volumes:
       - journal:/journal
     depends_on:
+      journal-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       keycloak:

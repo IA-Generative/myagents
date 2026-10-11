@@ -68,7 +68,17 @@ def configurer_journal_capacites(fichier: str = "") -> None:
     if fichier and not any(
         getattr(h, "baseFilename", None) == fichier for h in journal.handlers
     ):
-        f = logging.FileHandler(fichier, encoding="utf-8")
+        try:
+            f = logging.FileHandler(fichier, encoding="utf-8")
+        except OSError as exc:
+            # Un fichier de journal inaccessible ne doit jamais empêcher le service de démarrer :
+            # la sortie standard reste le support premier du journal.
+            logging.getLogger(__name__).error(
+                "journal des capacités : fichier %s inaccessible (%s), sortie standard seule",
+                fichier,
+                exc,
+            )
+            return
         f.setFormatter(logging.Formatter("%(message)s"))
         f._journal_capacites = True  # type: ignore[attr-defined]
         journal.addHandler(f)
