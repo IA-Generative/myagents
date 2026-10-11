@@ -232,8 +232,11 @@ def fiche_mcp(name: str, **kw) -> dict:
     corps = {
         "name": name,
         "kind": "mcp",
-        "title": f"Outil {name}",
-        "description": "Relaie une recherche vers le serveur MCP de dépendance.",
+        "title": f"Annuaire des services ({name})",
+        "description": (
+            "Recherche une fiche dans l'annuaire interne des services de l'État, tenu par le "
+            "serveur MCP de l'annuaire : nom du service, adresse et horaires d'ouverture."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {"query": {"type": "string"}},
