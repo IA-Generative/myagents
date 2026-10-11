@@ -1,0 +1,326 @@
+{
+  "realm": "conformite",
+  "enabled": true,
+  "sslRequired": "none",
+  "accessTokenLifespan": 900,
+  "roles": {
+    "realm": [
+      {
+        "name": "mesagents-reviewer",
+        "description": "Revue des capacités (ADR Mes agents)"
+      }
+    ]
+  },
+  "groups": [
+    {
+      "name": "g",
+      "path": "/g",
+      "subGroups": [
+        {
+          "name": "G1",
+          "path": "/g/G1"
+        },
+        {
+          "name": "G2",
+          "path": "/g/G2"
+        }
+      ]
+    }
+  ],
+  "clientScopes": [
+    {
+      "name": "mesagents:read",
+      "protocol": "openid-connect",
+      "description": "Mes agents — mesagents:read",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-mesagents",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "mesagents",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "groups-chemins-complets",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "groups",
+            "full.path": "true",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "mesagents:act",
+      "protocol": "openid-connect",
+      "description": "Mes agents — mesagents:act",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-mesagents",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "mesagents",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "mesagents:author",
+      "protocol": "openid-connect",
+      "description": "Mes agents — mesagents:author",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-mesagents",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "mesagents",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "mesagents:review",
+      "protocol": "openid-connect",
+      "description": "Mes agents — mesagents:review",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-mesagents",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "mesagents",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "mesagents:delegate",
+      "protocol": "openid-connect",
+      "description": "Mes agents — mesagents:delegate",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-mesagents",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "mesagents",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "surface-complete",
+      "name": "surface-complete",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": true,
+      "redirectUris": [
+        "http://localhost/*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "access.token.lifespan": "900"
+      },
+      "defaultClientScopes": [
+        "basic",
+        "profile",
+        "email",
+        "roles"
+      ],
+      "optionalClientScopes": [
+        "mesagents:read",
+        "mesagents:act",
+        "mesagents:author",
+        "mesagents:review",
+        "mesagents:delegate"
+      ]
+    },
+    {
+      "clientId": "socle",
+      "name": "socle",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": true,
+      "redirectUris": [
+        "http://localhost/*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "access.token.lifespan": "900"
+      },
+      "defaultClientScopes": [
+        "basic",
+        "profile",
+        "email",
+        "roles"
+      ],
+      "optionalClientScopes": [
+        "mesagents:read"
+      ]
+    },
+    {
+      "clientId": "client-suspendu",
+      "name": "client-suspendu",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": true,
+      "redirectUris": [
+        "http://localhost/*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "access.token.lifespan": "900"
+      },
+      "defaultClientScopes": [
+        "basic",
+        "profile",
+        "email",
+        "roles"
+      ],
+      "optionalClientScopes": [
+        "mesagents:read",
+        "mesagents:act"
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "alice",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "Conformité",
+      "email": "alice@conformite.example",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${CONFORMITE_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/g/G1"
+      ],
+      "realmRoles": [
+        "default-roles-conformite"
+      ]
+    },
+    {
+      "username": "bob",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Bob",
+      "lastName": "Conformité",
+      "email": "bob@conformite.example",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${CONFORMITE_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/g/G2"
+      ],
+      "realmRoles": [
+        "default-roles-conformite"
+      ]
+    },
+    {
+      "username": "revue",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Revue",
+      "lastName": "Conformité",
+      "email": "revue@conformite.example",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${CONFORMITE_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/g/G1"
+      ],
+      "realmRoles": [
+        "default-roles-conformite",
+        "mesagents-reviewer"
+      ]
+    }
+  ]
+}

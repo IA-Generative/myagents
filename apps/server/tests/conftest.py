@@ -49,3 +49,34 @@ async def client(session_factory):
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()
+
+
+# --- Capacités gouvernées (ADR Mes agents) -----------------------------------------------
+
+
+@pytest.fixture
+def juge_definition_favorable(monkeypatch):
+    """Juge LLM de définition simulé : défavorable seulement si la définition porte « POISON »."""
+    from app.llm.guard import definition as definition_module
+    from app.llm.guard.core import Verdict
+
+    async def _juger(texte: str, **_):
+        return Verdict("POISON" in texte, "juge de définition simulé")
+
+    monkeypatch.setattr(definition_module, "juger_definition", _juger)
+    return _juger
+
+
+@pytest.fixture
+def fake_llm(monkeypatch):
+    """Modèle simulé branché sur LlmClient.chat_model ; la file `responses` est remplissable."""
+    from unittest.mock import patch
+
+    from langchain_core.messages import AIMessage
+
+    from app.llm.client import LlmClient
+    from tests.fakes import FakeToolCallingModel
+
+    fake = FakeToolCallingModel(responses=[AIMessage("Réponse simulée.")])
+    with patch.object(LlmClient, "chat_model", return_value=fake):
+        yield fake

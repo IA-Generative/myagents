@@ -141,6 +141,26 @@ hooks: ## Installe les hooks pre-commit (pre-commit + commit-msg)
 	pre-commit install --install-hooks
 	@echo '✓ Hooks pre-commit installés (pre-commit + commit-msg).'
 
+# --- Conformité ADR « capacités gouvernées » (C-A1…C-A12, Docker Compose) -----------
+
+CONFORMITE := docker compose -f docker-compose.conformite.yml
+export CONFORMITE_PASSWORD ?= $(shell openssl rand -hex 16)
+
+conformite: ## Construit la pile de conformité, joue C-A1…C-A12, puis l'arrête
+	$(CONFORMITE) build server
+	$(CONFORMITE) --profile tests up --exit-code-from conformite --abort-on-container-exit conformite ; \
+	code=$$? ; $(CONFORMITE) --profile tests down -v ; exit $$code
+
+conformite-up: ## Démarre la pile de conformité et la laisse debout (http://localhost:8080)
+	$(CONFORMITE) build server
+	$(CONFORMITE) up -d --wait
+
+conformite-test: ## Rejoue la suite de conformité sur la pile debout
+	$(CONFORMITE) --profile tests run --rm conformite
+
+conformite-down: ## Arrête la pile de conformité et supprime ses volumes
+	$(CONFORMITE) --profile tests down -v
+
 # --- apps/next (autonome, en cours de dépréciation) --------------------------
 
 next-%: ## Délègue à apps/next (ex. make next-up, make next-test)
