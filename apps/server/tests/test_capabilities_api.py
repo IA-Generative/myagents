@@ -498,3 +498,26 @@ async def test_identifiant_malforme_400(client):
     res = await client.get("/api/v2/capabilities/pas-un-uuid", headers=A)
     assert res.status_code == 400
     assert res.json()["error"]["code"] == "invalid_request"
+
+
+async def test_la_revue_voit_les_soumises_d_autrui_dans_la_liste_mais_pas_en_outil(
+    client,
+):
+    """Une capacité `ministry` soumise par son auteur est listée au reviewer (écran de revue),
+    invisible d'une autre personne, et n'est servie à personne en `tools/list` tant qu'elle n'est
+    pas publiée."""
+    cap = await _creer(
+        client, fiche_prompt(name="soumise-revue", visibility="ministry")
+    )
+    res = await _publier(client, cap["id"])
+    assert res.status_code == 200 and res.json()["status"] == "submitted"
+    liste_revue = await client.get("/api/v2/capabilities", headers=R)
+    soumises = [t for t in liste_revue.json()["tools"] if t["name"] == "soumise-revue"]
+    assert soumises and soumises[0]["status"] == "submitted"
+    liste_bob = await client.get("/api/v2/capabilities", headers=B)
+    assert "soumise-revue" not in [t["name"] for t in liste_bob.json()["tools"]]
+    # Pas d'outil tant qu'elle n'est pas publiée : ni épinglable, ni servie.
+    res = await client.put("/api/v2/pins/soumise-revue", headers=R)
+    assert res.status_code == 404
+    detail = await client.get(f"/api/v2/capabilities/{cap['id']}", headers=R)
+    assert detail.status_code == 200 and detail.json()["status"] == "submitted"
