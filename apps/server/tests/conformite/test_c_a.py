@@ -6,6 +6,7 @@ import threading
 import time
 
 import httpx
+import pytest
 
 from tests.conformite.conftest import (
     BASE_URL,
@@ -166,7 +167,13 @@ def test_c_a5_dependance_non_declaree_refusee_et_journalisee(api, jeton, suffixe
     refus = [l for l in lignes if l["status"] == "denied"]
     assert refus and refus[-1]["capability"] == autre["name"]
     assert _runs(api, revue, autre["id"]) == []
-    # Variante kind: mcp — la dépendance déclarée est relayée avec l'identité de la personne.
+    # Variante kind: mcp — la dépendance déclarée est relayée avec l'identité de la personne
+    # (exige le faux serveur MCP de dépendance : compose ; en preview, le relais est prouvé au
+    # chantier 3 avec le serveur Légifrance).
+    if not os.environ.get("MCP_FAKE_URL"):
+        pytest.skip(
+            "MCP_FAKE_URL absent : variante mcp de C-A5 jouée en compose seulement"
+        )
     outil = _publiee(api, revue, fiche_mcp(f"ca5-mcp-{suffixe}"))
     r = _executer(api, alice, outil["name"], {"query": "ceseda"})
     assert r["isError"] is False, r
@@ -242,7 +249,11 @@ def test_c_a8_act_requis_sur_non_lecture_seule(api, jeton, suffixe):
     assert "mesagents:act" in r["content"][0]["text"]
     complet = jeton("alice", portees=PORTEES)
     r = _executer(api, complet, outil["name"], {"query": "x"})
-    assert r["isError"] is False, r
+    # Avec la portée, la barrière des droits est passée : le relais réussit quand le serveur de
+    # dépendance existe (compose) ; sans lui (preview), le refus n'est plus `scope_missing`.
+    assert (r.get("_meta", {}).get("error") or {}).get("code") != "scope_missing", r
+    if os.environ.get("MCP_FAKE_URL"):
+        assert r["isError"] is False, r
 
 
 @compose_only

@@ -148,7 +148,8 @@ export CONFORMITE_PASSWORD ?= $(shell openssl rand -hex 16)
 
 conformite: ## Construit la pile de conformité, joue C-A1…C-A12, puis l'arrête
 	$(CONFORMITE) build server
-	$(CONFORMITE) --profile tests up --exit-code-from conformite --abort-on-container-exit conformite ; \
+	$(CONFORMITE) up -d --wait --wait-timeout 300 server
+	$(CONFORMITE) --profile tests run --rm conformite ; \
 	code=$$? ; $(CONFORMITE) --profile tests down -v ; exit $$code
 
 conformite-up: ## Démarre la pile de conformité et la laisse debout (http://localhost:8080)
