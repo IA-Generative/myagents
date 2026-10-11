@@ -38,9 +38,9 @@ spec:
           image: {{ include "mes-agents.image" . }}
           imagePullPolicy: {{ .Values.app.image.pullPolicy }}
           {{- if .Values.app.migrations.seed }}
-          command: ["sh", "-c", "alembic upgrade head && python -m app.scripts.seed_agents"]
+          command: ["sh", "-c", "alembic upgrade head && python -m app.scripts.seed_agents && python -m app.scripts.seed_veilles"]
           {{- else }}
-          command: ["alembic", "upgrade", "head"]
+          command: ["sh", "-c", "alembic upgrade head && python -m app.scripts.seed_veilles"]
           {{- end }}
           env:
             {{- include "mes-agents.containerEnv" . | nindent 12 }}

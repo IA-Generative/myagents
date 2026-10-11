@@ -1,0 +1,56 @@
+{{- if and .Values.enabled .Values.veilles.enabled }}
+# Battement des veilles (chantier 3 de l'ADR capacités gouvernées) : joue les créneaux dus de
+# chaque veille active, une fois chacun, et purge les résultats expirés. Même image, même
+# environnement et mêmes secrets que l'application ; rien n'est fait au nom d'une personne.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "mes-agents.fullname" . }}-veilles
+  labels:
+    {{- include "mes-agents.labels" . | nindent 4 }}
+    app.kubernetes.io/component: veilles
+spec:
+  schedule: {{ .Values.veilles.schedule | quote }}
+  timeZone: {{ .Values.veilles.timeZone | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 3600
+      template:
+        metadata:
+          labels:
+            {{- include "mes-agents.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: veilles
+        spec:
+          restartPolicy: Never
+          {{- with .Values.app.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            {{- toYaml .Values.app.podSecurityContext | nindent 12 }}
+          containers:
+            - name: veilles
+              securityContext:
+                {{- toYaml .Values.app.securityContext | nindent 16 }}
+              image: {{ include "mes-agents.image" . }}
+              imagePullPolicy: {{ .Values.app.image.pullPolicy }}
+              command: ["python", "-m", "app.scripts.veilles_tick"]
+              env:
+                {{- include "mes-agents.containerEnv" . | nindent 16 }}
+              envFrom:
+                {{- include "mes-agents.containerEnvFrom" . | nindent 16 }}
+              resources:
+                {{- toYaml .Values.veilles.resources | nindent 16 }}
+              {{- with .Values.app.volumeMounts }}
+              volumeMounts:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+          {{- with .Values.app.volumes }}
+          volumes:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}
