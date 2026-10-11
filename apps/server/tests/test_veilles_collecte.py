@@ -173,3 +173,98 @@ def test_pas_de_rendu_javascript_ni_de_contournement():
         "https://www.interieur.gouv.fr/a",
     )
     assert fiche["title"] == "Abonnés" and fiche["extrait"] == ""
+
+
+# --- Pertinence et répartition de la collecte -------------------------------------------------
+
+ACTUS = """<html><head><title>Actualités</title></head><body>
+<a href="/actu/aides">Aides financières pour les familles</a>
+<a href="/actu/cyber">Cybersecurite : un guide pour les collectivites</a>
+<a href="/actu/scolaire">Vie scolaire : plateforme des lycéens</a>
+</body></html>"""
+
+
+def _page(titre: str, corps: str) -> str:
+    return f"<html><head><title>{titre}</title></head><body><article><p>{corps}</p></article></body></html>"
+
+
+def test_mots_de_la_requete_sans_mots_vides_ni_accents():
+    mots = collecte._mots("cybersécurité des collectivités territoriales")
+    assert "des" not in mots
+    assert "cybersecurite" in mots and "collectivites" in mots
+
+
+async def test_seuls_les_liens_en_rapport_avec_la_requete_sont_suivis(monkeypatch):
+    monkeypatch.setattr(
+        collecte,
+        "_transport_pour_tests",
+        _transport(
+            {
+                "/robots.txt": ("User-agent: *\nAllow: /\n", 200),
+                "/actualites": (ACTUS, 200),
+                "/actu/aides": (
+                    _page("Aides financières", "Les aides aux familles."),
+                    200,
+                ),
+                "/actu/cyber": (
+                    _page("Cybersécurité des collectivités", "Un guide."),
+                    200,
+                ),
+                "/actu/scolaire": (
+                    _page("Vie scolaire", "Des lycéens et des plateformes."),
+                    200,
+                ),
+            }
+        ),
+    )
+    fiches = await collecte.collecter(
+        "cybersécurité des collectivités territoriales",
+        seeds=["https://www.interieur.gouv.fr/actualites"],
+    )
+    assert [f["url"] for f in fiches] == ["https://www.interieur.gouv.fr/actu/cyber"]
+
+
+async def test_une_page_suivie_mais_hors_sujet_est_ecartee(monkeypatch):
+    # Le lien promettait le sujet, la page ne le porte pas : elle n'est pas rendue.
+    monkeypatch.setattr(
+        collecte,
+        "_transport_pour_tests",
+        _transport(
+            {
+                "/robots.txt": ("User-agent: *\nAllow: /\n", 200),
+                "/actualites": ('<a href="/actu/cyber">Cybersécurité</a>', 200),
+                "/actu/cyber": (
+                    _page("Horaires d'ouverture", "La préfecture ouvre à 9 h."),
+                    200,
+                ),
+            }
+        ),
+    )
+    fiches = await collecte.collecter(
+        "cybersécurité", seeds=["https://www.interieur.gouv.fr/actualites"]
+    )
+    assert fiches == []
+
+
+async def test_le_budget_de_pages_se_repartit_entre_les_pages_de_depart(monkeypatch):
+    liens = "".join(
+        f'<a href="/{p}/cyber{i}">Cybersécurité {i}</a>'
+        for p in ("a", "b")
+        for i in range(4)
+    )
+    reponses = {
+        "/robots.txt": ("User-agent: *\nAllow: /\n", 200),
+        "/a": (liens.replace("/b/", "/zz/"), 200),
+        "/b": (liens.replace("/a/", "/zz/"), 200),
+    }
+    for p in ("a", "b"):
+        for i in range(4):
+            reponses[f"/{p}/cyber{i}"] = (_page(f"Cybersécurité {i}", "Guide."), 200)
+    monkeypatch.setattr(collecte, "_transport_pour_tests", _transport(reponses))
+    fiches = await collecte.collecter(
+        "cybersécurité",
+        seeds=["https://www.interieur.gouv.fr/a", "https://www.interieur.gouv.fr/b"],
+        max_pages=4,
+    )
+    chemins = [f["url"].split("gouv.fr")[1][:2] for f in fiches]
+    assert len(fiches) == 4 and chemins.count("/a") == 2 and chemins.count("/b") == 2
