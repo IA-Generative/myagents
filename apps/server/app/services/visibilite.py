@@ -27,6 +27,13 @@ def groupe_correspond(community_path: str | None, groups: Iterable[str]) -> bool
     return chemin in {g.rstrip("/").rsplit("/", 1)[-1] for g in groups}
 
 
+def est_reviewer(user) -> bool:
+    """Rôle de realm `mesagents-reviewer` ET portée `mesagents:review` dans le jeton."""
+    return bool(getattr(user, "is_reviewer", False)) and "mesagents:review" in (
+        getattr(user, "scopes", ()) or ()
+    )
+
+
 def est_servie(cap) -> bool:
     """Une version publiée existe et la capacité n'est ni retirée ni suspendue."""
     return cap.current_version is not None and cap.status not in STATUTS_NON_SERVIS
@@ -37,6 +44,9 @@ def est_visible(cap, user) -> bool:
     if cap is None:
         return False
     if cap.owner_sub == user.user_id:
+        return True
+    if cap.status == "submitted" and est_reviewer(user):
+        # L'écran de revue : une soumission d'autrui se lit, elle n'est servie à personne.
         return True
     if not est_servie(cap):
         return False

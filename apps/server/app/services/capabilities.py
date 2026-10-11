@@ -7,7 +7,7 @@ import logging
 import uuid
 from typing import Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import false, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -27,7 +27,7 @@ from app.schemas.capability import (
     valider_schema,
 )
 from app.services import capability_guard, dependances, journal, pins
-from app.services.visibilite import est_servie, visible_pour
+from app.services.visibilite import est_reviewer, est_servie, visible_pour
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +83,8 @@ async def lister_visibles(db: AsyncSession, user) -> list[Capability]:
             or_(
                 Capability.owner_sub == user.user_id,
                 Capability.current_version.is_not(None),
+                # La revue lit les soumissions d'autrui (statut `submitted`, jamais servies).
+                Capability.status == "submitted" if est_reviewer(user) else false(),
             )
         )
         .order_by(Capability.updated_at.desc())
