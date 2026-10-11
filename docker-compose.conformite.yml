@@ -22,7 +22,10 @@ services:
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.4.0
-    command: ["start-dev", "--import-realm", "--hostname-strict=false", "--http-port=8080"]
+    # L'émetteur des jetons est FIXE (http://keycloak:8080) : le serveur le vérifie (OIDC_ISSUER) et
+    # le lanceur de tests obtient ses jetons à cette adresse. Le port publié sur l'hôte ne sert
+    # qu'à regarder ; un jeton obtenu par localhost porterait un autre émetteur.
+    command: ["start-dev", "--import-realm", "--hostname=http://keycloak:8080", "--hostname-backchannel-dynamic=false", "--http-port=8080"]
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${CONFORMITE_PASSWORD:?CONFORMITE_PASSWORD requis}
@@ -81,7 +84,7 @@ services:
       ENVIRONMENT: conformite
       DATABASE_URL: postgresql+asyncpg://mesagents:${CONFORMITE_PASSWORD}@postgres:5432/mesagents
       OIDC_ENABLED: "true"
-      OIDC_ISSUER: http://localhost:${CONFORMITE_KC_PORT:-8181}/realms/conformite
+      OIDC_ISSUER: http://keycloak:8080/realms/conformite
       OIDC_INTERNAL_URL: http://keycloak:8080/realms/conformite
       OIDC_AUDIENCE: ""
       OIDC_CLIENT_ID: surface-complete

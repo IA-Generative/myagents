@@ -14,9 +14,13 @@ et les en-têtes déclarés (`kind: mcp|http`). Trois couches, dans l'ordre :
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 from dataclasses import dataclass, field
 from urllib.parse import urlsplit
+
+import openai
 
 from app.llm.guard.core import Verdict, fired_signals, inspect_input, ruleset_version
 from app.llm.guard.judge import (
@@ -33,17 +37,27 @@ Réponds UNIQUEMENT par un objet JSON, sans texte autour :
 {"malicious": true|false, "reason": "courte justification"}"""
 
 _ENTETES_INTERDITS = ("authorization", "cookie", "x-api-key", "proxy-authorization")
+_INDISPONIBLE = "juge indisponible"
+# Réessais sur une limite de débit de la passerelle (429) : une publication n'est pas un flux.
+_REESSAIS_429 = (2.0, 5.0)
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
 class VerdictDefinition:
-    verdict: str  # "favorable" | "defavorable"
+    verdict: str  # "favorable" | "defavorable" | "indisponible"
     ruleset_version: str
     details: list[str] = field(default_factory=list)
 
     @property
     def favorable(self) -> bool:
         return self.verdict == "favorable"
+
+    @property
+    def indisponible(self) -> bool:
+        """Le juge n'a pas pu rendre de verdict (passerelle en panne ou saturée) : rien n'est
+        publié, mais ce n'est pas un refus de la définition (`502 upstream_unavailable`)."""
+        return self.verdict == "indisponible"
 
 
 def _parse_definition_reply(raw: str) -> Verdict:
@@ -66,20 +80,34 @@ async def juger_definition(
     texte: str, *, juge: LlmJudge | None = None, model: str | None = None
 ) -> Verdict:
     """Le juge LLM de définition : `complied=True` = malveillant. Fail-closed sur toute erreur."""
-    try:
-        raw = await (juge or LangChainJudge()).complete(
-            system=JUDGE_DEFINITION_SYSTEM,
-            user=f"DÉFINITION À JUGER:\n{texte}",
-            model=resolve_judge_model(model),
-            temperature=0,
-            max_tokens=512,
-        )
-    except Exception as exc:  # noqa: BLE001 — tout échec du juge ferme la porte
-        return Verdict(
-            True,
-            f"juge indisponible (fail-closed): {type(exc).__name__}: {str(exc)[:200]}",
-        )
-    return _parse_definition_reply(raw)
+    for tentative in range(len(_REESSAIS_429) + 1):
+        try:
+            raw = await (juge or LangChainJudge()).complete(
+                system=JUDGE_DEFINITION_SYSTEM,
+                user=f"DÉFINITION À JUGER:\n{texte}",
+                model=resolve_judge_model(model),
+                temperature=0,
+                max_tokens=512,
+            )
+            return _parse_definition_reply(raw)
+        except openai.RateLimitError as exc:
+            if tentative < len(_REESSAIS_429):
+                logger.warning(
+                    "[garde] juge de définition limité (429), réessai dans %.0f s",
+                    _REESSAIS_429[tentative],
+                )
+                await asyncio.sleep(_REESSAIS_429[tentative])
+                continue
+            return Verdict(
+                True,
+                f"{_INDISPONIBLE} (fail-closed): {type(exc).__name__}: {str(exc)[:200]}",
+            )
+        except Exception as exc:  # noqa: BLE001 — tout échec du juge ferme la porte
+            return Verdict(
+                True,
+                f"{_INDISPONIBLE} (fail-closed): {type(exc).__name__}: {str(exc)[:200]}",
+            )
+    return Verdict(True, f"{_INDISPONIBLE} (fail-closed)")
 
 
 def texte_de_la_definition(
@@ -151,6 +179,10 @@ async def check(
     if details:
         return VerdictDefinition("defavorable", version, details)
     verdict = await juger_definition(texte, juge=juge, model=model)
+    if verdict.complied and verdict.reason.startswith(_INDISPONIBLE):
+        return VerdictDefinition(
+            "indisponible", version, [f"juge de définition : {verdict.reason}"]
+        )
     if verdict.complied:
         return VerdictDefinition(
             "defavorable", version, [f"juge de définition : {verdict.reason}"]

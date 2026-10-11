@@ -106,8 +106,34 @@ async def test_juge_indisponible_fail_closed():
         juge=juge,
         model="juge",
     )
-    assert v.verdict == "defavorable"
+    assert v.verdict == "indisponible" and not v.favorable and v.indisponible
     assert any("indisponible" in d for d in v.details)
+
+
+async def test_juge_limite_reessaie_puis_indisponible(monkeypatch):
+    import httpx
+    import openai
+
+    from app.llm.guard import definition as module
+
+    monkeypatch.setattr(module, "_REESSAIS_429", (0.0, 0.0))
+    erreur = openai.RateLimitError(
+        "rate limit exceeded",
+        response=httpx.Response(429, request=httpx.Request("POST", "http://hub")),
+        body=None,
+    )
+    juge = _Juge(erreur=erreur)
+    v = await check(
+        {"prompt": PROMPT_SAIN},
+        "Assistant.",
+        kind="prompt",
+        title="X",
+        examples=[],
+        juge=juge,
+        model="juge",
+    )
+    assert v.verdict == "indisponible"
+    assert len(juge.appels) == 3  # un appel et deux réessais
 
 
 async def test_mcp_avec_identifiant_dans_la_definition_defavorable():

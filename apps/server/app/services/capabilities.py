@@ -380,6 +380,13 @@ async def publier(
         )
 
     verdict = await capability_guard.verifier_definition(cap)
+    if verdict.indisponible:
+        raise ContratError(
+            502,
+            "upstream_unavailable",
+            "la garde n'a pas pu rendre de verdict (modèle juge indisponible) : rien n'est publié, réessayez",
+            details=verdict.details,
+        )
     if not verdict.favorable:
         raise ContratError(422, "guard_rejected", details=verdict.details)
 

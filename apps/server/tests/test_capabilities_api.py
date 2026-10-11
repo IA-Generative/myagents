@@ -193,6 +193,23 @@ async def test_c_a3_hash_stable_et_sensible(client):
     assert h[0] != h[2]
 
 
+async def test_juge_indisponible_rend_502_sans_publier(client, monkeypatch):
+    from app.llm.guard import definition as module
+    from app.llm.guard.core import Verdict
+
+    async def _indisponible(texte, **_):
+        return Verdict(True, "juge indisponible (fail-closed): hub down")
+
+    monkeypatch.setattr(module, "juger_definition", _indisponible)
+    cap = await _creer(client)
+    res = await _publier(client, cap["id"])
+    assert (
+        res.status_code == 502 and res.json()["error"]["code"] == "upstream_unavailable"
+    )
+    detail = await client.get(f"/api/v2/capabilities/{cap['id']}", headers=A)
+    assert detail.json()["current_version"] is None
+
+
 async def test_grounding_open_exige_trois_exemples(client):
     """C-C2 côté fournisseur."""
     cap = await _creer(
