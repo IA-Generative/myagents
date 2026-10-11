@@ -255,11 +255,12 @@ def _mots(requete: str) -> list[str]:
 
 
 def _en_rapport(mots: list[str], *textes: str | None) -> bool:
-    """Un texte est en rapport s'il porte la racine (7 premières lettres) d'un mot de la requête."""
+    """Un texte est en rapport s'il porte la racine (5 premières lettres) d'un mot de la requête :
+    « cybersécurité » retient « Cybermois », « collectivités » retient « collectivité »."""
     if not mots:
         return True
     plat = _plat(" ".join(t or "" for t in textes))
-    return any(m[:7] in plat for m in mots)
+    return any(m[:5] in plat for m in mots)
 
 
 async def collecter(
