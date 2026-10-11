@@ -59,10 +59,26 @@ def test_veille_legifrance_et_web_complete(api, jeton, suffixe):
             and lignes[-1]["sub"] == "service:veilles"
             and lignes[-1]["azp"] == "mes-agents-cron"
         )
-        deps = [l["capability"] for l in lignes if l["route"] == "dependency"]
-        assert "web.collecter" in deps, deps
+        parent = lignes[-1]["run_id"]
+
+        # Les appels de dépendance sont journalisés sous la capacité appelée, rattachés au
+        # parent par `parent_run_id`.
+        def enfants(nom: str) -> list[dict]:
+            cap = next(t for t in caps if t["name"] == nom)
+            texte = api.get(f"/api/v2/capabilities/{cap['id']}/runs", revue).text
+            return [
+                l
+                for l in (json.loads(x) for x in texte.splitlines() if x.strip())
+                if l["parent_run_id"] == parent and l["route"] == "dependency"
+            ]
+
+        assert enfants("web.collecter"), (
+            "web.collecter non journalisée comme dépendance"
+        )
         if os.environ.get("MCP_FAKE_URL"):
-            assert "legifrance.rechercher" in deps, deps
+            assert enfants("legifrance.rechercher"), (
+                "legifrance.rechercher non journalisée"
+            )
     finally:
         res = api.delete(f"/api/v2/schedules/{veille['id']}", alice)
         assert res.status_code == 200 and res.json()["deleted"] is True
