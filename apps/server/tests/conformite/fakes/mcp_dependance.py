@@ -31,6 +31,22 @@ OUTILS = [
         },
     },
     {
+        "name": "reserver",
+        "title": "Réserver (doublure)",
+        "description": "Réserve un créneau et rend un numéro.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"query": {"type": "string"}},
+            "required": ["query"],
+        },
+        "annotations": {
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": False,
+            "openWorldHint": True,
+        },
+    },
+    {
         "name": "legifrance_search",
         "title": "Légifrance (doublure)",
         "description": "Trois résultats figés.",

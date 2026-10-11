@@ -97,7 +97,9 @@ class Jetons:
             pytest.skip(f"jeton absent : {chemin} (scripts/jeton-preview.py)")
         contenu = json.loads(chemin.read_text())
         charge = json.loads(_b64(contenu["access_token"].split(".")[1]))
-        if charge.get("exp", 0) - time.time() < 30 and contenu.get("refresh_token"):
+        # Un test de conformité dure jusqu'à deux minutes (C-A7) : un jeton qui expirerait en
+        # cours de test est rafraîchi d'avance (durée de vie de 5 min sur le realm de preview).
+        if charge.get("exp", 0) - time.time() < 180 and contenu.get("refresh_token"):
             res = httpx.post(
                 contenu["token_endpoint"],
                 data={
@@ -234,8 +236,9 @@ def fiche_mcp(name: str, **kw) -> dict:
         "kind": "mcp",
         "title": f"Annuaire des services ({name})",
         "description": (
-            "Recherche une fiche dans l'annuaire interne des services de l'État, tenu par le "
-            "serveur MCP de l'annuaire : nom du service, adresse et horaires d'ouverture."
+            "Recherche une fiche dans l'annuaire public des services de l'État "
+            "(service-public.fr), par le serveur MCP de l'annuaire : nom du service, adresse "
+            "et horaires d'ouverture."
         ),
         "input_schema": {
             "type": "object",

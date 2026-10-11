@@ -164,10 +164,15 @@ def test_c_a5_dependance_non_declaree_refusee_et_journalisee(api, jeton, suffixe
         api, alice, cap["name"], {"text": f"APPELLE {autre['name']} avec ceci"}
     )
     assert r["isError"] is False, r
+    assert _runs(api, revue, autre["id"]) == []
     lignes = _runs(api, alice, cap["id"])
     refus = [l for l in lignes if l["status"] == "denied"]
-    assert refus and refus[-1]["capability"] == autre["name"]
-    assert _runs(api, revue, autre["id"]) == []
+    if os.environ.get("MCP_FAKE_URL"):
+        # Seule la doublure du modèle appelle un outil qui ne lui est pas offert ; un vrai modèle
+        # ne voit que les dépendances déclarées (refus prouvé en unitaire et en compose).
+        assert refus and refus[-1]["capability"] == autre["name"]
+    else:
+        assert all(l["capability"] != autre["name"] for l in lignes)
     # Variante kind: mcp — la dépendance déclarée est relayée avec l'identité de la personne
     # (exige le faux serveur MCP de dépendance : compose ; en preview, le relais est prouvé au
     # chantier 3 avec le serveur Légifrance).
@@ -238,6 +243,16 @@ def test_c_a8_act_requis_sur_non_lecture_seule(api, jeton, suffixe):
         revue,
         fiche_mcp(
             f"ca8-{suffixe}",
+            title=f"Prise de rendez-vous ({suffixe})",
+            description=(
+                "Réserve un créneau de rendez-vous sur l'agenda public des préfectures, par le "
+                "serveur MCP de prise de rendez-vous, et rend le numéro de réservation."
+            ),
+            definition={
+                "endpoint": os.environ.get("MCP_FAKE_URL", "http://mcp-fake:8000/mcp"),
+                "tool": "reserver",
+                "identity": "user",
+            },
             annotations={
                 "readOnlyHint": False,
                 "destructiveHint": True,
