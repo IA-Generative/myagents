@@ -72,6 +72,17 @@ services:
     volumes:
       - journal:/journal
 
+  site-fake:
+    image: ${CONFORMITE_IMAGE:-mes-agents:conformite}
+    command: ["uvicorn", "tests.conformite.fakes.site_fake:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      OPENAI_BASE_URL: http://mirai-fake:8080/v1
+      OPENAI_API_KEY: fake
+      LLM_DEFAULT_MODEL: chat
+      LLM_EMBEDDING_MODEL: bge-m3
+      LLM_ASSIST_MODEL: chat
+      LLM_ONBOARDING_MODEL: chat
+
   server:
     image: ${CONFORMITE_IMAGE:-mes-agents:conformite}
     build:
@@ -79,7 +90,7 @@ services:
       dockerfile: Dockerfile
       args:
         UV_SYNC_ARGS: ""   # pytest dans l'image de conformité
-    command: ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers"]
+    command: ["sh", "-c", "alembic upgrade head && python -m app.scripts.seed_veilles && uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers"]
     environment:
       ENVIRONMENT: conformite
       DATABASE_URL: postgresql+asyncpg://mesagents:${CONFORMITE_PASSWORD}@postgres:5432/mesagents
@@ -95,6 +106,12 @@ services:
       MESAGENTS_CONTEXTES_AZP: '{"socle": ["text"], "*": ["text", "email", "selection", "document"]}'
       MESAGENTS_RELAIS_HOTES_AUTORISES: '["mcp-fake", "http-fake"]'
       MESAGENTS_JOURNAL_FICHIER: /journal/mesagents.jsonl
+      # Veilles (chantier 3) : site institutionnel simulé (http admis ici seulement) et doublure Légifrance.
+      VEILLE_DOMAINES_AUTORISES: '["site-fake"]'
+      VEILLE_SCHEMAS_AUTORISES: '["http", "https"]'
+      VEILLE_SEEDS: '["http://site-fake:8000/actualites"]'
+      VEILLE_CONTACT: conformite@example.gouv.fr
+      LEGIFRANCE_MCP_URL: http://mcp-fake:8000/mcp
       PUBLIC_BASE_URL: http://localhost:${CONFORMITE_PORT:-8080}
       WEB_PUBLIC_URL: http://localhost:${CONFORMITE_PORT:-8080}
       SESSION_SECRET: ${CONFORMITE_PASSWORD}
@@ -118,6 +135,8 @@ services:
       mirai-fake:
         condition: service_started
       mcp-fake:
+        condition: service_started
+      site-fake:
         condition: service_started
     ports:
       - "${CONFORMITE_PORT:-8080}:8000"

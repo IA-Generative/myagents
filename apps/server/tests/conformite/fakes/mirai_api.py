@@ -53,6 +53,40 @@ async def completions(request: Request):
         texte = json.dumps({"complied": False, "reason": "fausse api"})
     elif "définition" in systeme.lower() and "malveillant" in systeme.lower():
         texte = json.dumps({"malicious": "POISON" in dernier, "reason": "fausse api"})
+    elif "veille documentaire" in systeme and outils:
+        # Veille (chantier 3) : le faux modèle appelle une fois chaque outil offert, dans l'ordre
+        # du prompt, puis rédige à partir des retours ; déterministe, sans mémoire.
+        deja = {
+            tc["function"]["name"]
+            for m in messages
+            if m.get("role") == "assistant"
+            for tc in (m.get("tool_calls") or [])
+        }
+        try:
+            args_veille = json.loads(dernier)
+        except ValueError, TypeError:
+            args_veille = {}
+        sujet = str(args_veille.get("sujet") or dernier[:100])
+        restants = [o for o in outils if o["function"]["name"] not in deja]
+        if restants:
+            o = restants[0]
+            arguments = {"query": sujet}
+            if "urls" in (o["function"].get("parameters") or {}).get("properties", {}):
+                arguments["urls"] = list(args_veille.get("seeds") or [])
+            tool_calls = [
+                {
+                    "id": f"call_{uuid.uuid4().hex[:8]}",
+                    "type": "function",
+                    "function": {
+                        "name": o["function"]["name"],
+                        "arguments": json.dumps(arguments),
+                    },
+                }
+            ]
+            texte = None
+        else:
+            retours = [_texte(m) for m in messages if m.get("role") == "tool"]
+            texte = "Synthèse : " + " | ".join(r[:120] for r in retours)
     else:
         appel = _APPELLE.search(dernier)
         deja_appele = any(m.get("role") == "tool" for m in messages)

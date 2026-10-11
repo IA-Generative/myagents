@@ -80,3 +80,32 @@ def fake_llm(monkeypatch):
     fake = FakeToolCallingModel(responses=[AIMessage("Réponse simulée.")])
     with patch.object(LlmClient, "chat_model", return_value=fake):
         yield fake
+
+
+# --- Veilles (chantier 3) ---------------------------------------------------------------
+
+
+@pytest.fixture
+def garde_noms_favorable(monkeypatch):
+    """Garde des sujets simulée : refus seulement si le sujet porte « PERSONNE »."""
+    from app.veilles import garde_noms
+
+    async def _verifier(sujet: str, **_):
+        return garde_noms.VerdictSujet("PERSONNE" not in sujet, "garde simulée")
+
+    monkeypatch.setattr(garde_noms, "verifier_sujet", _verifier)
+    return _verifier
+
+
+@pytest.fixture
+async def capacites_de_veille(client):
+    """Sème les capacités des veilles (web.collecter, legifrance.rechercher, veille.synthese)
+    comme le fait `python -m app.scripts.seed_veilles`."""
+    from app.db.session import get_db
+    from app.main import app
+    from app.scripts.seed_veilles import semer
+
+    get_session = app.dependency_overrides[get_db]
+    async for db in get_session():
+        await semer(db)
+        break
