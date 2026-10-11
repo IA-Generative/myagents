@@ -371,3 +371,14 @@ async def test_modification(client):
             f"/api/v2/schedules/{veille['id']}", json={"actif": True}, headers=B
         )
     ).status_code == 404
+
+
+async def test_la_liste_rend_les_sources_avec_leurs_domaines(client):
+    """`sources` dit, pour chaque source, les domaines consultés : c'est ce que l'écran affiche
+    avant la création (liste d'autorisation visible de la personne)."""
+    res = await client.get("/api/v2/schedules", headers=A)
+    assert res.status_code == 200
+    sources_affichees = res.json()["sources"]
+    assert set(sources_affichees) == {"legifrance", "web"}
+    assert sources_affichees["legifrance"] == ["www.legifrance.gouv.fr"]
+    assert sources_affichees["web"] == list(get_settings().veille_domaines_autorises)
