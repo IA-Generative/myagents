@@ -15,6 +15,7 @@ import contextvars
 import fnmatch
 import html
 import re
+import unicodedata
 from dataclasses import dataclass
 from typing import ClassVar
 from urllib.parse import urljoin, urlsplit
@@ -190,8 +191,75 @@ async def collecter_page(url: str, *, etag: str | None = None) -> dict | None:
     return fiche
 
 
+_MOTS_VIDES = frozenset(
+    [
+        "des",
+        "les",
+        "une",
+        "uns",
+        "unes",
+        "pour",
+        "dans",
+        "sur",
+        "par",
+        "avec",
+        "aux",
+        "est",
+        "sont",
+        "ses",
+        "son",
+        "leur",
+        "leurs",
+        "ces",
+        "cet",
+        "cette",
+        "qui",
+        "que",
+        "quoi",
+        "dont",
+        "nos",
+        "vos",
+        "mes",
+        "entre",
+        "vers",
+        "chez",
+        "sans",
+        "sous",
+        "apres",
+        "avant",
+        "comme",
+        "plus",
+        "moins",
+        "tout",
+        "tous",
+        "toute",
+        "toutes",
+        "etc",
+    ]
+)
+
+
+def _plat(texte: str) -> str:
+    """Minuscules sans accents : « Cybersécurité » et « cybersecurite » se valent."""
+    return (
+        unicodedata.normalize("NFKD", texte or "")
+        .encode("ascii", "ignore")
+        .decode()
+        .lower()
+    )
+
+
 def _mots(requete: str) -> list[str]:
-    return [m.lower() for m in re.findall(r"\w{3,}", requete or "")]
+    """Mots porteurs de la requête (sans accents, sans mots vides) : « des » ne retient rien."""
+    return [m for m in re.findall(r"\w{3,}", _plat(requete)) if m not in _MOTS_VIDES]
+
+
+def _en_rapport(mots: list[str], *textes: str | None) -> bool:
+    """Un texte est en rapport s'il porte la racine (7 premières lettres) d'un mot de la requête."""
+    if not mots:
+        return True
+    plat = _plat(" ".join(t or "" for t in textes))
+    return any(m[:7] in plat for m in mots)
 
 
 async def collecter(
@@ -201,11 +269,14 @@ async def collecter(
     dont le libellé ou l'adresse porte un mot de la requête, et en collecte au plus `max_pages`."""
     mots = _mots(requete)
     fiches: list[dict] = []
-    for seed in seeds or get_settings().veille_seeds:
+    departs = [u for u in (seeds or get_settings().veille_seeds) if domaine_autorise(u)]
+    for i, seed in enumerate(departs):
         if len(fiches) >= max_pages:
             break
-        if not domaine_autorise(seed):
-            continue
+        # Le budget restant se répartit entre les pages de départ qui restent à lire : une
+        # première liste prolixe ne prend pas toute la place des suivantes.
+        quota = -(-(max_pages - len(fiches)) // (len(departs) - i))
+        pris = 0
         async with _client() as client:
             if not await robots_permet(client, seed):
                 continue
@@ -217,24 +288,26 @@ async def collecter(
         if rep.status_code >= 400:
             continue
         for href, libelle in _LIEN.findall(rep.text):
-            if len(fiches) >= max_pages:
+            if pris >= quota or len(fiches) >= max_pages:
                 break
             cible = urljoin(seed, html.unescape(href))
             if (
                 not domaine_autorise(cible)
                 or urlsplit(cible).netloc != urlsplit(seed).netloc
+                or cible == seed
             ):
                 continue
-            texte = _texte(libelle).lower() + " " + cible.lower()
-            if mots and not any(m in texte for m in mots):
+            if not _en_rapport(mots, _texte(libelle), cible):
                 continue
             try:
                 fiche = await collecter_page(cible)
             except CollecteRefusee:
                 continue
-            if fiche:
+            # Le lien promettait le sujet ; la page doit le porter aussi, sinon elle est écartée.
+            if fiche and _en_rapport(mots, fiche.get("title"), fiche.get("extrait")):
                 fiche.pop("etag", None)
                 fiches.append(fiche)
+                pris += 1
     memo = fiches_collectees.get()
     if memo is not None:
         memo.extend(fiches)
