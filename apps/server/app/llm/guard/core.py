@@ -450,6 +450,30 @@ class StreamingOutputInspector:
 
 
 # ---------------------------------------------------------------------------
+# Version des règles (ADR règle 7) : empreinte de tout ce qui décide d'un verdict.
+# Changer un motif, une signature ou le prompt d'un juge change la version, ce qui
+# déclenche la re-vérification des versions publiées (guard.recheck_all).
+# ---------------------------------------------------------------------------
+
+
+def ruleset_version() -> str:
+    """Empreinte courte (12 hex) des règles de garde en vigueur."""
+    import hashlib
+
+    from app.llm.guard import definition as _definition
+    from app.llm.guard import judge as _judge
+
+    morceaux = [
+        *[f"{m.pattern.pattern}|{m.severity}" for m in INJECTION_MARKERS],
+        *[sig.pattern for sig in KEYLOGGER_SIGNATURES],
+        _judge.JUDGE_SYSTEM,
+        _judge.DEFAULT_OUTPUT_POLICY_GOAL,
+        _definition.JUDGE_DEFINITION_SYSTEM,
+    ]
+    return hashlib.sha256("\n".join(morceaux).encode("utf-8")).hexdigest()[:12]
+
+
+# ---------------------------------------------------------------------------
 # Messages affichés à l'utilisateur (ton sobre, non spécifiques sur le détecteur
 # déclenché pour ne pas aider un contournement).
 # ---------------------------------------------------------------------------
