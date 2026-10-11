@@ -39,7 +39,7 @@ Réponds UNIQUEMENT par un objet JSON, sans texte autour :
 _ENTETES_INTERDITS = ("authorization", "cookie", "x-api-key", "proxy-authorization")
 _INDISPONIBLE = "juge indisponible"
 # Réessais sur une limite de débit de la passerelle (429) : une publication n'est pas un flux.
-_REESSAIS_429 = (2.0, 5.0)
+_REESSAIS_429 = (2.0, 5.0, 10.0, 20.0)
 logger = logging.getLogger(__name__)
 
 

@@ -14,6 +14,7 @@ from tests.conformite.conftest import (
     CLIENT_SOCLE,
     CLIENT_SUSPENDU,
     G1,
+    JETONS_DIR,
     VOLUME,
     compose_only,
     fiche,
@@ -212,6 +213,8 @@ def test_c_a7_taille_tools_list_constante(api, jeton, suffixe):
     petit = api.mcp(alice, "tools/list").json()["result"]["tools"]
     for i in range(10, 10 + VOLUME):
         _publiee(api, revue, fiche(f"ca7-{suffixe}-{i:04d}", visibility="ministry"))
+        if JETONS_DIR:
+            time.sleep(1.5)  # la passerelle de la preview limite le débit du juge
     grand = api.mcp(alice, "tools/list").json()["result"]["tools"]
     assert len(petit) == len(grand)
     assert len(json.dumps(petit)) == len(json.dumps(grand))
