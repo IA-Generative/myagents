@@ -155,6 +155,66 @@
           }
         }
       ]
+    },
+    {
+      "name": "basic",
+      "protocol": "openid-connect",
+      "description": "Portée de base (sub, auth_time)",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "sub",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "consentRequired": false,
+          "config": {
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "auth_time",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usersessionmodel-note-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.session.note": "AUTH_TIME",
+            "claim.name": "auth_time",
+            "jsonType.label": "long",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "roles",
+      "protocol": "openid-connect",
+      "description": "Rôles de realm (realm_access.roles)",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "realm roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "realm_access.roles",
+            "multivalued": "true",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
     }
   ],
   "clients": [
@@ -181,8 +241,6 @@
       },
       "defaultClientScopes": [
         "basic",
-        "profile",
-        "email",
         "roles"
       ],
       "optionalClientScopes": [
@@ -216,8 +274,6 @@
       },
       "defaultClientScopes": [
         "basic",
-        "profile",
-        "email",
         "roles"
       ],
       "optionalClientScopes": [
@@ -247,8 +303,6 @@
       },
       "defaultClientScopes": [
         "basic",
-        "profile",
-        "email",
         "roles"
       ],
       "optionalClientScopes": [
