@@ -7,25 +7,33 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import (
+    admin_v2,
     agents,
     auth,
+    capabilities,
     catalog,
     favorites,
     knowledge,
+    mcp,
     models,
+    oauth_metadata,
     openai_compat,
+    pins,
     presentations,
     prompt,
     ratings,
     tools,
 )
 from app.core.config import get_settings
+from app.core.contrat import CapacitesCorsMiddleware, ContratError, est_route_du_contrat
 from app.core.csp import CSP_EXEMPT_PATHS, build_csp
 from app.core.logging import setup_logging
 from app.services.prompt_guard import GuardBlockedError
@@ -75,7 +83,7 @@ def custom_openapi():
         return app.openapi_schema
     schema = get_openapi(
         title=app.title,
-        version="1.0.0",
+        version="2.0.0",
         routes=app.routes,
     )
     schema["components"]["securitySchemes"] = {
@@ -136,6 +144,30 @@ async def security_headers(request: Request, call_next):
     return response
 
 
+@app.exception_handler(ContratError)
+async def erreur_du_contrat(_: Request, exc: ContratError) -> JSONResponse:
+    """Routes du contrat de capacités : `{"error": {"code", "message"[, "details"]}}` (ADR §10.0)."""
+    return exc.reponse()
+
+
+@app.exception_handler(RequestValidationError)
+async def validation(request: Request, exc: RequestValidationError):
+    """Sur les routes du contrat, une entrée invalide est `400 invalid_request` ; ailleurs, FastAPI."""
+    if not est_route_du_contrat(request.url.path):
+        return await request_validation_exception_handler(request, exc)
+    erreurs = exc.errors()
+    premiere = erreurs[0] if erreurs else {}
+    champ = ".".join(
+        str(p) for p in premiere.get("loc", ()) if p not in ("body", "query", "path")
+    )
+    message = (
+        f"{champ} : {premiere.get('msg', 'invalide')}"
+        if champ
+        else str(premiere.get("msg", "invalide"))
+    )
+    return ContratError(400, "invalid_request", message).reponse()
+
+
 @app.exception_handler(GuardBlockedError)
 async def guard_blocked(_: Request, exc: GuardBlockedError) -> JSONResponse:
     """Refus de la garde : code stable (`error`) + message sobre en français.
@@ -146,6 +178,13 @@ async def guard_blocked(_: Request, exc: GuardBlockedError) -> JSONResponse:
         status_code=422,
         content={"error": exc.code, "message": exc.message, "detail": exc.message},
     )
+
+
+# Posé après les autres : Starlette empile le dernier ajouté à l'extérieur, il voit donc toutes
+# les réponses des routes du contrat (CORS par motifs, Cache-Control: no-store, Vary: Origin).
+app.add_middleware(
+    CapacitesCorsMiddleware, motifs=lambda: get_settings().contrat_origines
+)
 
 
 @app.middleware("http")
@@ -180,6 +219,13 @@ for router in (
 ):
     app.include_router(router, prefix="/api")
 
+# Contrat de capacités (ADR « Mes agents : capacités gouvernées ») : API de cycle de vie sous
+# /api/v2, serveur MCP sur /mcp, métadonnées OAuth de la ressource protégée.
+for router in (capabilities.router, pins.router, admin_v2.router):
+    app.include_router(router, prefix="/api/v2")
+app.include_router(mcp.router)
+app.include_router(oauth_metadata.router)
+
 # Liens de navigation hors /api (déconnexion du menu commun) : avant le catch-all de la SPA.
 app.include_router(auth.racine)
 
@@ -207,7 +253,7 @@ if static_path.exists():
     @app.get("/{path:path}")
     async def serve_spa(path: str) -> FileResponse:
         """Catch-all serving the Vue.js SPA (client-side routing)."""
-        if path.split("/", 1)[0] in {"api", "v1"}:
+        if path.split("/", 1)[0] in {"api", "v1", "mcp", ".well-known"}:
             raise HTTPException(status_code=404, detail="not_found")
         try:
             file_path = (static_root / path).resolve()
