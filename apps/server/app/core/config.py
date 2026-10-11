@@ -149,6 +149,34 @@ class Settings(BaseSettings):
     # Fichier du journal des exécutions (une ligne JSON par appel) en plus de la sortie standard.
     mesagents_journal_fichier: str = ""
 
+    # --- Veilles (chantier 3) ---
+    # Domaines autorisés pour web.collecter (hôtes ou motifs « *.gouv.fr ») ; https seul par défaut.
+    veille_domaines_autorises: list[str] = [
+        "www.legifrance.gouv.fr",
+        "www.vie-publique.fr",
+        "www.service-public.fr",
+        "www.interieur.gouv.fr",
+        "www.senat.fr",
+        "www.assemblee-nationale.fr",
+        "www.conseil-etat.fr",
+        "www.courdecassation.fr",
+        "www.cnil.fr",
+        "www.info.gouv.fr",
+        "www.immigration.interieur.gouv.fr",
+    ]
+    veille_schemas_autorises: list[str] = ["https"]
+    # Pages de départ de la collecte (listes d'actualités des domaines autorisés).
+    veille_seeds: list[str] = [
+        "https://www.interieur.gouv.fr/actualites",
+        "https://www.vie-publique.fr/actualites",
+    ]
+    # Contact nommé dans le User-Agent (question ouverte du rapport : adresse à confirmer).
+    veille_contact: str = "a-completer@interieur.gouv.fr"
+    # Conservation des résultats de veille, en jours (proposition de l'ADR : 90).
+    veille_conservation_jours: int = 90
+    # Serveur MCP Légifrance (PISTE) relayé par la capacité legifrance.rechercher.
+    legifrance_mcp_url: str = ""
+
     @model_validator(mode="after")
     def _default_web_public_url(self) -> Settings:
         if not self.web_public_url:

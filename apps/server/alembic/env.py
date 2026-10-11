@@ -15,6 +15,7 @@ from app.models import (  # noqa: F401 (registers models on Base.metadata)
     guard_event,
     knowledge,
     presentation,
+    veille,
 )
 
 # this is the Alembic Config object, which provides

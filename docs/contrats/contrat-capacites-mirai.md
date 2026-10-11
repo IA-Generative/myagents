@@ -86,6 +86,14 @@ Un jeton portant `mesagents:delegate` est refusé (`403 forbidden`). Un client (
 | `GET /api/v2/pins` | Mes capacités épinglées |  |
 | `PUT /api/v2/pins/{name}` | Épingler | Au plus `max` capacités ; au-delà, `422 invalid_request`. |
 | `DELETE /api/v2/pins/{name}` | Désépingler |  |
+| `GET /api/v2/schedules` | Mes veilles | La finalité est rendue avec la liste ; seules les veilles de la personne. |
+| `POST /api/v2/schedules` | Créer une veille | Sujet, sources (legifrance, web), fréquence (cron ou préréglage). Le sujet passe la garde des noms. |
+| `GET /api/v2/schedules/export` | Exporter mes veilles et leurs résultats |  |
+| `GET /api/v2/schedules/{schedule_id}` | Lire une veille |  |
+| `PATCH /api/v2/schedules/{schedule_id}` | Modifier une veille |  |
+| `DELETE /api/v2/schedules/{schedule_id}` | Supprimer une veille et purger ses résultats |  |
+| `GET /api/v2/schedules/{schedule_id}/results` | Résultats d'une veille | Synthèses marquées « générées », sources citées (titre, lien, date, extrait court), URL consultées. |
+| `POST /api/v2/schedules/{schedule_id}/run` | Forcer une exécution maintenant | Une exécution par veille et par minute ; une seconde demande rend le même résultat. |
 
 ### Corps de création (`POST /api/v2/capabilities`)
 

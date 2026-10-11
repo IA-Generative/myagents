@@ -31,6 +31,7 @@ from app.api.routes import (
     prompt,
     ratings,
     tools,
+    veilles,
 )
 from app.core.config import get_settings
 from app.core.contrat import CapacitesCorsMiddleware, ContratError, est_route_du_contrat
@@ -221,7 +222,7 @@ for router in (
 
 # Contrat de capacités (ADR « Mes agents : capacités gouvernées ») : API de cycle de vie sous
 # /api/v2, serveur MCP sur /mcp, métadonnées OAuth de la ressource protégée.
-for router in (capabilities.router, pins.router, admin_v2.router):
+for router in (capabilities.router, pins.router, admin_v2.router, veilles.router):
     app.include_router(router, prefix="/api/v2")
 app.include_router(mcp.router)
 app.include_router(oauth_metadata.router)

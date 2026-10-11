@@ -208,6 +208,7 @@ async def executer(
         "version": numero,
         "maturity": maturity,
         "generated": forme.grounding == "open",
+        "run_id": str(run_id),
     }
 
     try:
@@ -299,6 +300,8 @@ async def _executer_prompt(
     declarees: dict[str, int] = {
         d["name"]: int(d["version"]) for d in (forme.dependencies or [])
     }
+    # Le modèle voit des noms sans point (web__collecter) : OpenAI n'admet que [A-Za-z0-9_-].
+    reels: dict[str, str] = {nom.replace(".", "__"): nom for nom in declarees}
     outils: list[dict] = []
     for nom, numero in declarees.items():
         dep = await service.par_nom(db, nom)
@@ -306,11 +309,14 @@ async def _executer_prompt(
         if dep is not None and version_dep is not None:
             outils.append(
                 specification_outil(
-                    nom, version_dep.description, version_dep.input_schema
+                    nom.replace(".", "__"),
+                    version_dep.description,
+                    version_dep.input_schema,
                 )
             )
 
     async def executeur(nom: str, args: dict) -> str:
+        nom = reels.get(nom, nom)
         if (
             nom not in declarees
             or ctx.profondeur + 1 > settings.mesagents_profondeur_max
@@ -382,10 +388,28 @@ async def _executer_prompt(
         raise
 
 
+INTERNES = {
+    # Capacités `http` servies par ce service même, sans réseau ni secret : adresse `interne:<nom>`.
+    "interne:web.collecter": "app.veilles.collecte:outil_collecter",
+}
+
+
+async def _executer_interne(adresse: str, arguments: dict) -> str:
+    import importlib
+
+    module, fonction = INTERNES[adresse].split(":")
+    return await getattr(importlib.import_module(module), fonction)(arguments)
+
+
 async def _executer_relais(
     ctx: ContexteAppel, cap: Capability, forme, arguments: dict
 ) -> str:
     definition = forme.definition or {}
+    adresse = str(definition.get("url") or "")
+    if cap.kind == "http" and adresse.startswith("interne:"):
+        if adresse not in INTERNES:
+            raise RelaisError(f"capacité interne inconnue : {adresse}")
+        return await _executer_interne(adresse, arguments)
     autorisation = relais.autorisation_pour(definition, ctx.jeton)
     if cap.kind == "mcp":
         resultat = await relais.relayer_mcp(
