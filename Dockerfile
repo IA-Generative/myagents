@@ -22,7 +22,10 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_PYTHON_DOWNLOADS=never
 WORKDIR /app
 COPY apps/server/pyproject.toml apps/server/uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+# UV_SYNC_ARGS : `--no-dev` en production ; vide pour l'image de conformité (pytest embarqué,
+# docker-compose.conformite.yml), jamais pour une image publiée.
+ARG UV_SYNC_ARGS=--no-dev
+RUN uv sync --frozen $UV_SYNC_ARGS --no-install-project
 
 # ---------- Stage 3 : production ----------
 FROM python:${PYTHON_VERSION}-slim-trixie AS production
