@@ -34,7 +34,11 @@ async def lister(
         "finalite": veilles.finalite(),
         "conservation_jours": get_settings().veille_conservation_jours,
         "presets": PRESETS,
-        "sources": ["legifrance", "web"],
+        # Liste d'autorisation visible de la personne : les domaines consultés, par source.
+        "sources": {
+            "legifrance": ["www.legifrance.gouv.fr"],
+            "web": list(get_settings().veille_domaines_autorises),
+        },
     }
 
 
