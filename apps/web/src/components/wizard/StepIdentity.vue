@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useWizardStore } from '@/stores/wizard'
 import type { Visibility } from '@/types/agent'
 import { groupsApi, type GroupProfile } from '@/api/groups'
@@ -38,27 +38,34 @@ const groupLoading = ref(false)
 const groupError = ref(false)
 const activeIndex = ref(-1)
 const comboboxRef = ref<HTMLElement | null>(null)
+const searchInputRef = ref<HTMLInputElement | null>(null)
 let debounceId: ReturnType<typeof setTimeout> | null = null
+let requestId = 0
 
 const selectedGroupPath = computed(() => wizard.draft.config.community_path)
 
-watch(groupQuery, (q) => {
+watch(groupQuery, (q, _old, onCleanup) => {
   if (debounceId) clearTimeout(debounceId)
   activeIndex.value = -1
   if (!q.trim()) {
     groupResults.value = []
     return
   }
+  const currentId = ++requestId
+  onCleanup(() => { requestId++ })
   debounceId = setTimeout(async () => {
     groupLoading.value = true
     groupError.value = false
     try {
-      groupResults.value = await groupsApi.search(q.trim())
+      const results = await groupsApi.search(q.trim())
+      if (currentId === requestId) groupResults.value = results
     } catch {
-      groupError.value = true
-      groupResults.value = []
+      if (currentId === requestId) {
+        groupError.value = true
+        groupResults.value = []
+      }
     } finally {
-      groupLoading.value = false
+      if (currentId === requestId) groupLoading.value = false
     }
   }, 300)
 })
@@ -81,6 +88,7 @@ function selectGroup(group: GroupProfile) {
 
 function clearGroup() {
   wizard.updateConfig({ community_path: null })
+  nextTick(() => searchInputRef.value?.focus())
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -260,6 +268,7 @@ onUnmounted(() => {
         <input
           v-else
           id="agent-community"
+          ref="searchInputRef"
           v-model="groupQuery"
           class="fr-input"
           type="text"
@@ -267,7 +276,6 @@ onUnmounted(() => {
           :aria-expanded="groupOpen"
           aria-autocomplete="list"
           :placeholder="groupLoading ? 'Recherche…' : 'Rechercher un groupe…'"
-          :disabled="groupLoading"
           @focus="openCombobox"
           @keydown="onKeydown"
         >

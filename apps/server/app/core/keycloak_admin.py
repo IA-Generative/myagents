@@ -64,27 +64,30 @@ async def _get_service_account_token() -> str:
     global _admin_token, _admin_token_expires
     if _admin_token and time.monotonic() < _admin_token_expires - 30:
         return _admin_token
-    settings = get_settings()
-    async with httpx.AsyncClient(timeout=10, trust_env=_trust_env()) as client:
-        try:
-            response = await client.post(
-                f"{_backchannel_realm()}/protocol/openid-connect/token",
-                data={
-                    "grant_type": "client_credentials",
-                    "client_id": settings.oidc_admin_client_id,
-                    "client_secret": settings.oidc_admin_client_secret,
-                },
+    async with _cache_lock:
+        if _admin_token and time.monotonic() < _admin_token_expires - 30:
+            return _admin_token
+        settings = get_settings()
+        async with httpx.AsyncClient(timeout=10, trust_env=_trust_env()) as client:
+            try:
+                response = await client.post(
+                    f"{_backchannel_realm()}/protocol/openid-connect/token",
+                    data={
+                        "grant_type": "client_credentials",
+                        "client_id": settings.oidc_admin_client_id,
+                        "client_secret": settings.oidc_admin_client_secret,
+                    },
+                )
+            except httpx.HTTPError as exc:
+                raise KeycloakAdminError("admin token request failed") from exc
+        if response.status_code != 200:
+            raise KeycloakAdminError(
+                f"admin token rejected ({response.status_code})"
             )
-        except httpx.HTTPError as exc:
-            raise KeycloakAdminError("admin token request failed") from exc
-    if response.status_code != 200:
-        raise KeycloakAdminError(
-            f"admin token rejected ({response.status_code})"
-        )
-    body = response.json()
-    _admin_token = body["access_token"]
-    _admin_token_expires = time.monotonic() + int(body.get("expires_in", 60))
-    return _admin_token
+        body = response.json()
+        _admin_token = body["access_token"]
+        _admin_token_expires = time.monotonic() + int(body.get("expires_in", 60))
+        return _admin_token
 
 
 async def search_groups(query: str, max_results: int = 20) -> list[KcGroup]:
