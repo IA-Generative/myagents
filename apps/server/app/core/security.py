@@ -37,6 +37,14 @@ class AuthUser:
     roles: list[str]
     groups: list[str]
     is_admin: bool
+    # Client Keycloak qui a demandé le jeton (claim `azp`) ; vide hors SSO.
+    azp: str = ""
+    # Portées effectives du client (claim `scope`, formes canoniques `mesagents:*`), triées.
+    scopes: tuple[str, ...] = ()
+
+    @property
+    def is_reviewer(self) -> bool:
+        return self.is_admin or "mesagents-reviewer" in self.roles
 
 
 class OIDCError(Exception):
@@ -45,6 +53,10 @@ class OIDCError(Exception):
 
 class OIDCDisabled(OIDCError):
     """Raised when OIDC is disabled but a caller tried to use the security dep."""
+
+
+class AudienceError(OIDCError):
+    """Le jeton n'est pas destiné à ce service (audience absente)."""
 
 
 _jwks_cache: tuple[float, PyJWKSet] | None = None
@@ -92,6 +104,12 @@ def _decode_token(token: str, audience: str | None = None) -> dict[str, Any]:
         raise OIDCError("OIDC_ISSUER not configured")
 
     expected_audience = audience or settings.oidc_audience or None
+    return _decode_with(token, expected_audience)
+
+
+def _decode_with(token: str, expected_audience: str | None) -> dict[str, Any]:
+    """Décode un JWT Keycloak ; `expected_audience` None = pas de contrôle d'audience."""
+    settings = get_settings()
     return jwt.decode(
         token,
         _signing_key(token).key,
@@ -126,6 +144,8 @@ def _extract_user(claims: dict[str, Any]) -> AuthUser:
 
     # Keycloak `sub` is the user UUID.
     user_id = claims.get("sub") or claims.get("preferred_username") or "unknown"
+    from app.core.portees import normaliser_portees
+
     return AuthUser(
         user_id=str(user_id),
         username=str(claims.get("preferred_username") or ""),
@@ -133,6 +153,8 @@ def _extract_user(claims: dict[str, Any]) -> AuthUser:
         roles=roles,
         groups=groups,
         is_admin=is_admin,
+        azp=str(claims.get("azp") or ""),
+        scopes=tuple(sorted(normaliser_portees(str(claims.get("scope") or "")))),
     )
 
 
@@ -181,4 +203,30 @@ async def get_current_user(authorization: str | None = None) -> AuthUser:
         logger.error("JWKS fetch failed: %s", exc)
         raise OIDCError("issuer unavailable") from exc
 
+    return _extract_user(claims)
+
+
+async def get_capability_user(authorization: str | None) -> AuthUser:
+    """Jeton d'un consommateur du contrat de capacités : audience `mesagents`, `sub` requis.
+
+    Lève AudienceError (→ 403 audience_mismatch) ou OIDCError (→ 401 invalid_token). Les
+    portées (`scope`) et le client appelant (`azp`) sont lus dans le jeton, jamais dans le corps.
+    """
+    settings = get_settings()
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise OIDCError("missing bearer token")
+    token = authorization.split(" ", 1)[1].strip()
+    audience = settings.contrat_audience.strip() or None
+    try:
+        claims = await asyncio.to_thread(_decode_with, token, audience)
+    except jwt.InvalidAudienceError as exc:
+        raise AudienceError("audience mismatch") from exc
+    except jwt.PyJWTError as exc:
+        logger.warning("JWT du contrat refusé: %s", exc)
+        raise OIDCError("invalid token") from exc
+    except httpx.HTTPError as exc:
+        logger.error("JWKS fetch failed: %s", exc)
+        raise OIDCError("issuer unavailable") from exc
+    if not claims.get("sub"):
+        raise OIDCError("token without sub")
     return _extract_user(claims)

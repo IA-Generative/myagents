@@ -1,0 +1,175 @@
+# Compose de CONFORMITÉ (ADR « capacités gouvernées », tests C-A1…C-A12) — rien à voir avec le
+# compose de développement. Une seule image applicative, quatre rôles : le serveur, la fausse
+# MirAI API, le faux serveur MCP de dépendance et le lanceur de tests.
+#   make conformite        # construit, démarre, joue, arrête
+#   make conformite-up     # laisse la pile debout (BASE_URL=http://localhost:${CONFORMITE_PORT:-8080})
+# Secrets : CONFORMITE_PASSWORD et KC_BOOTSTRAP_ADMIN_PASSWORD sont lus dans l'environnement
+# (make les génère) ; aucun n'est écrit ici ni dans le realm (substitution ${…} à l'import).
+name: mesagents-conformite
+
+services:
+  postgres:
+    image: postgres:18.6-alpine
+    environment:
+      POSTGRES_USER: mesagents
+      POSTGRES_PASSWORD: ${CONFORMITE_PASSWORD:?CONFORMITE_PASSWORD requis}
+      POSTGRES_DB: mesagents
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mesagents -d mesagents"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4.0
+    # L'émetteur des jetons est FIXE (http://keycloak:8080) : le serveur le vérifie (OIDC_ISSUER) et
+    # le lanceur de tests obtient ses jetons à cette adresse. Le port publié sur l'hôte ne sert
+    # qu'à regarder ; un jeton obtenu par localhost porterait un autre émetteur.
+    command: ["start-dev", "--import-realm", "--hostname=http://keycloak:8080", "--hostname-backchannel-dynamic=false", "--http-port=8080"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${CONFORMITE_PASSWORD:?CONFORMITE_PASSWORD requis}
+      CONFORMITE_PASSWORD: ${CONFORMITE_PASSWORD:?CONFORMITE_PASSWORD requis}
+      KC_HEALTH_ENABLED: "true"
+    volumes:
+      - ./apps/server/tests/conformite/keycloak/realm-conformite.json:/opt/keycloak/data/import/realm-conformite.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nhost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | head -1 | grep -q '200 OK'"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 30s
+    ports:
+      - "${CONFORMITE_KC_PORT:-8181}:8080"
+
+  mirai-fake:
+    image: ${CONFORMITE_IMAGE:-mes-agents:conformite}
+    command: ["uvicorn", "tests.conformite.fakes.mirai_api:app", "--host", "0.0.0.0", "--port", "8080"]
+    environment:
+      OPENAI_BASE_URL: http://mirai-fake:8080/v1
+      OPENAI_API_KEY: fake
+      LLM_DEFAULT_MODEL: chat
+      LLM_EMBEDDING_MODEL: bge-m3
+      LLM_ASSIST_MODEL: chat
+      LLM_ONBOARDING_MODEL: chat
+
+  mcp-fake:
+    image: ${CONFORMITE_IMAGE:-mes-agents:conformite}
+    command: ["uvicorn", "tests.conformite.fakes.mcp_dependance:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      OPENAI_BASE_URL: http://mirai-fake:8080/v1
+      OPENAI_API_KEY: fake
+      LLM_DEFAULT_MODEL: chat
+      LLM_EMBEDDING_MODEL: bge-m3
+      LLM_ASSIST_MODEL: chat
+      LLM_ONBOARDING_MODEL: chat
+
+  # Le volume du journal appartient à root à sa création ; le serveur tourne en 10001.
+  journal-init:
+    image: ${CONFORMITE_IMAGE:-mes-agents:conformite}
+    user: root
+    command: ["sh", "-c", "mkdir -p /journal && chown 10001:0 /journal && chmod 0775 /journal"]
+    volumes:
+      - journal:/journal
+
+  site-fake:
+    image: ${CONFORMITE_IMAGE:-mes-agents:conformite}
+    command: ["uvicorn", "tests.conformite.fakes.site_fake:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      OPENAI_BASE_URL: http://mirai-fake:8080/v1
+      OPENAI_API_KEY: fake
+      LLM_DEFAULT_MODEL: chat
+      LLM_EMBEDDING_MODEL: bge-m3
+      LLM_ASSIST_MODEL: chat
+      LLM_ONBOARDING_MODEL: chat
+
+  server:
+    image: ${CONFORMITE_IMAGE:-mes-agents:conformite}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        UV_SYNC_ARGS: ""   # pytest dans l'image de conformité
+    command: ["sh", "-c", "alembic upgrade head && python -m app.scripts.seed_veilles && uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers"]
+    environment:
+      ENVIRONMENT: conformite
+      DATABASE_URL: postgresql+asyncpg://mesagents:${CONFORMITE_PASSWORD}@postgres:5432/mesagents
+      OIDC_ENABLED: "true"
+      OIDC_ISSUER: http://keycloak:8080/realms/conformite
+      OIDC_INTERNAL_URL: http://keycloak:8080/realms/conformite
+      OIDC_AUDIENCE: ""
+      OIDC_CLIENT_ID: surface-complete
+      OIDC_GROUPE_EXIGE: ""
+      CONTRAT_AUDIENCE: mesagents
+      CONTRAT_ORIGINES: '["https://surface.example"]'
+      MESAGENTS_AZP_SUSPENDUS: '["client-suspendu"]'
+      MESAGENTS_CONTEXTES_AZP: '{"socle": ["text"], "*": ["text", "email", "selection", "document"]}'
+      MESAGENTS_RELAIS_HOTES_AUTORISES: '["mcp-fake", "http-fake"]'
+      MESAGENTS_JOURNAL_FICHIER: /journal/mesagents.jsonl
+      # Veilles (chantier 3) : site institutionnel simulé (http admis ici seulement) et doublure Légifrance.
+      VEILLE_DOMAINES_AUTORISES: '["site-fake"]'
+      VEILLE_SCHEMAS_AUTORISES: '["http", "https"]'
+      VEILLE_SEEDS: '["http://site-fake:8000/actualites"]'
+      VEILLE_CONTACT: conformite@example.gouv.fr
+      LEGIFRANCE_MCP_URL: http://mcp-fake:8000/mcp
+      PUBLIC_BASE_URL: http://localhost:${CONFORMITE_PORT:-8080}
+      WEB_PUBLIC_URL: http://localhost:${CONFORMITE_PORT:-8080}
+      SESSION_SECRET: ${CONFORMITE_PASSWORD}
+      OPENAI_BASE_URL: http://mirai-fake:8080/v1
+      OPENAI_API_KEY: fake
+      LLM_DEFAULT_MODEL: chat
+      LLM_EMBEDDING_MODEL: bge-m3
+      LLM_ASSIST_MODEL: chat
+      LLM_ONBOARDING_MODEL: chat
+      LLM_GUARD_JUDGE_MODEL: juge
+      RATE_LIMIT_PER_MINUTE: "0"
+    volumes:
+      - journal:/journal
+    depends_on:
+      journal-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      mirai-fake:
+        condition: service_started
+      mcp-fake:
+        condition: service_started
+      site-fake:
+        condition: service_started
+    ports:
+      - "${CONFORMITE_PORT:-8080}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u,sys; o=u.build_opener(u.ProxyHandler({})); sys.exit(0 if o.open('http://127.0.0.1:8000/api/health', timeout=4).status == 200 else 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  conformite:
+    image: ${CONFORMITE_IMAGE:-mes-agents:conformite}
+    profiles: [tests]
+    command: ["python", "-m", "pytest", "tests/conformite", "-p", "no:cacheprovider", "-q", "-o", "addopts="]
+    environment:
+      BASE_URL: http://server:8000
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: conformite
+      CONFORMITE_PASSWORD: ${CONFORMITE_PASSWORD}
+      CONFORMITE_VOLUME: ${CONFORMITE_VOLUME:-200}
+      CONFORMITE_ORIGINE_AUTORISEE: https://surface.example
+      MESAGENTS_JOURNAL_FICHIER: /journal/mesagents.jsonl
+      MCP_FAKE_URL: http://mcp-fake:8000/mcp
+      OPENAI_BASE_URL: http://mirai-fake:8080/v1
+      OPENAI_API_KEY: fake
+      LLM_DEFAULT_MODEL: chat
+      LLM_EMBEDDING_MODEL: bge-m3
+      LLM_ASSIST_MODEL: chat
+      LLM_ONBOARDING_MODEL: chat
+    volumes:
+      - journal:/journal
+    depends_on:
+      server:
+        condition: service_healthy
+
+volumes:
+  journal:

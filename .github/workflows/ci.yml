@@ -8,14 +8,16 @@ on:
 jobs:
   lint-commits:
     uses: dnum-mi/fabnum-cicd/.github/workflows/lint-commits.yml@v0
-    if: ${{ !github.event.pull_request.draft }}
+    # Une PR en brouillon ne passe pas la CI, sauf si elle porte `beta-preview` : sa preview
+    # exige l'image pr-<n>, donc les contrôles qui la précèdent.
+    if: ${{ !github.event.pull_request.draft || contains(github.event.pull_request.labels.*.name, 'beta-preview') }}
     permissions:
       contents: read
       pull-requests: read
 
   path-filter:
     runs-on: ubuntu-24.04
-    if: ${{ !github.event.pull_request.draft }}
+    if: ${{ !github.event.pull_request.draft || contains(github.event.pull_request.labels.*.name, 'beta-preview') }}
     permissions:
       contents: read
       pull-requests: read

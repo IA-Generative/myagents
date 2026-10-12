@@ -123,6 +123,60 @@ class Settings(BaseSettings):
     # Origines supplémentaires autorisées en `connect-src` du CSP (ex. un second IdP).
     csp_extra_connect_src: list[str] = []
 
+    # --- Contrat de capacités (ADR « Mes agents : capacités gouvernées ») ---
+    # Audience exigée dans `aud` des jetons des consommateurs (routes /api/v2 et /mcp).
+    contrat_audience: str = "mesagents"
+    # Origines navigateur admises en CORS sur ces routes (motifs fnmatch), sans credentials.
+    contrat_origines: list[str] = []
+    # Clients Keycloak (`azp`) suspendus par configuration ; union avec la table suspended_clients.
+    mesagents_azp_suspendus: list[str] = []
+    # Champs d'entrée qu'une surface (azp) sait fournir : une capacité qui exige un autre champ
+    # n'est pas servie à cette surface dans tools/list. `*` = surfaces inconnues.
+    mesagents_contextes_azp: dict[str, list[str]] = {"*": ["text"]}
+    # Plafond des capacités épinglées servies comme vrais outils (ADR §4.4 : proposition sept).
+    mesagents_epingles_max: int = 7
+    # Résultats au plus de rechercher_capacites.
+    mesagents_recherche_max: int = 10
+    # Profondeur maximale de composition à l'exécution (ADR question 4).
+    mesagents_profondeur_max: int = 3
+    # Relais vers un outil mcp|http : délai, hôtes admis en clair ou internes (fnmatch sur l'hôte).
+    mesagents_relais_timeout: float = 120.0
+    mesagents_relais_hotes_autorises: list[str] = []
+    # Troncature des sorties relayées avant la garde de sortie.
+    mesagents_sortie_max_chars: int = 50_000
+    # Alias de nommage des portées (si un Keycloak refuse « : ») : {"mesagents-read": "mesagents:read"}.
+    mesagents_portees_alias: dict[str, str] = {}
+    # Fichier du journal des exécutions (une ligne JSON par appel) en plus de la sortie standard.
+    mesagents_journal_fichier: str = ""
+
+    # --- Veilles (chantier 3) ---
+    # Domaines autorisés pour web.collecter (hôtes ou motifs « *.gouv.fr ») ; https seul par défaut.
+    veille_domaines_autorises: list[str] = [
+        "www.legifrance.gouv.fr",
+        "www.vie-publique.fr",
+        "www.service-public.fr",
+        "www.interieur.gouv.fr",
+        "www.senat.fr",
+        "www.assemblee-nationale.fr",
+        "www.conseil-etat.fr",
+        "www.courdecassation.fr",
+        "www.cnil.fr",
+        "www.info.gouv.fr",
+        "www.immigration.interieur.gouv.fr",
+    ]
+    veille_schemas_autorises: list[str] = ["https"]
+    # Pages de départ de la collecte (listes d'actualités des domaines autorisés).
+    veille_seeds: list[str] = [
+        "https://www.interieur.gouv.fr/actualites",
+        "https://www.vie-publique.fr/actualites",
+    ]
+    # Contact nommé dans le User-Agent (question ouverte du rapport : adresse à confirmer).
+    veille_contact: str = "a-completer@interieur.gouv.fr"
+    # Conservation des résultats de veille, en jours (proposition de l'ADR : 90).
+    veille_conservation_jours: int = 90
+    # Serveur MCP Légifrance (PISTE) relayé par la capacité legifrance.rechercher.
+    legifrance_mcp_url: str = ""
+
     @model_validator(mode="after")
     def _default_web_public_url(self) -> Settings:
         if not self.web_public_url:

@@ -11,9 +11,11 @@ from app.db.base import Base
 from app.models import (  # noqa: F401 (registers models on Base.metadata)
     agent,
     auth_session,
+    capability,
     guard_event,
     knowledge,
     presentation,
+    veille,
 )
 
 # this is the Alembic Config object, which provides

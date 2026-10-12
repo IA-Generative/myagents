@@ -63,6 +63,30 @@ Toute route qui envoie du texte utilisateur au modèle passe par `app/llm/guard.
 system prompt durci, sortie + juge), y compris `/v1/chat/completions`. Une nouvelle route LLM
 sans garde est une régression de sécurité.
 
+## Capacités gouvernées (`/api/v2`, `/mcp`)
+
+Mise en œuvre de l'ADR « Mes agents : un catalogue de capacités gouvernées, exposé par MCP ».
+Le contrat servi est GÉNÉRÉ dans `docs/contrats/contrat-capacites-mirai.md`
+(`python -m app.scripts.exporter_contrat`, contrôlé par `tests/test_contrat_doc.py`).
+
+- Modèle : `capabilities` (fiche de travail), `capability_versions` (forme publiée, immuable :
+  un écouteur ORM refuse toute mise à jour), `runs` (journal, jamais de contenu), `pins`,
+  `suspended_clients` (`app/models/capability.py`). Les tables `agents*` restent en place ; la
+  migration `d4e6f8a0b135` copie les agents en capacités (réversible).
+- Identité : jeton Keycloak avec `aud` ∋ `mesagents`, `azp`, `scope` (`mesagents:read|act|author|
+  review`) — `app/api/deps_v2.py`, table portée → opération dans `app/core/portees.py`. Sans SSO
+  (dev), en-têtes `X-User-ID`, `X-User-Groups`, `X-User-Azp`, `X-User-Scopes`, `X-User-Roles`.
+- Un seul chemin d'exécution (`app/services/execution.py`) pour `tools/call`, `executer_capacite`,
+  `POST …/test` et les dépendances : seules les dépendances déclarées sont appelables, garde en
+  entrée et en sortie, UNE ligne de journal par appel (`mesagents.journal` + table `runs`).
+- `tools/list` = trois méta-outils + capacités épinglées (≤ `MESAGENTS_EPINGLES_MAX`), filtrées
+  par visibilité et par contexte de surface (`MESAGENTS_CONTEXTES_AZP`). Jamais le catalogue.
+- Garde de définition à la publication (`app/llm/guard/definition.py`, `ruleset_version`) ;
+  re-vérification de masse par `POST /api/v2/admin/guard/recheck`.
+- Conformité C-A1…C-A12 : `make conformite` (Docker Compose : Keycloak de test, fausse MirAI API,
+  faux serveur MCP de dépendance) ; rejeu contre une preview : `BASE_URL=… JETONS_DIR=… uv run
+  pytest tests/conformite`.
+
 ## Version de l'image (`/__version__`, ADR-0004)
 
 L'image écrit `/app/version.json` à sa construction (`scripts/version_json.py`, copié tel quel

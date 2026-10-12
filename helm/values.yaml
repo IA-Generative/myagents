@@ -253,3 +253,27 @@ vaultSecrets:
 
   # -- Secrets to sync from Vault (MUST be configured in private values)
   items: []
+
+# =============================================================================
+# Veilles (chantier 3 de l'ADR capacités gouvernées)
+# =============================================================================
+veilles:
+  # -- Battement des veilles (CronJob `python -m app.scripts.veilles_tick`)
+  enabled: false
+  schedule: "*/15 * * * *"
+  timeZone: "Europe/Paris"
+  resources:
+    requests: {cpu: 50m, memory: 256Mi}
+    limits: {memory: 1Gi}
+
+# -- Serveur MCP Légifrance (PISTE) pour la capacité legifrance.rechercher
+legifrance:
+  enabled: false
+  image: ""
+  pullPolicy: "IfNotPresent"
+  # -- Secret existant portant PISTE_CLIENT_ID et PISTE_CLIENT_SECRET
+  existingSecret: "legifrance-piste"
+  environment: "production"
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {memory: 512Mi}

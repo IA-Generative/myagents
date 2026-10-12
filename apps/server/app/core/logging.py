@@ -42,4 +42,43 @@ def setup_logging() -> None:
         ):
             logging.getLogger(noisy).setLevel(logging.WARNING)
     logging.getLogger("uvicorn.access").addFilter(_SilentPathsFilter())
+    configurer_journal_capacites(settings.mesagents_journal_fichier)
     _CONFIGURED = True
+
+
+JOURNAL_LOGGER = "mesagents.journal"
+
+
+def configurer_journal_capacites(fichier: str = "") -> None:
+    """Journal des exécutions de capacités : une ligne JSON NUE par appel (règle 6 de l'ADR).
+
+    Logger dédié, sans propagation (pas de préfixe horodaté qui casserait le JSON), sur la sortie
+    standard et, si demandé, dans un fichier (exploité par les tests de conformité).
+    """
+    import sys
+
+    journal = logging.getLogger(JOURNAL_LOGGER)
+    journal.setLevel(logging.INFO)
+    journal.propagate = False
+    if not any(getattr(h, "_journal_capacites", False) for h in journal.handlers):
+        sortie = logging.StreamHandler(sys.stdout)
+        sortie.setFormatter(logging.Formatter("%(message)s"))
+        sortie._journal_capacites = True  # type: ignore[attr-defined]
+        journal.addHandler(sortie)
+    if fichier and not any(
+        getattr(h, "baseFilename", None) == fichier for h in journal.handlers
+    ):
+        try:
+            f = logging.FileHandler(fichier, encoding="utf-8")
+        except OSError as exc:
+            # Un fichier de journal inaccessible ne doit jamais empêcher le service de démarrer :
+            # la sortie standard reste le support premier du journal.
+            logging.getLogger(__name__).error(
+                "journal des capacités : fichier %s inaccessible (%s), sortie standard seule",
+                fichier,
+                exc,
+            )
+            return
+        f.setFormatter(logging.Formatter("%(message)s"))
+        f._journal_capacites = True  # type: ignore[attr-defined]
+        journal.addHandler(f)
