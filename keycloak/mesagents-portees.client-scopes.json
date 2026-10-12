@@ -1,0 +1,130 @@
+[
+  {
+    "name": "mesagents:read",
+    "protocol": "openid-connect",
+    "description": "Mes agents — lister et exécuter les capacités en lecture seule (audience mesagents, groupes en chemins complets)",
+    "attributes": {
+      "include.in.token.scope": "true",
+      "display.on.consent.screen": "false"
+    },
+    "protocolMappers": [
+      {
+        "name": "audience-mesagents",
+        "protocol": "openid-connect",
+        "protocolMapper": "oidc-audience-mapper",
+        "consentRequired": false,
+        "config": {
+          "included.custom.audience": "mesagents",
+          "access.token.claim": "true",
+          "id.token.claim": "false",
+          "introspection.token.claim": "true"
+        }
+      },
+      {
+        "name": "groups-chemins-complets",
+        "protocol": "openid-connect",
+        "protocolMapper": "oidc-group-membership-mapper",
+        "consentRequired": false,
+        "config": {
+          "claim.name": "groups",
+          "full.path": "true",
+          "access.token.claim": "true",
+          "id.token.claim": "true",
+          "userinfo.token.claim": "true"
+        }
+      }
+    ]
+  },
+  {
+    "name": "mesagents:act",
+    "protocol": "openid-connect",
+    "description": "Mes agents — exécuter une capacité non lecture seule (la surface affiche une confirmation)",
+    "attributes": {
+      "include.in.token.scope": "true",
+      "display.on.consent.screen": "false"
+    },
+    "protocolMappers": [
+      {
+        "name": "audience-mesagents",
+        "protocol": "openid-connect",
+        "protocolMapper": "oidc-audience-mapper",
+        "consentRequired": false,
+        "config": {
+          "included.custom.audience": "mesagents",
+          "access.token.claim": "true",
+          "id.token.claim": "false",
+          "introspection.token.claim": "true"
+        }
+      }
+    ]
+  },
+  {
+    "name": "mesagents:author",
+    "protocol": "openid-connect",
+    "description": "Mes agents — créer, tester, publier (private, community) et retirer ses capacités",
+    "attributes": {
+      "include.in.token.scope": "true",
+      "display.on.consent.screen": "false"
+    },
+    "protocolMappers": [
+      {
+        "name": "audience-mesagents",
+        "protocol": "openid-connect",
+        "protocolMapper": "oidc-audience-mapper",
+        "consentRequired": false,
+        "config": {
+          "included.custom.audience": "mesagents",
+          "access.token.claim": "true",
+          "id.token.claim": "false",
+          "introspection.token.claim": "true"
+        }
+      }
+    ]
+  },
+  {
+    "name": "mesagents:review",
+    "protocol": "openid-connect",
+    "description": "Mes agents — publier en ministry, valider une capacité non lecture seule, retirer la capacité d'un autre (rôle mesagents-reviewer requis)",
+    "attributes": {
+      "include.in.token.scope": "true",
+      "display.on.consent.screen": "false"
+    },
+    "protocolMappers": [
+      {
+        "name": "audience-mesagents",
+        "protocol": "openid-connect",
+        "protocolMapper": "oidc-audience-mapper",
+        "consentRequired": false,
+        "config": {
+          "included.custom.audience": "mesagents",
+          "access.token.claim": "true",
+          "id.token.claim": "false",
+          "introspection.token.claim": "true"
+        }
+      }
+    ]
+  },
+  {
+    "name": "mesagents:delegate",
+    "protocol": "openid-connect",
+    "description": "Mes agents — régime délégué : HORS V2, refusée par le service ; déclarée pour réserver le nom",
+    "attributes": {
+      "include.in.token.scope": "true",
+      "display.on.consent.screen": "false"
+    },
+    "protocolMappers": [
+      {
+        "name": "audience-mesagents",
+        "protocol": "openid-connect",
+        "protocolMapper": "oidc-audience-mapper",
+        "consentRequired": false,
+        "config": {
+          "included.custom.audience": "mesagents",
+          "access.token.claim": "true",
+          "id.token.claim": "false",
+          "introspection.token.claim": "true"
+        }
+      }
+    ]
+  }
+]
