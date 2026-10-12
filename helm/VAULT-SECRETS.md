@@ -43,6 +43,7 @@ Les variables d'env Kubernetes (synced depuis Vault) correspondent exactement au
 | `DATABASE_URL` | `database_url` | str | ✓ | `postgresql://...` | URL PostgreSQL, convertie en `postgresql+asyncpg://` par le serveur |
 | `OIDC_ISSUER` | `oidc_issuer` | str | ✓ | `https://keycloak.example.com/realms/myagents` | Claim `iss` exact des tokens |
 | `OIDC_CLIENT_SECRET` | `oidc_client_secret` | str | ✓ | `xxx` | Secret du client Keycloak `myagents-server` |
+| `OIDC_ADMIN_CLIENT_SECRET` | `oidc_admin_client_secret` | str | (optionnel) | `xxx` | Secret du client Keycloak `myagents-admin` (compte de service pour la recherche de groupes). Vide = repli sur les groupes du token utilisateur |
 | `OPENWEBUI_API_KEY` | `openwebui_api_key` | str | ✓ | `xxx` | Secret partagé pour `/v1/*` |
 | `SESSION_SECRET` | `session_secret` | str | (optionnel*) | `xxx` | Chiffrement des tokens en base ; fallback = `oidc_client_secret` |
 | `PRESENTATION_LINK_SECRET` | `presentation_link_secret` | str | (optionnel*) | `xxx` | Signature des liens ; fallback = `openwebui_api_key` |
@@ -71,6 +72,7 @@ vault kv put kv/prod/myagents/app \
   DATABASE_URL='postgresql://user:pass@postgres-prod:5432/myagents' \
   OIDC_ISSUER='https://keycloak.prod.example.com/realms/myagents' \
   OIDC_CLIENT_SECRET='xxx' \
+  OIDC_ADMIN_CLIENT_SECRET='xxx' \
   OPENWEBUI_API_KEY="$(openssl rand -hex 32)" \
   SESSION_SECRET="$(openssl rand -base64 32)" \
   PRESENTATION_LINK_SECRET="$(openssl rand -hex 32)"
@@ -86,6 +88,7 @@ vault kv put kv/beta/myagents/app \
   DATABASE_URL='postgresql://user:pass@postgres-beta:5432/myagents' \
   OIDC_ISSUER='https://keycloak.beta.example.com/realms/myagents' \
   OIDC_CLIENT_SECRET='xxx' \
+  OIDC_ADMIN_CLIENT_SECRET='xxx' \
   OPENWEBUI_API_KEY="$(openssl rand -hex 32)" \
   SESSION_SECRET="$(openssl rand -base64 32)" \
   PRESENTATION_LINK_SECRET="$(openssl rand -hex 32)"
@@ -102,6 +105,7 @@ Les variables ci-dessous ne sont **pas stockées dans Vault** et doivent être d
 ENVIRONMENT: production         # "production" impose OIDC_ENABLED=true
 OIDC_ENABLED: "true"
 OIDC_CLIENT_ID: myagents-server
+OIDC_ADMIN_CLIENT_ID: myagents-admin  # Compte de service pour la recherche de groupes
 OIDC_AUDIENCE: myagents-api     # doit figurer dans le claim aud, ou vide pour désactiver
 QDRANT_URL: http://qdrant:6333
 
@@ -130,6 +134,23 @@ Keycloak n'accepte `*` qu'en dernier caractère (correspondance par préfixe). P
 | Web origins | vide (le navigateur n'appelle jamais Keycloak, le serveur fait le flux code) |
 
 Son secret (onglet Credentials) va dans `OIDC_CLIENT_SECRET` du Vault de la preview.
+
+### Client `myagents-admin` (recherche de groupes)
+
+Compte de service (Service accounts = On, Client authentication = On) pour la recherche
+dynamique de groupes Keycloak lors de la publication d'un agent à une communauté. Rôles
+`realm-management` : `view-users`, `query-groups`. Le secret va dans `OIDC_ADMIN_CLIENT_SECRET`
+(Vault). Sans secret configuré, la route `GET /api/groups` repli sur les groupes du token
+utilisateur (pas de recherche serveur, mais l'application fonctionne).
+
+| Champ | Valeur |
+|---|---|
+| Client ID | `myagents-admin` (`OIDC_ADMIN_CLIENT_ID`) |
+| Client authentication | On |
+| Service accounts | On |
+| Standard flow | Off |
+| Direct access grants | Off |
+| Rôles `realm-management` | `view-users`, `query-groups` |
 
 ### Prod / beta : client `myagents-server`
 

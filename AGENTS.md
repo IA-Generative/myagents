@@ -63,6 +63,21 @@ Toute route qui envoie du texte utilisateur au modèle passe par `app/llm/guard.
 system prompt durci, sortie + juge), y compris `/v1/chat/completions`. Une nouvelle route LLM
 sans garde est une régression de sécurité.
 
+### Recherche de groupes Keycloak (publication à une communauté)
+
+La route `GET /api/groups?q=...` permet la recherche dynamique de groupes lors de la
+publication d'un agent en visibilité « communauté ». Deux modes :
+
+- **Avec `OIDC_ADMIN_CLIENT_SECRET`** (compte de service `myagents-admin`) : recherche serveur
+  via l'Admin REST API (`/admin/realms/{realm}/groups?search=...`), qui retourne tous les
+  groupes du realm. Token et résultats cachés (5 min). Le client Keycloak doit avoir
+  `serviceAccountsEnabled=true` et les rôles `realm-management/view-users` + `query-groups`.
+- **Sans secret** (ou si l'Admin API est indisponible) : repli sur les groupes du token
+  utilisateur (`AuthUser.groups`). L'utilisateur ne peut publier que vers ses propres groupes.
+
+Le combobox du wizard (`StepIdentity.vue`) interroge cette route avec un debounce de 300 ms.
+Ne pas cacher côté front : le debounce suffit, le cache serveur absorbe le reste.
+
 ## Version de l'image (`/__version__`, ADR-0004)
 
 L'image écrit `/app/version.json` à sa construction (`scripts/version_json.py`, copié tel quel

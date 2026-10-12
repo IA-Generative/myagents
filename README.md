@@ -92,7 +92,7 @@ et OpenWebUI. Le realm est importé au démarrage depuis
 
 - **Utilisateurs** : `admin` (rôle `admin`) et `user1` (rôle `user`). Leurs mots de passe sont
   `KEYCLOAK_DEV_ADMIN_PASSWORD` et `KEYCLOAK_DEV_USER_PASSWORD` dans `.env` (générés par `make ensure-env`)
-- **Clients** : `myagents-server` (FastAPI, confidentiel, flux code + PKCE côté serveur pour le front Vue), `miraiku-agents` (Next.js, confidentiel), `open-webui` (OWUI, confidentiel)
+- **Clients** : `myagents-server` (FastAPI, confidentiel, flux code + PKCE côté serveur pour le front Vue), `miraiku-agents` (Next.js, confidentiel), `open-webui` (OWUI, confidentiel), `myagents-admin` (compte de service pour la recherche de groupes, `serviceAccountsEnabled=true`, rôles `realm-management/view-users` + `query-groups`)
 - **Mappers** : `myagents-api` (audience pour le server FastAPI), `groups` (claim `groups`, `full.path=false`)
 
 ```bash

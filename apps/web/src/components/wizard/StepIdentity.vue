@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { useWizardStore } from '@/stores/wizard'
 import type { Visibility } from '@/types/agent'
+import { groupsApi, type GroupProfile } from '@/api/groups'
 
 const wizard = useWizardStore()
 
@@ -28,6 +29,91 @@ function setCategory(value: string) {
   wizard.updateConfig({ category: value })
   wizard.update({ category: value ? [value] : [] })
 }
+
+// --- Combobox de recherche de groupes ---
+const groupQuery = ref('')
+const groupResults = ref<GroupProfile[]>([])
+const groupOpen = ref(false)
+const groupLoading = ref(false)
+const groupError = ref(false)
+const activeIndex = ref(-1)
+const comboboxRef = ref<HTMLElement | null>(null)
+let debounceId: ReturnType<typeof setTimeout> | null = null
+
+const selectedGroupPath = computed(() => wizard.draft.config.community_path)
+
+watch(groupQuery, (q) => {
+  if (debounceId) clearTimeout(debounceId)
+  activeIndex.value = -1
+  if (!q.trim()) {
+    groupResults.value = []
+    return
+  }
+  debounceId = setTimeout(async () => {
+    groupLoading.value = true
+    groupError.value = false
+    try {
+      groupResults.value = await groupsApi.search(q.trim())
+    } catch {
+      groupError.value = true
+      groupResults.value = []
+    } finally {
+      groupLoading.value = false
+    }
+  }, 300)
+})
+
+function openCombobox() {
+  groupOpen.value = true
+}
+
+function closeCombobox() {
+  groupOpen.value = false
+  groupQuery.value = ''
+  activeIndex.value = -1
+  groupResults.value = []
+}
+
+function selectGroup(group: GroupProfile) {
+  wizard.updateConfig({ community_path: group.path })
+  closeCombobox()
+}
+
+function clearGroup() {
+  wizard.updateConfig({ community_path: null })
+}
+
+function onKeydown(e: KeyboardEvent) {
+  if (!groupOpen.value || groupResults.value.length === 0) return
+  if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    activeIndex.value = Math.min(activeIndex.value + 1, groupResults.value.length - 1)
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    activeIndex.value = Math.max(activeIndex.value - 1, 0)
+  } else if (e.key === 'Enter' && activeIndex.value >= 0) {
+    e.preventDefault()
+    selectGroup(groupResults.value[activeIndex.value])
+  } else if (e.key === 'Escape') {
+    closeCombobox()
+  }
+}
+
+function onDocumentClick(e: MouseEvent) {
+  if (comboboxRef.value && !comboboxRef.value.contains(e.target as Node)) {
+    closeCombobox()
+  }
+}
+
+watch(groupOpen, (open) => {
+  if (open) document.addEventListener('click', onDocumentClick)
+  else document.removeEventListener('click', onDocumentClick)
+})
+
+onUnmounted(() => {
+  if (debounceId) clearTimeout(debounceId)
+  document.removeEventListener('click', onDocumentClick)
+})
 </script>
 
 <template>
@@ -145,18 +231,101 @@ function setCategory(value: string) {
     </div>
 
     <div v-if="wizard.draft.visibility === 'community'" class="fr-col-12">
-      <div class="fr-input-group">
+      <div ref="comboboxRef" class="fr-input-group">
         <label class="fr-label" for="agent-community">
           Communauté
-          <span class="fr-hint-text">Nom du groupe ou du service avec lequel partager l'agent.</span>
+          <span class="fr-hint-text">
+            Sélectionnez le groupe avec lequel partager l'agent. Tapez pour rechercher.
+          </span>
         </label>
+
+        <div
+          v-if="selectedGroupPath"
+          class="fr-mt-1w"
+          style="display: flex; align-items: center; gap: 0.5rem"
+        >
+          <span class="fr-icon-group-line" aria-hidden="true" />
+          <span class="fr-text--sm">
+            Communauté sélectionnée : <strong>{{ selectedGroupPath }}</strong>
+          </span>
+          <button
+            type="button"
+            class="fr-btn fr-btn--tertiary-no-outline fr-btn--sm"
+            @click="clearGroup"
+          >
+            Changer
+          </button>
+        </div>
+
         <input
+          v-else
           id="agent-community"
-          v-model="wizard.draft.config.community_path"
+          v-model="groupQuery"
           class="fr-input"
           type="text"
-          placeholder="Ex : DLPAJ"
+          role="combobox"
+          :aria-expanded="groupOpen"
+          aria-autocomplete="list"
+          :placeholder="groupLoading ? 'Recherche…' : 'Rechercher un groupe…'"
+          :disabled="groupLoading"
+          @focus="openCombobox"
+          @keydown="onKeydown"
         >
+
+        <div
+          v-if="groupOpen && (groupResults.length > 0 || groupLoading || groupError || groupQuery.trim())"
+          role="listbox"
+          style="border: 1px solid var(--border-default-grey); background: var(--background-default-grey); max-height: 240px; overflow-y: auto; margin-top: 2px; border-radius: 4px"
+        >
+          <div
+            v-if="groupLoading"
+            class="fr-p-2w fr-text--sm"
+            style="color: var(--text-mention-grey)"
+          >
+            Recherche en cours…
+          </div>
+          <div
+            v-else-if="groupError"
+            class="fr-p-2w fr-text--sm"
+            style="color: var(--text-default-error)"
+          >
+            Impossible de charger les groupes.
+          </div>
+          <div
+            v-else-if="groupQuery.trim() && groupResults.length === 0"
+            class="fr-p-2w fr-text--sm"
+            style="color: var(--text-mention-grey)"
+          >
+            Aucun groupe ne correspond à « {{ groupQuery }} »
+          </div>
+          <button
+            v-for="(group, index) in groupResults"
+            :key="group.id"
+            type="button"
+            role="option"
+            :aria-selected="index === activeIndex"
+            :style="{
+              display: 'block',
+              width: '100%',
+              textAlign: 'left',
+              padding: '0.5rem 0.75rem',
+              background: index === activeIndex ? 'var(--background-alt-blue-france)' : 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              fontSize: '0.875rem',
+            }"
+            @click="selectGroup(group)"
+            @mouseenter="activeIndex = index"
+          >
+            <strong>{{ group.name }}</strong>
+            <span
+              style="margin-left: 0.5rem; color: var(--text-mention-grey); font-size: 0.75rem"
+            >
+              {{ group.path }}
+            </span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
