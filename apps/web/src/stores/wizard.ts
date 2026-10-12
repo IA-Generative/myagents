@@ -20,6 +20,8 @@ const DEFAULT_CONFIG: ConfigSnapshot = {
   temperature: 0.7,
   knowledge_ids: [],
   tool_ids: [],
+  inputs: ['text'],
+  outputs: ['text'],
 }
 
 function initialDraft(): AgentDraft {

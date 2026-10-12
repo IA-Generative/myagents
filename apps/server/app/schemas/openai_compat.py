@@ -6,6 +6,16 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.agent import ChatMessage
 
+# Contrat d'agents : un consommateur envoie un contenu entier (transcription d'une réunion,
+# document, passages d'une collection) dans le dernier message. 120 000 caractères, soit
+# l'ordre de grandeur de la fenêtre des modèles de la passerelle ; au-delà, le modèle refuse
+# et la route répond 502.
+MAX_CONTENT_CHARS_V1 = 120_000
+
+
+class OpenAIChatMessage(ChatMessage):
+    content: str = Field(max_length=MAX_CONTENT_CHARS_V1)
+
 
 class OpenAIModel(BaseModel):
     id: str
@@ -13,6 +23,8 @@ class OpenAIModel(BaseModel):
     created: int
     owned_by: str = "myagents"
     name: str
+    # Même forme qu'Open WebUI (`info.meta.description`) : les plug-ins bureautiques la lisent.
+    info: dict | None = None
 
 
 class OpenAIModelList(BaseModel):
@@ -26,7 +38,7 @@ class OpenAIChatCompletionRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     model: str = Field(max_length=255)
-    messages: list[ChatMessage] = Field(max_length=500)
+    messages: list[OpenAIChatMessage] = Field(max_length=500)
     stream: bool = False
 
 

@@ -16,6 +16,7 @@ from app.api.routes import (
     agents,
     auth,
     catalog,
+    contrat,
     favorites,
     knowledge,
     models,
@@ -26,6 +27,7 @@ from app.api.routes import (
     tools,
 )
 from app.core.config import get_settings
+from app.core.contrat import ContratCorsMiddleware, ContratError, OpenAIApiError
 from app.core.csp import CSP_EXEMPT_PATHS, build_csp
 from app.core.logging import setup_logging
 from app.services.prompt_guard import GuardBlockedError
@@ -148,6 +150,26 @@ async def guard_blocked(_: Request, exc: GuardBlockedError) -> JSONResponse:
     )
 
 
+@app.exception_handler(ContratError)
+async def contrat_refuse(_: Request, exc: ContratError) -> JSONResponse:
+    """Refus d'une route du contrat d'agents : `{"error": {"code", "message"}}`."""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"code": exc.code, "message": exc.message}},
+        headers=exc.headers,
+    )
+
+
+@app.exception_handler(OpenAIApiError)
+async def openai_refuse(_: Request, exc: OpenAIApiError) -> JSONResponse:
+    """Refus d'une route /v1 : format d'erreur OpenAI, que les clients savent afficher."""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"message": exc.message, "type": exc.type, "code": exc.code}},
+        headers=exc.headers,
+    )
+
+
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     # /__version__ est lu en boucle par le noteur de version : hors journal (ADR-0004).
@@ -166,11 +188,19 @@ async def log_requests(request: Request, call_next):
     return response
 
 
+# CORS des routes du contrat d'agents (origines par motifs), posé en dernier pour être le
+# plus externe : il répond au préflight avant le CORSMiddleware global, qui ne connaît
+# que les origines de la SPA.
+app.add_middleware(
+    ContratCorsMiddleware, motifs=lambda: get_settings().contrat_origines
+)
+
 for router in (
     tools.router,
     auth.router,
     agents.router,
     catalog.router,
+    contrat.router,
     ratings.router,
     favorites.router,
     models.router,

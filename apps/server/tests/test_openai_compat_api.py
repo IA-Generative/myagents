@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from langchain_core.messages import AIMessage
 
-from app.api.deps import require_openwebui_key
+from app.api.deps import V1Caller, v1_caller
 from app.core.config import get_settings
 from app.llm.client import LlmClient
 from app.main import app
@@ -43,7 +43,7 @@ async def test_models_endpoint_rejects_when_integration_disabled(client, monkeyp
 
 
 async def test_models_endpoint_lists_only_shared_agents(client):
-    app.dependency_overrides[require_openwebui_key] = lambda: None
+    app.dependency_overrides[v1_caller] = lambda: V1Caller()
     await _create_agent(client, visibility="private", status="draft")
     await _create_agent(client, visibility="private", status="published")
     await _create_agent(client, visibility="community", status="draft")
@@ -58,7 +58,7 @@ async def test_models_endpoint_lists_only_shared_agents(client):
 
 
 async def test_chat_completions_hides_private_agent(client):
-    app.dependency_overrides[require_openwebui_key] = lambda: None
+    app.dependency_overrides[v1_caller] = lambda: V1Caller()
     private = await _create_agent(client)
     res = await client.post(
         "/v1/chat/completions",
@@ -71,7 +71,7 @@ async def test_chat_completions_hides_private_agent(client):
 
 
 async def test_chat_completions_returns_openai_shaped_response(client):
-    app.dependency_overrides[require_openwebui_key] = lambda: None
+    app.dependency_overrides[v1_caller] = lambda: V1Caller()
     created = await _create_agent(client, **SHARED)
     fake_model = FakeToolCallingModel(responses=[AIMessage(content="Bonjour !")])
 
@@ -91,7 +91,7 @@ async def test_chat_completions_returns_openai_shaped_response(client):
 
 
 async def test_chat_completions_unknown_model_returns_404(client):
-    app.dependency_overrides[require_openwebui_key] = lambda: None
+    app.dependency_overrides[v1_caller] = lambda: V1Caller()
     res = await client.post(
         "/v1/chat/completions",
         json={"model": "00000000-0000-0000-0000-000000000000", "messages": []},
@@ -100,7 +100,7 @@ async def test_chat_completions_unknown_model_returns_404(client):
 
 
 async def test_chat_completions_stream_returns_sse(client):
-    app.dependency_overrides[require_openwebui_key] = lambda: None
+    app.dependency_overrides[v1_caller] = lambda: V1Caller()
     created = await _create_agent(client, **SHARED)
     fake_model = FakeToolCallingModel(responses=[AIMessage(content="Bonjour !")])
 

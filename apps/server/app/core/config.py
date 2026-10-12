@@ -123,6 +123,19 @@ class Settings(BaseSettings):
     # Origines supplémentaires autorisées en `connect-src` du CSP (ex. un second IdP).
     csp_extra_connect_src: list[str] = []
 
+    # --- Contrat d'agents MirAI (docs/contrats/contrat-agents-mirai.md) ---
+    # Audience exigée dans `aud` du jeton d'un consommateur (posée par la portée Keycloak
+    # `mesagents-agents`). Vide = aucun contrôle d'audience.
+    contrat_audience: str = "mesagents"
+    # Clients Keycloak (claim `azp`) admis à appeler le contrat. Vide = tout client qui porte
+    # l'audience.
+    contrat_clients_autorises: list[str] = []
+    # Origines navigateur autorisées (CORS) sur les routes du contrat ; motifs fnmatch acceptés
+    # (ex. https://mysearch-pr-*.example). Vide = aucun appel depuis un navigateur tiers.
+    contrat_origines: list[str] = []
+    # Appels à GET /api/v1/agents par minute et par personne (0 = sans limite).
+    contrat_rate_limit_per_minute: int = 60
+
     @model_validator(mode="after")
     def _default_web_public_url(self) -> Settings:
         if not self.web_public_url:

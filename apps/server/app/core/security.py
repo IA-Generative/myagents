@@ -37,10 +37,16 @@ class AuthUser:
     roles: list[str]
     groups: list[str]
     is_admin: bool
+    # Client Keycloak qui a demandé le jeton (claim `azp`) ; vide hors SSO.
+    azp: str = ""
 
 
 class OIDCError(Exception):
     """Base error for OIDC validation failures."""
+
+
+class AudienceError(OIDCError):
+    """Le jeton n'est pas destiné à ce service (audience absente ou client non admis)."""
 
 
 class OIDCDisabled(OIDCError):
@@ -88,10 +94,16 @@ def _signing_key(token: str) -> PyJWK:
 def _decode_token(token: str, audience: str | None = None) -> dict[str, Any]:
     """Decode and validate a Keycloak JWT (access token by default, else the given audience)."""
     settings = get_settings()
+    expected_audience = audience or settings.oidc_audience or None
+    return _decode_with(token, expected_audience)
+
+
+def _decode_with(token: str, expected_audience: str | None) -> dict[str, Any]:
+    """Décode un JWT Keycloak ; `expected_audience` None = pas de contrôle d'audience."""
+    settings = get_settings()
     if not settings.oidc_issuer:
         raise OIDCError("OIDC_ISSUER not configured")
 
-    expected_audience = audience or settings.oidc_audience or None
     return jwt.decode(
         token,
         _signing_key(token).key,
@@ -133,6 +145,7 @@ def _extract_user(claims: dict[str, Any]) -> AuthUser:
         roles=roles,
         groups=groups,
         is_admin=is_admin,
+        azp=str(claims.get("azp") or ""),
     )
 
 
@@ -181,4 +194,35 @@ async def get_current_user(authorization: str | None = None) -> AuthUser:
         logger.error("JWKS fetch failed: %s", exc)
         raise OIDCError("issuer unavailable") from exc
 
+    return _extract_user(claims)
+
+
+async def get_contract_user(authorization: str | None) -> AuthUser:
+    """Jeton d'un consommateur du contrat d'agents : audience `mesagents`, client admis, `sub`.
+
+    Lève AudienceError (→ 403 audience_mismatch) ou OIDCError (→ 401 invalid_token).
+    """
+    settings = get_settings()
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise OIDCError("missing bearer token")
+    token = authorization.split(" ", 1)[1].strip()
+    audience = settings.contrat_audience.strip() or None
+    try:
+        claims = await asyncio.to_thread(_decode_with, token, audience)
+    except jwt.InvalidAudienceError as exc:
+        raise AudienceError("audience mismatch") from exc
+    except jwt.PyJWTError as exc:
+        logger.warning("JWT du contrat refusé: %s", exc)
+        raise OIDCError("invalid token") from exc
+    except httpx.HTTPError as exc:
+        logger.error("JWKS fetch failed: %s", exc)
+        raise OIDCError("issuer unavailable") from exc
+
+    # Sans `sub`, impossible d'imputer l'usage à une personne : refus (contrat §Erreurs).
+    if not claims.get("sub"):
+        raise OIDCError("token without sub")
+    azp = str(claims.get("azp") or "")
+    admis = settings.contrat_clients_autorises
+    if admis and azp not in admis:
+        raise AudienceError("client not allowed")
     return _extract_user(claims)

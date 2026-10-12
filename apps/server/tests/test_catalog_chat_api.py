@@ -8,8 +8,10 @@ from app.core.config import get_settings
 from app.llm.client import LlmClient
 from tests.fakes import FakeToolCallingModel, HubDown, RetiredModel
 
+# Un agent ouvert à tout le ministère : la règle d'accès (contrat d'agents) ne montre un agent
+# de communauté qu'aux membres de son groupe.
 DRAFT_PAYLOAD = {
-    "visibility": "community",
+    "visibility": "ministry",
     "status": "published",
     "category": ["redaction"],
     "tags": [],

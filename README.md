@@ -23,6 +23,14 @@ d'OpenWebUI. Spec complète dans [docs/specs/agent-builder-spec.md](docs/specs/a
 - **Déploiement** : Kubernetes Scaleway, namespace `miraiku`, ingress nginx +
   cert-manager letsencrypt-prod, URL `https://myagents.fake-domain.name`
 
+## Contrat d'agents MirAI
+
+Les autres applications et plug-ins listent et lancent les agents par deux routes servies par
+le server, avec le jeton Keycloak de la personne :
+[docs/contrats/contrat-agents-mirai.md](docs/contrats/contrat-agents-mirai.md). Portée Keycloak à
+importer chez les consommateurs : [keycloak/mesagents-agents.client-scope.json](keycloak/mesagents-agents.client-scope.json).
+Jeu d'essai : `uv run python -m app.scripts.seed_contrat` (dans `apps/server`).
+
 ## Pré-requis
 
 Aucun : l'application tourne en standalone, `docker-compose.yml` lance son
