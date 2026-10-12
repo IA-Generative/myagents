@@ -84,6 +84,36 @@ cd apps/next && docker compose up -d --force-recreate agent-builder
 
 `make down` arrête aussi OpenWebUI ; `make clean` supprime ses données.
 
+### Tester Open Terminal
+
+`make up-owui` lance aussi `open-terminal` (clé `OPEN_TERMINAL_API_KEY` générée dans `.env`), déjà déclaré
+comme terminal global dans OpenWebUI. Renseigner un LLM direct avec tool calling natif
+(`OPENWEBUI_LLM_BASE_URL` / `OPENWEBUI_LLM_API_KEY`, sinon `OPENAI_*`), puis dans un chat :
+sélectionner ce modèle et activer le terminal dans la barre du chat.
+
+Checklist : exécuter un script Python, parcourir/uploader/éditer des fichiers, preview (HTML, image, PDF, CSV),
+persistance après `docker compose restart open-terminal`, `pip install` derrière le proxy.
+Logs : `make logs-terminal`.
+
+#### Documents au design DSFR
+
+L'image `open-terminal` est construite depuis [`docker/open-terminal`](docker/open-terminal) : elle embarque
+`@gouvfr/dsfr` (Marianne, couleurs, bloc-marque), la CLI `dsfr-doc` (Markdown/HTML vers PDF) et le module
+Python `dsfr_office` (Word : `new_docx()`, `add_table()` ; PowerPoint : `new_pptx()`, `title_slide()`, `content_slide()`).
+
+```bash
+docker compose exec open-terminal dsfr-doc rapport.md --entity "Ministère de l'Intérieur" --subtitle "Chapeau"
+```
+
+Pour que le modèle l'applique seul, ajouter ce prompt système au modèle (Espace de travail > Modèles) :
+
+> Pour tout document (PDF, Word, PowerPoint), respecter le DSFR. PDF : écrire un fichier Markdown puis lancer
+> `dsfr-doc fichier.md --entity "<entité>"`. Word/PowerPoint : python avec `from dsfr_office import *`.
+> Ne jamais générer de PDF autrement. Enregistrer les fichiers dans `/home/user`.
+
+Limites : Marianne n'est embarquée que dans les PDF ; Word/PowerPoint la référencent par son nom (repli sur Arial
+si absente du poste). Le logo DSFR est d'usage restreint aux services de l'État.
+
 ## SSO Keycloak local
 
 Keycloak (realm `myagents`) fournit un SSO partagé entre `apps/web`, `apps/next`
