@@ -114,6 +114,12 @@ class Settings(BaseSettings):
     # jeton ; un chemin (« /g/mirai-beta-testeurs ») au chemin complet.
     oidc_groupe_exige: str = ""
 
+    # --- Keycloak Admin REST API (recherche de groupes pour la publication) ---
+    # Compte de service dédié (client myagents-admin, serviceAccountsEnabled=true,
+    # rôle realm-management/view-users). Vide = repli sur les groupes du token utilisateur.
+    oidc_admin_client_id: str = "myagents-admin"
+    oidc_admin_client_secret: str = ""
+
     # Vector store used for agent knowledge bases (RAG).
     qdrant_url: str = "http://localhost:6333"
 

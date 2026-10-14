@@ -43,6 +43,15 @@
       "credentials": [{ "type": "password", "value": "${KEYCLOAK_DEV_USER_PASSWORD}", "temporary": false }],
       "realmRoles": ["user"],
       "groups": ["myagents-user"]
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000020",
+      "username": "service-account-myagents-admin",
+      "enabled": true,
+      "serviceAccountClientId": "myagents-admin",
+      "clientRoles": {
+        "realm-management": ["view-users", "query-groups"]
+      }
     }
   ],
   "clients": [
@@ -108,6 +117,18 @@
       },
       "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "email", "myagents-api", "groups"],
       "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"]
+    },
+    {
+      "clientId": "myagents-admin",
+      "name": "MyAgents Admin (service account pour la recherche de groupes)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "dev-myagents-admin-secret",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "redirectUris": []
     }
   ],
   "clientScopes": [

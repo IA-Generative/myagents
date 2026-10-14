@@ -125,10 +125,13 @@ fi
 
 # --- 7. JWKS du server vers Keycloak ---
 info "Test 7: Server peut joindre Keycloak (JWKS)"
+# urllib respecte HTTP_PROXY/HTTPS_PROXY du conteneur (proxy corporate Orion) qui ne sait
+# pas résoudre `keycloak` → timeout. On bypass le proxy comme le fait le server (httpx trust_env=False).
 JWKS_STATUS=$(docker compose exec -T server python3 -c "
 import urllib.request, sys
+opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 try:
-    r = urllib.request.urlopen('http://keycloak:8080/realms/$REALM/protocol/openid-connect/certs', timeout=5)
+    r = opener.open('http://keycloak:8080/realms/$REALM/protocol/openid-connect/certs', timeout=5)
     print(r.status)
 except Exception as e:
     print('ERR:', e, file=sys.stderr); sys.exit(1)
