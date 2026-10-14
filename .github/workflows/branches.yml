@@ -1,0 +1,91 @@
+# Image de la branche `beta`, déployée en continu par l'Argo CD d'internal-gw (dépôt
+# IA-Generative/mirai-apps-beta-private, Application `beta-myagents`, ADR-0005) sur
+# https://mesagents.numerique-interieur.com. Chaque fusion dans `beta` publie la même image sous
+# deux étiquettes : `beta` (mobile) et `beta-<sha8>` (fixe — celle que le cluster tire : Argo CD la
+# déduit du commit qu'il déploie, le chart et l'image viennent donc toujours du même commit).
+# Les PR (`pr-<n>`) restent l'affaire de ci.yml, les versions publiées (X.Y.Z) celle de cd.yml.
+name: Branches
+
+on:
+  push:
+    branches: [beta]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: branches-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  infos:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      sha8: ${{ steps.v.outputs.sha8 }}
+      code-date: ${{ steps.v.outputs.code_date }}
+    steps:
+      - uses: actions/checkout@v5
+      # La date du commit construit, pour /app/version.json (ADR-0004) : lue dans git, elle vaut
+      # aussi pour un lancement manuel (head_commit.timestamp n'existe que sur push).
+      - id: v
+        run: |
+          echo "sha8=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+          echo "code_date=$(git log -1 --format=%cI)" >> "$GITHUB_OUTPUT"
+
+  # fabnum ajoute d'office l'étiquette au nom de la branche (hors main/develop) : IMAGE_TAG ne
+  # porte donc que l'étiquette fixe. Le job verify prouve que les deux existent.
+  build:
+    needs: [infos]
+    uses: dnum-mi/fabnum-cicd/.github/workflows/build-docker.yml@v0
+    permissions:
+      contents: read
+      packages: write
+    with:
+      IMAGE_NAME: ghcr.io/${{ github.repository }}/mes-agents
+      IMAGE_TAG: beta-${{ needs.infos.outputs.sha8 }}
+      IMAGE_CONTEXT: ./
+      IMAGE_DOCKERFILE: ./Dockerfile
+      PUSH: true
+      BUILD_ARM64: false
+      # /app/version.json, servi sur /__version__ (ADR-0004) : version = l'étiquette fixe.
+      BUILD_ARGS: |
+        VERSION=beta-${{ needs.infos.outputs.sha8 }}
+        COMMIT=${{ github.sha }}
+        BUILD=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        CODE_DATE=${{ needs.infos.outputs.code-date }}
+        SOURCE=${{ github.server_url }}/${{ github.repository }}
+
+  verify:
+    needs: [infos, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      packages: read
+    env:
+      # fabnum normalise le nom en minuscules ; docker refuse une majuscule dans une référence.
+      IMAGE: ghcr.io/${{ github.repository }}/mes-agents
+      SHA8: ${{ needs.infos.outputs.sha8 }}
+      ACTOR: ${{ github.actor }}
+      TOKEN: ${{ github.token }}
+    steps:
+      # On ne contrôle que l'étiquette FIXE, celle que tire Argo CD. L'étiquette mobile `beta` est
+      # aussi publiée par cd.yml quand une release (PR release-please) est fusionnée : les deux
+      # workflows tournent alors en même temps, et comparer `beta` à `beta-<sha8>` donnait un
+      # faux rouge sans aucun effet sur le déploiement.
+      - name: L'étiquette déployée porte le commit construit
+        run: |
+          set -euo pipefail
+          IMAGE="${IMAGE,,}"
+          echo "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin >/dev/null
+          echo "beta-$SHA8 → $(docker buildx imagetools inspect "$IMAGE:beta-$SHA8" --format '{{.Manifest.Digest}}')"
+          # Étiquette OCI posée par fabnum : ce que le cluster tire doit dire le commit fusionné.
+          revision=$(docker buildx imagetools inspect "$IMAGE:beta-$SHA8" \
+            --format '{{index .Image.Config.Labels "org.opencontainers.image.revision"}}')
+          [ "$revision" = "$GITHUB_SHA" ] \
+            || { echo "::error::l'image annonce le commit « $revision », pas $GITHUB_SHA"; exit 1; }
+          # ADR-0004 : ce que /__version__ servira dit la même chose que l'étiquette.
+          docker run --rm --entrypoint cat "$IMAGE:beta-$SHA8" /app/version.json > version.json
+          jq '{version, commit, build, code_date, source}' version.json
+          jq -e --arg v "beta-$SHA8" --arg c "$GITHUB_SHA" '.version == $v and .commit == $c' version.json >/dev/null \
+            || { echo "::error::version.json ne dit pas beta-$SHA8 / $GITHUB_SHA"; exit 1; }

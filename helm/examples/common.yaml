@@ -1,0 +1,115 @@
+# ============================================================================
+# Common Values - MyAgents Helm Chart
+# ============================================================================
+# This file contains environment-AGNOSTIC configurations shared across all deployments.
+# Place this file in a PRIVATE repository along with values-<env>.yaml files.
+#
+# Usage:
+#   helm install myagents ./helm \
+#     -f /path/to/private-config/common.yaml \
+#     -f /path/to/private-config/values-<env>.yaml
+#
+# DO NOT commit this file to the public repository if it contains any sensitive data.
+
+# =============================================================================
+# Application configuration
+# =============================================================================
+app:
+  # -- Application image details
+  image:
+    registry: "ghcr.io"
+    repository: "ia-generative/myagents/mes-agents"
+    pullPolicy: "IfNotPresent"
+  
+  # -- Container port
+  containerPort: 8000
+  containerPortName: "http"
+  
+  # -- Pod-level security context
+  podSecurityContext:
+    runAsNonRoot: true
+    fsGroup: 10001
+    seccompProfile:
+      type: "RuntimeDefault"
+  
+  # -- Container-level security context
+  securityContext:
+    runAsUser: 10001
+    runAsGroup: 10001
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    readOnlyRootFilesystem: true
+    seccompProfile:
+      type: "RuntimeDefault"
+  
+  # -- Volumes for temporary and cache storage
+  volumes:
+    - name: tmp
+      emptyDir: {}
+    - name: cache
+      emptyDir: {}
+  
+  volumeMounts:
+    - mountPath: /tmp
+      name: tmp
+    - mountPath: /app/.cache
+      name: cache
+  
+  # -- Health checks
+  probes:
+    startupProbe:
+      httpGet:
+        path: "/api/health"
+        port: 8000
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      failureThreshold: 30
+    readinessProbe:
+      httpGet:
+        path: "/api/health"
+        port: 8000
+      initialDelaySeconds: 5
+      periodSeconds: 10
+    livenessProbe:
+      httpGet:
+        path: "/api/health"
+        port: 8000
+      initialDelaySeconds: 15
+      periodSeconds: 20
+  
+  # -- Deployment strategy
+  strategy:
+    type: "RollingUpdate"
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  
+  # -- Service configuration
+  service:
+    enabled: true
+    type: "ClusterIP"
+    port: 80
+    portName: "http"
+
+# =============================================================================
+# PostgreSQL configuration (common across all environments)
+# =============================================================================
+postgres:
+  # -- PostgreSQL is required for this application
+  enabled: true
+  
+  # -- Image version
+  image:
+    tag: "18.6-alpine"
+  
+  # -- Persistence is required
+  persistence:
+    enabled: true
+
+# =============================================================================
+# Vault Secrets Operator (common configuration)
+# =============================================================================
+vaultSecrets:
+  # -- KV mount name in Vault
+  mount: "kv"

@@ -1,0 +1,16 @@
+node_modules
+.next
+deploy
+docker-compose.yml
+tsconfig.tsbuildinfo
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+coverage
+playwright-report
+test-results
+*.log
+.DS_Store
+__MACOSX

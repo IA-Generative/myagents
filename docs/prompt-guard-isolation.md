@@ -6,7 +6,7 @@ modèle juge** le plus efficace (coût vs détection).
 
 ## 1. Pourquoi
 
-La garde était auparavant un module applicatif (`src/lib/prompt-guard.ts`)
+La garde était auparavant un module applicatif (`apps/next/src/lib/prompt-guard.ts`)
 couplé en dur au client Scaleway (juge LLM) et, via le module d'audit, à Prisma.
 Objectifs de l'isolation :
 
@@ -20,7 +20,7 @@ Objectifs de l'isolation :
 ## 2. Architecture
 
 ```
-src/packages/prompt-guard/
+apps/next/src/packages/prompt-guard/
   core.ts    — heuristiques pures + durcissement + messages + log console
                (zéro dépendance hors `node:crypto`)
   judge.ts   — LLM-juge via interface `LLMJudge` injectable (agnostique fournisseur)
@@ -41,8 +41,8 @@ index ──► core, judge, audit, config
 
 | Adapter | Fichier | Rôle |
 | --- | --- | --- |
-| Juge Scaleway | `src/lib/prompt-guard.ts` | implémente `LLMJudge` via `scwChatCompletions`, ré-expose `judgeOutput` (API historique) et **ré-exporte tout le composant** |
-| Puits Prisma | `src/lib/guard-audit.ts` | implémente `AuditSink` (`prismaAuditSink`) : console + table `ab_guard_events` |
+| Juge Scaleway | `apps/next/src/lib/prompt-guard.ts` | implémente `LLMJudge` via `scwChatCompletions`, ré-expose `judgeOutput` (API historique) et **ré-exporte tout le composant** |
+| Puits Prisma | `apps/next/src/lib/guard-audit.ts` | implémente `AuditSink` (`prismaAuditSink`) : console + table `ab_guard_events` |
 
 Les **8 routes** `/api/ab/*` importent toujours `@/lib/prompt-guard` et
 `@/lib/guard-audit` : **aucune route n'a changé** (le shim préserve l'API).
@@ -61,7 +61,7 @@ const verdict = await judgeWith(monJuge, { goal, response });
 ```
 
 Le cœur ne connaît ni Scaleway, ni OpenAI : on injecte l'adapter. Exemple
-(Scaleway) dans `src/lib/prompt-guard.ts`.
+(Scaleway) dans `apps/next/src/lib/prompt-guard.ts`.
 
 ### `AuditSink` (persistance)
 
@@ -85,7 +85,7 @@ resolveJudgeModel(explicit?) // explicit > env GUARD_JUDGE_MODEL > recommandé >
 
 ## 4. Réutiliser le composant ailleurs
 
-1. Copier/publier `src/packages/prompt-guard` (aucune dépendance externe).
+1. Copier/publier `apps/next/src/packages/prompt-guard` (aucune dépendance externe).
 2. Implémenter un `LLMJudge` sur le fournisseur cible.
 3. Composer les couches :
 
@@ -115,7 +115,7 @@ ne voit pas. Quel modèle Scaleway utiliser ?
 
 ### Protocole (benchmark des 9 modèles)
 
-`tests/redteam/judge-eval.ts` évalue **chaque modèle dans le rôle de juge** sur
+`apps/next/tests/redteam/judge-eval.ts` évalue **chaque modèle dans le rôle de juge** sur
 un **jeu étiqueté** (`LABELED_SET`, 16 cas curés : keylogger / disinfo /
 prompt-leak en compliance ET en refus, + contrôles bénins ; enrichi
 automatiquement des cas déterministes du dernier rapport de matrice).
@@ -142,7 +142,7 @@ Une fois `npm run test:redteam:judge` joué (rapport
 `reports/judge-eval-*.md`) :
 
 - renseigner `RECOMMENDED_JUDGE_MODEL` dans
-  [`src/packages/prompt-guard/config.ts`](../src/packages/prompt-guard/config.ts), **ou**
+  [`apps/next/src/packages/prompt-guard/config.ts`](../apps/next/src/packages/prompt-guard/config.ts), **ou**
 - exporter `GUARD_JUDGE_MODEL=<id>` à l'exécution (override sans rebuild).
 
 > Statut : **benchmark joué le 2026-06-20** sur les 9 modèles (36 cas étiquetés).

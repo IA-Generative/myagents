@@ -1,0 +1,18 @@
+{{- if and .Values.app.enabled .Values.app.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "mes-agents.fullname" . }}
+  labels:
+    {{- include "mes-agents.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.app.pdb.minAvailable }}
+  minAvailable: {{ .Values.app.pdb.minAvailable }}
+  {{- end }}
+  {{- if .Values.app.pdb.maxUnavailable }}
+  maxUnavailable: {{ .Values.app.pdb.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "mes-agents.selectorLabels" . | nindent 6 }}
+{{- end }}

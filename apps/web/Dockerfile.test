@@ -1,0 +1,20 @@
+# Image Bun + Node.js pour exécuter les tests web avec vitest sous Node.js
+# Bun est inclus pour accéder aux node_modules pré-installés via le volume
+# Node.js est ajouté pour exécuter vitest avec jsdom 30.x (incompatible avec Bun 1.4.2)
+
+ARG BUN_VERSION=1.4.2
+FROM oven/bun:${BUN_VERSION}-alpine
+
+# Installer Node.js 22 (requis pour jsdom 30.1.1)
+RUN apk add --no-cache nodejs npm
+
+WORKDIR /app
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
+
+COPY . .
+
+# Les node_modules sont montés via un volume depuis l'image Bun
+# Les tests s'exécutent directement sans réinstallation
+#CMD ["bun", "run", "test"]
+CMD ["sh", "-c", "bun run lint && bun run build && bun run test && bun audit --audit-level=high"]

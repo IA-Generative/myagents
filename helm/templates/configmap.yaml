@@ -1,0 +1,12 @@
+{{- if and .Values.app.enabled .Values.app.envCm }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mes-agents.fullname" . }}-env
+  labels:
+    {{- include "mes-agents.labels" . | nindent 4 }}
+data:
+  {{- range $key, $val := .Values.app.envCm }}
+  {{ $key }}: {{ $val | quote }}
+  {{- end }}
+{{- end }}

@@ -1,0 +1,55 @@
+# Job one-shot execute avant chaque rollout : joue prisma migrate deploy
+# (migrations SQL versionnees dans prisma/migrations/) contre la base
+# `agentbuilder` du Postgres du socle.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: agent-builder-migrate
+  namespace: ${NAMESPACE}
+  labels:
+    app: agent-builder
+    job-role: migrate
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: agent-builder
+        job-role: migrate
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: owui-registry
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+      containers:
+        - name: migrate
+          # Image "migrator" = stage `builder` du Dockerfile (node_modules
+          # complet avec CLI prisma). L'image runner (AGENT_BUILDER_IMAGE)
+          # n'a que @prisma/client, pas le CLI — elle ne peut pas exécuter
+          # `prisma db push`.
+          image: ${AGENT_BUILDER_MIGRATOR_IMAGE}
+          # Always : on redeploie souvent la meme balise ${IMAGE_TAG}=dev
+          # avec un digest different (rebuild apres modif de schema.prisma).
+          # IfNotPresent reutiliserait le vieux migrator cache sur le node
+          # et reecraserait la DB avec un schema obsolete.
+          imagePullPolicy: Always
+          command: ["bunx", "prisma", "migrate", "deploy"]
+          envFrom:
+            - secretRef:
+                name: agent-builder-secrets
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

@@ -1,0 +1,13 @@
+apiVersion: v2
+name: mes-agents
+description: A Helm chart for mes-agents application
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+dependencies:
+  - name: postgres
+    alias: postgres
+    version: "0.20.6"
+    repository: "oci://registry-1.docker.io/cloudpirates"
+    condition: postgres.enabled
