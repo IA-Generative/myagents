@@ -1,5 +1,63 @@
 # Changelog
 
+## [0.3.0](https://github.com/IA-Generative/myagents/compare/v0.2.0...v0.3.0) (2026-10-14)
+
+
+### Features
+
+* add conditional command for migration job to support seeding agents ([1f39a62](https://github.com/IA-Generative/myagents/commit/1f39a62a25f87221714bf4258874d071f3ea89bb))
+* add owui & keycloak for local dev ([0d5a44b](https://github.com/IA-Generative/myagents/commit/0d5a44b1595747f887205e268048e617b7d08ce8))
+* add preview chat and refine config endpoints with schemas and frontend integration ([45f1af9](https://github.com/IA-Generative/myagents/commit/45f1af95f473e6f6b56db258078ad342194f34a2))
+* add PUBLIC_BASE_URL and PRESENTATION_LINK_SECRET for presentation downloads ([3288848](https://github.com/IA-Generative/myagents/commit/32888487965659035ef3bb586cac5cdade2545fe))
+* centraliser les defaults LLM entre docker-compose.yml et config.py ([78709a2](https://github.com/IA-Generative/myagents/commit/78709a213919d116c8368b829e9cb0b0f9fe7c72))
+* **ci:** force build image ([e4500be](https://github.com/IA-Generative/myagents/commit/e4500be779db74972c3a19b63b48800d3af3ccdf))
+* enhance chat functionality with streaming support and conversation management ([354753a](https://github.com/IA-Generative/myagents/commit/354753a6d1ad262033dcf83913c24cdd5ff0453f))
+* enhance model configuration to hide input errors in settings ([e7d2b5c](https://github.com/IA-Generative/myagents/commit/e7d2b5ca77b67f5bcfef827014fe2d5df5523c7f))
+* enhance OIDC error handling and improve rollout restart targets in Helm charts ([247c24c](https://github.com/IA-Generative/myagents/commit/247c24c467c848aeb7736c57fa9cb356df09beed))
+* enhance OIDC error handling by including exception type and message in token validation ([e053e24](https://github.com/IA-Generative/myagents/commit/e053e24d4d3a4ec36df737664409d7d6c1be19a1))
+* enhance token decoding to conditionally verify audience based on configuration ([b66d233](https://github.com/IA-Generative/myagents/commit/b66d233d33e746d3b6ed179a63a805274ad8a174))
+* enhance Vault secrets management and environment variable configuration for preview deployment ([781fab6](https://github.com/IA-Generative/myagents/commit/781fab6cc827c3a08cdb9d0de969164eb5e2b377))
+* format OIDC error message for improved readability in token request handling ([4c3895a](https://github.com/IA-Generative/myagents/commit/4c3895a34a08c8da35cf8b4c91473584cad173b6))
+* **helm:** ajouter sync Vault et restructurer les environnements ([68a6686](https://github.com/IA-Generative/myagents/commit/68a66869563f27bd800e2b3cfd25a47ec5c95c76))
+* **helm:** update secrets doc ([985ce97](https://github.com/IA-Generative/myagents/commit/985ce97e1ff54759efd084e65196fd49326bee3c))
+* improve onboarding chat flow and error handling, utilize sessionStorage for agent config ([efd60c0](https://github.com/IA-Generative/myagents/commit/efd60c0b7bd2c4e0f54961ec6b75a67abee8bd5e))
+* l'image porte sa version, servie sur /__version__ (ADR-0004) ([2c8e7e6](https://github.com/IA-Generative/myagents/commit/2c8e7e6cfe6d224435593fc442c424ff3c98ffeb))
+* **llm:** ajouter fallback sur modèle par défaut quand le modèle est introuvable ([3b21bba](https://github.com/IA-Generative/myagents/commit/3b21bbac27f2eed65bf2883f8ffd940d4c91bfc4))
+* **llm:** introduce model fallback abstraction ([1f894b9](https://github.com/IA-Generative/myagents/commit/1f894b9180f909658ea4bcdbc809d9d9ae9d30e7))
+* menu commun de la bêta (mirai-apps-menu) à la place des liens de compte de l'en-tête ([d1aec5e](https://github.com/IA-Generative/myagents/commit/d1aec5e544d547cc35a7ec5223744877a2963690))
+* refactor chat functionality and remove checkpointer dependency ([b62a821](https://github.com/IA-Generative/myagents/commit/b62a8219cff31ed1adc46067ebcf0e28af936877))
+* **server:** délai des appels au modèle réglable, 120 s par défaut ([691224d](https://github.com/IA-Generative/myagents/commit/691224dabd16a7219173ef5fda12c181c111c9fd))
+* **server:** groupe Keycloak exigé pour entrer (OIDC_GROUPE_EXIGE) ([05b1d49](https://github.com/IA-Generative/myagents/commit/05b1d492c775e7237b4df5da8494e4a6fb6abd13))
+* **server:** porter la garde anti-prompt-injection à trois couches de la production ([915ef12](https://github.com/IA-Generative/myagents/commit/915ef120d42372903ee3712b41c88a41e1de4e14))
+* **server:** reprise des données de l'ancienne app ([deaa7fa](https://github.com/IA-Generative/myagents/commit/deaa7fad36f01e5a7e90ac40eb9edda30b069ade))
+* **server:** table guard_events pour le journal de la garde anti-injection ([ae22c01](https://github.com/IA-Generative/myagents/commit/ae22c0100d61cf0c5abe4097d7bb3bc095e342fc))
+* swagger ui auth simplify ([9e258dc](https://github.com/IA-Generative/myagents/commit/9e258dc322d47a6ed22c8a2f27e54177d594e35c))
+* update Keycloak client configuration and derive public URLs from ingress host ([ef68f62](https://github.com/IA-Generative/myagents/commit/ef68f627867147786e7f6646482ebb770006ab35))
+* update redirect URIs in Keycloak configuration for code-server integration ([cce7906](https://github.com/IA-Generative/myagents/commit/cce7906c4e2ac9fb0911eacc3b9addb0e123ca19))
+* **web:** icône de Mes agents dans l'en-tête et l'onglet, reprise de l'application Next.js ([5b3fb7b](https://github.com/IA-Generative/myagents/commit/5b3fb7b9375be617f3c2dc526b1cabb44143e9b7))
+
+
+### Bug Fixes
+
+* authentication flow to use server-side session management ([a0eaaf8](https://github.com/IA-Generative/myagents/commit/a0eaaf8294efe724b179a76246f52c1654955daf))
+* **auth:** prolonger expires_at au refresh de session ([921e733](https://github.com/IA-Generative/myagents/commit/921e7337c1b2b907e60de9c8899698dc0dc1af39))
+* **auth:** redirect OIDC callback errors to SPA with auth_error param ([42da286](https://github.com/IA-Generative/myagents/commit/42da2869b426ecc714ae46576681c50294cef061))
+* **auth:** rediriger invalid_state et invalid_request vers /?auth_error=... ([479943f](https://github.com/IA-Generative/myagents/commit/479943fac608bd2d170d1ab737e1b26ea5ba908f))
+* **auth:** sérialiser les refresh de session concurrents sans race condition ([bfe06c8](https://github.com/IA-Generative/myagents/commit/bfe06c858bde0e5429297f4dd3261d0cbd459154))
+* **ci:** configure gitleaks to ignore documentation with example secrets ([fd30ca1](https://github.com/IA-Generative/myagents/commit/fd30ca181ef9ce99054ec03629efdf32d767fffa))
+* **ci:** configure gitleaks to ignore documentation with example secrets ([a7df38a](https://github.com/IA-Generative/myagents/commit/a7df38af933a46c9f625ab08db189184a5eb1bea))
+* **docker:** change ENTRYPOINT en CMD pour permettre les commandes personnalisées ([747c391](https://github.com/IA-Generative/myagents/commit/747c3912671ca6216258e53f534a03bff4e36a91))
+* **docker:** crée Dockerfile.test avec Bun + Node.js pour exécuter les tests ([65f18bc](https://github.com/IA-Generative/myagents/commit/65f18bc529a3cd5e0b89f5560328f532f4e3222d))
+* **helm:** fix helpers ([e74a54a](https://github.com/IA-Generative/myagents/commit/e74a54a6e0ba9dc481edcf9a362a15dbe368ddfe))
+* **helm:** migration rendue et ordonnée sous Argo CD, Always, clés postgres du sous-chart ([7ceeedd](https://github.com/IA-Generative/myagents/commit/7ceeedd0d01656a33a168ee68c1639acccac773d))
+* **helm:** prioriser version HEAD sur les fichiers en conflit ([341cb8b](https://github.com/IA-Generative/myagents/commit/341cb8b5a01ba487596832fe4fa87336dcb6c0fc))
+* **helm:** prioriser version HEAD sur les fichiers en conflit ([1f315e4](https://github.com/IA-Generative/myagents/commit/1f315e4ca93aa3d80eec1997851cb33dbdd9b722))
+* **next:** connexion locale sans SSO réservée au dev explicite, bouton Keycloak rétabli ([c65a19e](https://github.com/IA-Generative/myagents/commit/c65a19ec746664e357b3f675841992495ad9ea3f))
+* **preview:** compléter le câblage preview (placeholders, doublon de build, rollout) ([c9417b6](https://github.com/IA-Generative/myagents/commit/c9417b6aa417262360ce67519e7381c32d1abcaa))
+* **server:** « Discuter avec cet agent » du catalogue se replie quand le modèle a été retiré ([09901d9](https://github.com/IA-Generative/myagents/commit/09901d94e51595224381f1e0d16375b6fd2d53bb))
+* **web:** les réponses des agents rendent leur Markdown, assaini ([0bea435](https://github.com/IA-Generative/myagents/commit/0bea435ad4b87db830f1898ae404abd130d7e796))
+* **web:** source-map-js 1.2.2 (GHSA-68fv-2mgg-jv7q, relevé par bun audit) ([d67fff2](https://github.com/IA-Generative/myagents/commit/d67fff27ec466eb3e4d188beb4a11e40f5c72ebe))
+
 ## [0.2.0](https://github.com/IA-Generative/myagents/compare/v0.1.0...v0.2.0) (2026-10-01)
 
 
