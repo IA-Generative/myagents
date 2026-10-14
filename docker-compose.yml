@@ -210,6 +210,11 @@ services:
       KC_OWUI_REDIRECT_3000: https://3000.${CODE_SERVER_DOMAIN:-example.invalid}/*
       KC_OWUI_ORIGIN_3000: https://3000.${CODE_SERVER_DOMAIN:-example.invalid}
       KC_OWUI_LOGOUT_3000: https://3000.${CODE_SERVER_DOMAIN:-example.invalid}/*
+      # Substitution des redirect_uris code-server dans realm-myagents.json.
+      # Vide en dev local : les URLs https://<port>./... ne matcheront rien (inoffensif).
+      CODE_SERVER_DOMAIN: ${CODE_SERVER_DOMAIN:-}
+      WEB_PORT: ${WEB_PORT:-5173}
+      OPENWEBUI_PORT: ${OPENWEBUI_PORT:-3000}
       KC_HEALTH_ENABLED: "true"
     volumes:
       - ./keycloak/realm-myagents.json:/opt/keycloak/data/import/realm-myagents.json:ro
