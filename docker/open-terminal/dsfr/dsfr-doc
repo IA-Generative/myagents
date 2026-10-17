@@ -1,0 +1,93 @@
+#!/usr/bin/env python3
+"""Génère un PDF au design DSFR (Marianne, bloc-marque, couleurs de l'État) depuis du Markdown ou du HTML.
+
+Classes DSFR reconnues en HTML : fr-callout, fr-alert--(info|success|warning|error), fr-badge--(info|success|warning|error).
+Le premier titre `# ...` du Markdown devient le titre du document (sauf si --title est fourni).
+"""
+import argparse
+import html
+import re
+import subprocess
+import sys
+from datetime import date
+from pathlib import Path
+
+from weasyprint import HTML
+
+ASSETS = Path("/opt/dsfr-doc")
+LOGO_CSS = Path("/opt/dsfr/node_modules/@gouvfr/dsfr/dist/component/logo/logo.css")
+DATA_URI = re.compile(r'url\("(data:image/svg\+xml;charset=utf8,[^"]+)"\)')
+
+
+def _logo_layers():
+    # WeasyPrint plante sur les fonds multiples de .fr-logo : on récupère les SVG officiels du DSFR.
+    css = LOGO_CSS.read_text(encoding="utf-8")
+    before = DATA_URI.findall(css.split(".fr-logo::before {", 1)[1].split("}", 1)[0])
+    after = DATA_URI.findall(css.split(".fr-logo::after {", 1)[1].split("}", 1)[0])
+    return before[0], after[0]  # profil blanc (SVG), devise (SVG) ; le drapeau est un dégradé CSS
+
+
+def _brand_block():
+    profile, devise = _logo_layers()
+    q = lambda uri: html.escape(uri, quote=True)
+    return (
+        '<div class="brand"><div class="ribbon">'
+        f'<img class="profile" src="{q(profile)}"></div>'
+        '<div class="name">République<br>Française</div>'
+        f'<div class="devise"><img src="{q(devise)}"></div></div>'
+    )
+
+
+def _markdown_to_html(text):
+    return subprocess.run(
+        ["pandoc", "-f", "gfm", "-t", "html5", "--wrap=none"],
+        input=text, capture_output=True, text=True, check=True,
+    ).stdout
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("input", help="fichier .md ou .html")
+    ap.add_argument("-o", "--output", help="PDF de sortie (défaut : <input>.pdf)")
+    ap.add_argument("--title", help="titre du document")
+    ap.add_argument("--subtitle", help="chapeau sous le titre")
+    ap.add_argument("--entity", default="", help="entité émettrice (ex. « Ministère de l'Intérieur »)")
+    ap.add_argument("--date", default=date.today().strftime("%d/%m/%Y"), help="date affichée (défaut : aujourd'hui)")
+    args = ap.parse_args()
+
+    src = Path(args.input)
+    raw = src.read_text(encoding="utf-8")
+    if src.suffix.lower() in (".html", ".htm"):
+        m = re.search(r"<body[^>]*>(.*)</body>", raw, re.S | re.I)
+        body = m.group(1) if m else raw
+    else:
+        body = _markdown_to_html(raw)
+
+    title = args.title
+    if not title:
+        m = re.search(r"<h1[^>]*>(.*?)</h1>", body, re.S)
+        if m:
+            title = re.sub(r"<[^>]+>", "", m.group(1)).strip()
+            body = body.replace(m.group(0), "", 1)
+    title = title or src.stem
+
+    subtitle = f'<p class="lead">{html.escape(args.subtitle)}</p>' if args.subtitle else ""
+    entity = f'<div class="entity">{html.escape(args.entity)}</div>' if args.entity else ""
+    doc = (
+        f'<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>{html.escape(title)}</title>'
+        f'<link rel="stylesheet" href="{(ASSETS / "dsfr-print.css").as_uri()}"></head><body>'
+        f'<header class="doc-header">{_brand_block()}{entity}</header>'
+        f'<div class="doc-title"><h1>{html.escape(title)}</h1>{subtitle}<p class="meta">{html.escape(args.date)}</p></div>'
+        f"<main>{body}</main></body></html>"
+    )
+
+    out = Path(args.output) if args.output else src.with_suffix(".pdf")
+    HTML(string=doc, base_url=src.resolve().parent.as_uri() + "/").write_pdf(out)
+    print(out)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except subprocess.CalledProcessError as e:
+        sys.exit(e.stderr or str(e))

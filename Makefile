@@ -6,7 +6,7 @@ WEB    := apps/web
 IMAGE  ?= mes-agents:dev
 
 .PHONY: help \
-	up up-owui up-sso down restart build logs logs-server logs-owui logs-keycloak ps sh-server sh-web clean \
+	up up-owui up-sso down restart build logs logs-server logs-owui logs-terminal logs-keycloak ps sh-server sh-web clean \
 	ensure-env bootstrap reset \
 	migrate migration seed \
 	install install-server install-web dev-server dev-web \
@@ -47,6 +47,9 @@ logs-server: ## Suit les logs du backend
 logs-owui: ## Suit les logs d'OpenWebUI
 	docker compose logs -f openwebui
 
+logs-terminal: ## Suit les logs d'Open Terminal
+	docker compose logs -f open-terminal
+
 logs-keycloak: ## Suit les logs de Keycloak
 	docker compose logs -f keycloak
 
@@ -66,7 +69,7 @@ clean: ## Arrête et SUPPRIME les volumes (perte des données locales)
 
 ensure-env: # Crée .env et génère les clés et mots de passe de dev absents (idempotent)
 	@test -f .env || cp .env.example .env
-	@for k in OPENWEBUI_API_KEY OPENWEBUI_WEBUI_SECRET_KEY KEYCLOAK_ADMIN_PASSWORD KEYCLOAK_DEV_ADMIN_PASSWORD KEYCLOAK_DEV_USER_PASSWORD; do \
+	@for k in OPENWEBUI_API_KEY OPENWEBUI_WEBUI_SECRET_KEY OPEN_TERMINAL_API_KEY KEYCLOAK_ADMIN_PASSWORD KEYCLOAK_DEV_ADMIN_PASSWORD KEYCLOAK_DEV_USER_PASSWORD; do \
 		grep -qE "^$$k=.+" .env || { sed -i -E "/^#? ?$$k=/d" .env; echo "$$k=$$(openssl rand -hex 32)" >> .env; echo "$$k généré dans .env"; }; \
 	done
 
