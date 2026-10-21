@@ -21,14 +21,18 @@ def test_database_url_uses_async_driver(given: str, expected: str) -> None:
     [
         ({"web_public_url": "https://front.example"}, "https://front.example"),
         (
-            {"code_server_domain": "code.example", "web_port": 5174},
-            "https://5174.code.example",
+            {"public_host_suffix": ".a.test", "web_port": 5174},
+            "https://5174.a.test",
         ),
-        ({"code_server_domain": "", "web_port": 5174}, "http://localhost:5174"),
+        (
+            {"public_host_prefix": "pre-", "public_host_suffix": ".b.test", "web_port": 5174},
+            "https://pre-5174.b.test",
+        ),
+        ({"public_host_suffix": "", "web_port": 5174}, "http://localhost:5174"),
     ],
 )
 def test_web_public_url_is_derived_when_unset(kwargs: dict, expected: str) -> None:
-    base = {"web_public_url": "", "code_server_domain": "", "web_port": 5173}
+    base = {"web_public_url": "", "public_host_prefix": "", "public_host_suffix": "", "web_port": 5173}
     assert Settings(**{**base, **kwargs}).web_public_url == expected
 
 

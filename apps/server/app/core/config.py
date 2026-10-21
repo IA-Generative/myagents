@@ -102,10 +102,11 @@ class Settings(BaseSettings):
     # oidc_issuer. L'issuer reste l'URL publique, seule vue par le navigateur.
     oidc_internal_url: str = ""
     # Origine publique du front (redirect_uri = <origine>/api/auth/callback, cookie de session).
-    # Vide = https://<web_port>.<code_server_domain> derrière code-server, sinon localhost.
+    # Vide = https://<prefix><web_port><suffix> si le suffixe est défini (port-forwarding), sinon localhost.
     web_public_url: str = ""
     web_port: int = 5173
-    code_server_domain: str = ""
+    public_host_prefix: str = ""
+    public_host_suffix: str = ""
     # Clé de chiffrement des jetons en base ; vide = repli sur oidc_client_secret.
     session_secret: str = ""
     session_ttl_hours: int = 12
@@ -127,8 +128,8 @@ class Settings(BaseSettings):
     def _default_web_public_url(self) -> Settings:
         if not self.web_public_url:
             self.web_public_url = (
-                f"https://{self.web_port}.{self.code_server_domain}"
-                if self.code_server_domain
+                f"https://{self.public_host_prefix}{self.web_port}{self.public_host_suffix}"
+                if self.public_host_suffix
                 else f"http://localhost:{self.web_port}"
             )
         return self
